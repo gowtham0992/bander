@@ -398,6 +398,57 @@ describe("one-time Draft, Card, Band, Permit, Receipt", () => {
 });
 
 describe("standing Bands", () => {
+  it("resumes a committed standing request and returns one cached Receipt", async () => {
+    const { adapter, engine, store } = setup();
+    const candidate = engine.createStandingBandCandidate();
+    const { bandId } = await engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+    const requestId = "standing-core-recovery-0001";
+    adapter.loseNextResponseAfterCommit = true;
+
+    await expect(
+      engine.runStandingBand(bandId, standingFixture, requestId),
+    ).rejects.toThrow("response_lost_after_commit");
+    const recovered = await engine.runStandingBand(bandId, standingFixture, requestId);
+    const repeated = await engine.runStandingBand(bandId, standingFixture, requestId);
+
+    expect(recovered).toMatchObject({ status: "executed" });
+    expect(repeated).toEqual(recovered);
+    expect(adapter.executions).toHaveLength(1);
+    expect(adapter.reconciliations).toBe(1);
+    const band = store.getBand(bandId);
+    expect(band?.mode).toBe("standing");
+    if (!band || band.mode !== "standing") throw new Error("Expected standing Band");
+    expect(band.actionTimestamps).toHaveLength(1);
+    expect(store.getStandingRequest(bandId, requestId)).toMatchObject({
+      status: "executed",
+      receiptId:
+        recovered.status === "executed" ? recovered.receipt.id : "unexpected",
+    });
+  });
+
+  it("returns the same review Card for a repeated standing request", async () => {
+    const { adapter, engine, store } = setup();
+    const candidate = engine.createStandingBandCandidate();
+    const { bandId } = await engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+    const requestId = "standing-core-review-0001";
+
+    const first = await engine.runStandingBand(bandId, adjacentFixture, requestId);
+    const retry = await engine.runStandingBand(bandId, adjacentFixture, requestId);
+
+    expect(retry).toEqual(first);
+    expect(first.status).toBe("review_required");
+    expect(adapter.executions).toHaveLength(0);
+    expect(store.getStandingRequest(bandId, requestId)).toMatchObject({
+      status: "review_required",
+    });
+  });
+
   it("renders the exact predicate and executes only an eligible calendar move", async () => {
     const { adapter, engine } = setup();
     const candidate = engine.createStandingBandCandidate();
@@ -414,7 +465,11 @@ describe("standing Bands", () => {
       candidate.candidateId,
       candidate.predicateHash,
     );
-    const result = await engine.runStandingBand(bandId, standingFixture);
+    const result = await engine.runStandingBand(
+      bandId,
+      standingFixture,
+      "standing-test-eligible-0001",
+    );
 
     expect(result).toMatchObject({
       status: "executed",
@@ -432,7 +487,11 @@ describe("standing Bands", () => {
       candidate.predicateHash,
     );
 
-    const result = await engine.runStandingBand(bandId, adjacentFixture);
+    const result = await engine.runStandingBand(
+      bandId,
+      adjacentFixture,
+      "standing-test-adjacent-0001",
+    );
 
     expect(result).toMatchObject({
       status: "review_required",
@@ -474,7 +533,11 @@ describe("standing Bands", () => {
       },
     };
 
-    const result = await engine.runStandingBand(bandId, lateFixture);
+    const result = await engine.runStandingBand(
+      bandId,
+      lateFixture,
+      "standing-test-late-0001",
+    );
 
     expect(result.status).toBe("review_required");
     expect(adapter.executions).toHaveLength(0);

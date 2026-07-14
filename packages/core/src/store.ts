@@ -3,6 +3,7 @@ import type {
   HumanReceipt,
   Permit,
   StandingBandCandidate,
+  StandingExecutionRequest,
   StoredDraft,
 } from "@bander/contracts";
 
@@ -16,6 +17,11 @@ export class AuthorityStore {
   readonly #permits = new Map<string, Permit>();
   readonly #receipts = new Map<string, HumanReceipt>();
   readonly #standingCandidates = new Map<string, StandingBandCandidate>();
+  readonly #standingRequests = new Map<string, StandingExecutionRequest>();
+
+  #standingRequestKey(bandId: string, requestId: string): string {
+    return `${bandId}\u0000${requestId}`;
+  }
 
   saveDraft(draft: StoredDraft): void {
     if (this.#drafts.has(draft.id)) throw new Error("Draft already exists");
@@ -101,11 +107,36 @@ export class AuthorityStore {
     this.#standingCandidates.set(candidate.id, copy(candidate));
   }
 
+  saveStandingRequest(request: StandingExecutionRequest): void {
+    const key = this.#standingRequestKey(request.bandId, request.requestId);
+    if (this.#standingRequests.has(key)) {
+      throw new Error("Standing execution request already exists");
+    }
+    this.#standingRequests.set(key, copy(request));
+  }
+
+  getStandingRequest(
+    bandId: string,
+    requestId: string,
+  ): StandingExecutionRequest | undefined {
+    const value = this.#standingRequests.get(this.#standingRequestKey(bandId, requestId));
+    return value ? copy(value) : undefined;
+  }
+
+  updateStandingRequest(request: StandingExecutionRequest): void {
+    const key = this.#standingRequestKey(request.bandId, request.requestId);
+    if (!this.#standingRequests.has(key)) {
+      throw new Error("Standing execution request does not exist");
+    }
+    this.#standingRequests.set(key, copy(request));
+  }
+
   reset(): void {
     this.#drafts.clear();
     this.#bands.clear();
     this.#permits.clear();
     this.#receipts.clear();
     this.#standingCandidates.clear();
+    this.#standingRequests.clear();
   }
 }

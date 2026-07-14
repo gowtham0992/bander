@@ -22,6 +22,7 @@
     "openclaw": "./node_modules/node/bin/node scripts/openclaw.mjs",
     "verify:demo": "tsx scripts/verify-demo.ts",
     "verify:recovery": "tsx scripts/verify-http-recovery.ts",
+    "verify:standing-recovery": "tsx scripts/verify-standing-recovery.ts",
     "verify:openclaw": "npm run build && tsx scripts/verify-openclaw.ts"
   },
   "devDependencies": {

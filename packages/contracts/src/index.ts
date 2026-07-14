@@ -174,6 +174,22 @@ export interface StandingBand {
   actionTimestamps: string[];
 }
 
+export interface StandingExecutionRequest {
+  bandId: string;
+  requestId: string;
+  requestDigest: string;
+  draftId: string;
+  status: "drafted" | "review_required" | "executing" | "executed" | "conflict";
+  createdAt: string;
+  permitId?: string;
+  receiptId?: string;
+  proposalActivity?: {
+    count: number;
+    limit: number;
+    windowMinutes: number;
+  };
+}
+
 export type Band = OneTimeBand | StandingBand;
 
 export interface StandingBandCard {

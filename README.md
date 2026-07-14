@@ -24,10 +24,13 @@ npm run check
 npm run attack
 npm run verify:demo
 npm run verify:recovery
+npm run verify:standing-recovery
 npm run verify:openclaw
 ```
 
 `npm run verify:recovery` opens a real local HTTP listener and proves the ambiguous-response path: the Calendar commits, the first approval response is lost, the same-hash approval is retried, and Bander returns one Receipt without minting new authority or repeating the mutation.
+
+Standing execution requests require a client-generated request ID. Bander binds it to the standing Band and a canonical digest of the requested content, so browser retries recover the original Draft, Permit, Card, or Receipt instead of creating another attempt. `npm run verify:standing-recovery` exercises both downstream and broker-response loss through real local HTTP listeners.
 
 For an interactive MCP probe, keep the demo running and use a second terminal:
 

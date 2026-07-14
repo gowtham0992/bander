@@ -14,6 +14,7 @@ import type {
   StandingBandCandidate,
   StandingBandCard,
   StandingBandPredicate,
+  StandingExecutionRequest,
   StoredDraft,
 } from "@bander/contracts";
 import { hashCanonical, hashDraft } from "./canonical.js";
@@ -82,6 +83,29 @@ interface AuthorityEngineOptions {
 export type StandingRunResult =
   | { status: "executed"; receipt: HumanReceipt }
   | { status: "review_required"; card: ApprovalCard };
+
+export function digestStandingRequest(fixture: DraftFixture): string {
+  return hashCanonical({
+    version: 1,
+    request: {
+      claimedUserRequest: fixture.claimedUserRequest,
+      calendar: {
+        eventId: fixture.calendar.eventId,
+        expectedEtag: fixture.calendar.expectedEtag,
+        newStartTime: fixture.calendar.newStartTime,
+      },
+      ...(fixture.message
+        ? {
+            message: {
+              recipientId: fixture.message.recipientId,
+              expectedRecipientRevision: fixture.message.expectedRecipientRevision,
+              body: fixture.message.body,
+            },
+          }
+        : {}),
+    },
+  });
+}
 
 function sameIds(actual: string[], expected: string[]): boolean {
   return (
@@ -331,19 +355,37 @@ export class AuthorityEngine {
   async runStandingBand(
     bandId: string,
     fixture: DraftFixture,
+    requestId: string,
     agentId = "demo-agent",
   ): Promise<StandingRunResult> {
-    const draft = await this.#storeFixtureDraft(fixture);
-    const band = this.#store.getBand(bandId);
-    if (!band || band.mode !== "standing") {
-      throw new AuthorityError("standing_band_not_found", "Standing Band not found", 404);
+    if (!/^[A-Za-z0-9_-]{16,100}$/.test(requestId)) {
+      throw new AuthorityError(
+        "invalid_standing_request_id",
+        "A valid client request ID is required",
+        400,
+      );
     }
+    const requestDigest = digestStandingRequest(fixture);
 
-    return this.#lock.run(band.id, async () => {
-      const currentBand = this.#store.getBand(band.id);
+    return this.#lock.run(bandId, async () => {
+      const currentBand = this.#store.getBand(bandId);
+      if (!currentBand || currentBand.mode !== "standing") {
+        throw new AuthorityError("standing_band_not_found", "Standing Band not found", 404);
+      }
+
+      const existing = this.#store.getStandingRequest(bandId, requestId);
+      if (existing) {
+        if (existing.requestDigest !== requestDigest) {
+          throw new AuthorityError(
+            "standing_request_mismatch",
+            "This request ID is already bound to different content",
+            409,
+          );
+        }
+        return this.#resumeStandingRequest(existing, currentBand, agentId);
+      }
+
       if (
-        !currentBand ||
-        currentBand.mode !== "standing" ||
         currentBand.status !== "active" ||
         new Date(currentBand.expiresAt).getTime() <= this.#now().getTime()
       ) {
@@ -354,24 +396,153 @@ export class AuthorityEngine {
         );
       }
 
-      if (!standingBandAllows(currentBand, draft, this.#now())) {
-        const activity = this.#recordProposal(agentId);
-        return {
-          status: "review_required",
-          card: {
-            ...renderApprovalCard(draft.id, draft.hash, draft.document),
-            proposalActivity: activity,
-          },
-        };
-      }
-
-      this.#store.updateDraft({ ...draft, status: "approved" });
-      const permit = this.#createPermit(currentBand.id, draft);
-      return {
-        status: "executed",
-        receipt: await this.#executeStoredDraft(permit.id),
+      const draft = await this.#storeFixtureDraft(fixture);
+      const standingRequest: StandingExecutionRequest = {
+        bandId: currentBand.id,
+        requestId,
+        requestDigest,
+        draftId: draft.id,
+        status: "drafted",
+        createdAt: this.#now().toISOString(),
       };
+      this.#store.saveStandingRequest(standingRequest);
+      return this.#resumeStandingRequest(standingRequest, currentBand, agentId);
     });
+  }
+
+  async #resumeStandingRequest(
+    request: StandingExecutionRequest,
+    band: StandingBand,
+    agentId: string,
+  ): Promise<StandingRunResult> {
+    const draft = this.#requireDraft(request.draftId);
+    if (request.bandId !== band.id || draft.hash !== hashDraft(draft.document)) {
+      throw new AuthorityError(
+        "invalid_standing_request_state",
+        "The stored standing request is inconsistent",
+        409,
+      );
+    }
+
+    if (request.status === "review_required") {
+      if (draft.status !== "proposed" || !request.proposalActivity) {
+        throw new AuthorityError(
+          "standing_request_not_resumable",
+          "This standing request cannot be resumed",
+          409,
+        );
+      }
+      return {
+        status: "review_required",
+        card: {
+          ...renderApprovalCard(draft.id, draft.hash, draft.document),
+          proposalActivity: request.proposalActivity,
+        },
+      };
+    }
+
+    if (request.status === "conflict") {
+      throw new AuthorityError(
+        "standing_request_not_resumable",
+        "This standing request cannot be resumed",
+        409,
+      );
+    }
+
+    if (request.permitId) {
+      const permit = this.#store.getPermit(request.permitId);
+      if (
+        !permit ||
+        permit.bandId !== request.bandId ||
+        permit.draftId !== request.draftId ||
+        permit.draftHash !== draft.hash ||
+        permit.executor !== "bander_executor"
+      ) {
+        throw new AuthorityError(
+          "invalid_standing_request_state",
+          "The stored standing request is inconsistent",
+          409,
+        );
+      }
+      try {
+        const receipt = await this.#executeStoredDraft(request.permitId);
+        this.#store.updateStandingRequest({
+          ...request,
+          status: "executed",
+          receiptId: receipt.id,
+        });
+        return { status: "executed", receipt };
+      } catch (error) {
+        if (error instanceof AuthorityError && error.code === "conflict") {
+          this.#store.updateStandingRequest({ ...request, status: "conflict" });
+        }
+        throw error;
+      }
+    }
+
+    if (
+      request.status !== "drafted" ||
+      draft.status !== "proposed" ||
+      new Date(draft.document.expiresAt).getTime() <= this.#now().getTime()
+    ) {
+      throw new AuthorityError(
+        "standing_request_not_resumable",
+        "This standing request cannot be resumed",
+        409,
+      );
+    }
+    if (
+      band.status !== "active" ||
+      new Date(band.expiresAt).getTime() <= this.#now().getTime()
+    ) {
+      throw new AuthorityError(
+        "standing_band_inactive",
+        "This standing Band is not active",
+        409,
+      );
+    }
+
+    if (!standingBandAllows(band, draft, this.#now())) {
+      const activity = this.#recordProposal(agentId);
+      this.#store.updateStandingRequest({
+        ...request,
+        status: "review_required",
+        proposalActivity: activity,
+      });
+      return {
+        status: "review_required",
+        card: {
+          ...renderApprovalCard(draft.id, draft.hash, draft.document),
+          proposalActivity: activity,
+        },
+      };
+    }
+
+    this.#store.updateDraft({ ...draft, status: "approved" });
+    const permit = this.#createPermit(band.id, draft);
+    const executingRequest: StandingExecutionRequest = {
+      ...request,
+      status: "executing",
+      permitId: permit.id,
+    };
+    this.#store.updateStandingRequest(executingRequest);
+    try {
+      const receipt = await this.#executeStoredDraft(permit.id);
+      this.#store.updateStandingRequest({
+        ...executingRequest,
+        status: "executed",
+        receiptId: receipt.id,
+      });
+      return { status: "executed", receipt };
+    } catch (error) {
+      if (error instanceof AuthorityError && error.code === "conflict") {
+        this.#store.updateStandingRequest({
+          ...executingRequest,
+          status: "conflict",
+        });
+      }
+      throw error;
+    }
   }
 
   resetDemo(): void {

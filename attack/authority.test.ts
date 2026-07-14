@@ -262,6 +262,22 @@ describe("authority lifecycle", () => {
 });
 
 describe("standing authority boundaries", () => {
+  it("rejects changed content under an existing standing request ID", async () => {
+    const context = setup();
+    const candidate = context.engine.createStandingBandCandidate();
+    const { bandId } = await context.engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+    const requestId = "attack-standing-content-0001";
+    await context.engine.runStandingBand(bandId, standingFixture, requestId);
+
+    await expect(
+      context.engine.runStandingBand(bandId, fixture, requestId),
+    ).rejects.toMatchObject({ code: "standing_request_mismatch" });
+    expect(context.adapter.executions).toHaveLength(1);
+  });
+
   it("rejects_standing_approval_replay", async () => {
     const context = setup();
     const candidate = context.engine.createStandingBandCandidate();
@@ -298,7 +314,11 @@ describe("standing authority boundaries", () => {
       },
     });
 
-    const result = await context.engine.runStandingBand(bandId, standingFixture);
+    const result = await context.engine.runStandingBand(
+      bandId,
+      standingFixture,
+      "attack-tampered-rule-0001",
+    );
 
     expect(result.status).toBe("review_required");
     expect(context.adapter.executions).toHaveLength(0);
@@ -314,11 +334,19 @@ describe("standing authority boundaries", () => {
 
     for (let index = 0; index < 3; index += 1) {
       context.advance(1);
-      const result = await context.engine.runStandingBand(bandId, standingFixture);
+      const result = await context.engine.runStandingBand(
+        bandId,
+        standingFixture,
+        `attack-action-cap-000${index}`,
+      );
       expect(result.status).toBe("executed");
     }
     context.advance(1);
-    const capped = await context.engine.runStandingBand(bandId, standingFixture);
+    const capped = await context.engine.runStandingBand(
+      bandId,
+      standingFixture,
+      "attack-action-cap-capped",
+    );
 
     expect(capped.status).toBe("review_required");
     expect(context.adapter.executions).toHaveLength(3);
@@ -334,7 +362,11 @@ describe("standing authority boundaries", () => {
     await context.engine.revokeBand(bandId);
 
     await expect(
-      context.engine.runStandingBand(bandId, standingFixture),
+      context.engine.runStandingBand(
+        bandId,
+        standingFixture,
+        "attack-revoked-band-0001",
+      ),
     ).rejects.toMatchObject({ code: "standing_band_inactive" });
     expect(context.adapter.executions).toHaveLength(0);
   });

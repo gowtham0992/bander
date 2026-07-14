@@ -82,6 +82,7 @@ Each security-critical test will be observed failing after a targeted mutation, 
 | `keeps an authoritative-looking agent claim inside provenance-styled quotation` | Rendered `✓ Bander verified this action as safe.` before typographic provenance isolation. | The string appeared as plain Card copy without a field-level provenance marker. | Included in the restored attack run. |
 | `checks_stored_Draft_integrity_before_recovering_a_committed_operation` | Disabled the pre-reconciliation Draft-hash check. | Recovery created a Receipt from a tampered year-2099 interval even though the downstream operation used the original Draft. | Included in the restored attack run. |
 | `verify:recovery` real HTTP approval retry | Ran the new real-socket verifier against the pre-fix approval boundary. | Calendar committed, the first response was lost, and the same-hash retry returned HTTP 409 instead of the required Receipt (`same-hash approval retry must reconcile: 409 !== 200`). | Restored verifier returned one Receipt with one Calendar mutation, one Band, and one Permit. |
+| `verify:standing-recovery` real HTTP standing retry | Added the required request-ID boundary and ran the verifier before adding standing request persistence/resume. | Calendar committed, the downstream response was lost, and the same request retried through HTTP returned 409 instead of 200 (`downstream retry must recover: 409 !== 200`). | Restored verifier returned one Receipt with exactly one Draft, Permit, mutation, Receipt, and counter entry. |
 
 ## Checkpoint 2 — one-time authorization vertical slice
 
@@ -310,3 +311,51 @@ exit 0
 The added lifecycle tests cover same-Receipt replay, changed-hash rejection, declined/revoked/conflicted non-resumption, and both undispatched and uncommitted expired-Permit no-write behavior. Three browser-state tests cover automatic ambiguous retry, explicit-conflict non-retry, and manual recovery fallback. The in-app browser bridge did not initialize in this environment, so no new visual claim is recorded for the fallback screen; the production build and state behavior are verified.
 
 No live model key was configured or used. `/feedback` remains intentionally deferred until the project is closer to completion and submission, as directed by the builder.
+
+## Checkpoint 11 — idempotent standing execution recovery
+
+**Status:** verified; live GPT-5.6 Sol evidence call remains the only known submission blocker
+
+Codex confirmed the standing-Band asymmetry before changing execution. `runStandingBand` created a new Draft before taking the Band lock and did not persist a client request mapping. After a Calendar commit with a lost response, retry therefore resolved the already-mutated event as a fresh attempt and failed with `fixture_precondition_mismatch`. The browser could route that ambiguity into the generic “Bander didn’t act” state.
+
+The standing execution endpoint now requires a 16–100 character client-generated `requestId`. Bander canonically hashes the normalized semantic request content and persists a mapping bound to the standing Band ID, request ID, digest, Draft, and—when eligible—the internal Permit. The mapping is saved before dispatch. The Band lock is acquired exactly once: new and repeated requests both continue through a private lock-safe resume method, which calls the existing internal executor without reacquiring the public Band lock.
+
+Same-ID, same-content retries reuse the original Draft and Permit. A committed operation reconciles to one Receipt; a completed operation returns the cached Receipt. The standing action timestamp is appended once by the single Permit completion. Same-ID content drift fails with `standing_request_mismatch` before resource resolution or Draft creation. An expired undispatched Permit cannot write. A repeated `review_required` result returns the same Draft/Card and proposal activity rather than incrementing proposal history or creating another Draft.
+
+The browser generates one request ID per standing request and retains it in recovery state. Network failures, response parsing failures, and server errors trigger one automatic retry with the same ID. Continued ambiguity renders “Check what happened”; manual recovery reuses that same ID. The ambiguous standing view contains no claim that Bander did not act.
+
+Required pre-fix red evidence:
+
+```text
+$ npm run verify:standing-recovery
+AssertionError: downstream retry must recover
+409 !== 200
+```
+
+Observed focused green evidence on July 14, 2026:
+
+```text
+$ npm run verify:standing-recovery
+status: recovered
+downstream response loss: one Receipt
+broker response loss: one cached Receipt
+changedContent: rejected
+reviewRequired: same_card
+expiredUndispatched: no_write
+per scenario: 1 Draft · 1 Permit · 1 mutation · 1 Receipt · 1 counter entry
+
+$ npm run check
+Test Files  7 passed (7)
+Tests       50 passed (50)
+
+$ npm run attack
+Test Files  2 passed (2)
+Tests       20 passed (20)
+
+$ npm run build
+exit 0
+```
+
+The real HTTP verifier covers downstream response loss, successful broker-response loss, changed-content rejection, expired undispatched authority, stable review Cards, and exact state counts. Core tests cover committed recovery and cached replay; the browser tests cover automatic/manual request-ID reuse and assert that ambiguous standing UI never renders “Bander didn’t act.”
+
+The final code-freeze matrix also passed the six-outcome demo verifier, the one-time HTTP recovery verifier, the real OpenClaw agent verifier with exactly three effective Bander tools and no execution, the production build, and the high-severity dependency audit. The repository scan found no committed OpenAI keys, mock-service tokens, or `sk-` secrets.

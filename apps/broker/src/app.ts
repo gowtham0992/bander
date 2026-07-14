@@ -10,6 +10,7 @@ interface BrokerAppOptions {
   agentCompiler?: DraftCompiler;
   resetDemo?: () => Promise<void>;
   simulateCalendarChange?: () => Promise<void>;
+  dropNextStandingRunResponseAfterCompletion?: () => boolean;
 }
 
 function sendError(error: unknown, reply: { code(status: number): { send(body: unknown): unknown } }) {
@@ -152,16 +153,25 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     },
   );
 
-  app.post<{ Params: { bandId: string }; Body: { fixtureId: string } }>(
+  app.post<{
+    Params: { bandId: string };
+    Body: { fixtureId: string; requestId: string };
+  }>(
     "/api/standing-bands/:bandId/run",
     {
       schema: {
         body: {
           type: "object",
           additionalProperties: false,
-          required: ["fixtureId"],
+          required: ["fixtureId", "requestId"],
           properties: {
             fixtureId: { type: "string", minLength: 1, maxLength: 100 },
+            requestId: {
+              type: "string",
+              minLength: 16,
+              maxLength: 100,
+              pattern: "^[A-Za-z0-9_-]+$",
+            },
           },
         },
       },
@@ -174,7 +184,18 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
         });
       }
       try {
-        return await options.engine.runStandingBand(request.params.bandId, fixture);
+        const result = await options.engine.runStandingBand(
+          request.params.bandId,
+          fixture,
+          request.body.requestId,
+          "demo-agent",
+        );
+        if (options.dropNextStandingRunResponseAfterCompletion?.()) {
+          reply.hijack();
+          reply.raw.destroy();
+          return reply;
+        }
+        return result;
       } catch (error) {
         return sendError(error, reply);
       }

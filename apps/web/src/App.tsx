@@ -10,6 +10,13 @@ type StandingRunResponse =
   | { status: "executed"; receipt: HumanReceipt }
   | { status: "review_required"; card: ApprovalCard };
 
+export interface StandingRunInput {
+  bandId: string;
+  fixtureId: string;
+  requestId: string;
+  expected: "executed" | "review_required";
+}
+
 type Screen =
   | { kind: "welcome" }
   | { kind: "loading"; message: string }
@@ -18,6 +25,7 @@ type Screen =
   | { kind: "standing-card"; card: StandingBandCard }
   | { kind: "standing-receipt"; receipt: HumanReceipt; bandId: string }
   | { kind: "standing-revoked" }
+  | { kind: "standing-recovery"; input: StandingRunInput; message: string }
   | { kind: "declined" }
   | { kind: "change"; card: ApprovalCard }
   | { kind: "approval-recovery"; card: ApprovalCard; message: string }
@@ -59,6 +67,14 @@ export async function attemptApprovalWithRecovery<T>(
     if (!isAmbiguousApprovalError(error)) throw error;
     return { status: "ambiguous" };
   }
+}
+
+export function attemptStandingRunWithRecovery(
+  input: StandingRunInput,
+  request: (input: StandingRunInput) => Promise<StandingRunResponse>,
+  onRecoveryAttempt: () => void,
+) {
+  return attemptApprovalWithRecovery(() => request(input), onRecoveryAttempt);
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -398,6 +414,32 @@ function StandingCardView({
   );
 }
 
+export function StandingRecoveryView({
+  busy,
+  message,
+  onCheck,
+  onBack,
+}: {
+  busy: boolean;
+  message: string;
+  onCheck: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <main className="result-shell" role="alert" aria-live="polite">
+      <span className="deal-kicker">Result not confirmed</span>
+      <h1>Let’s check what happened.</h1>
+      <p className="result-summary">{message}</p>
+      <div className="result-actions">
+        <button className="primary" onClick={onCheck} disabled={busy}>
+          {busy ? "Checking…" : "Check what happened"}
+        </button>
+        <button className="secondary" onClick={onBack}>Back to Bander</button>
+      </div>
+    </main>
+  );
+}
+
 export function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "welcome" });
   const [status, setStatus] = useState<Status | null>(null);
@@ -461,20 +503,11 @@ export function App() {
           body: JSON.stringify({ predicateHash: card.predicateHash }),
         },
       );
-      const result = await api<StandingRunResponse>(
-        `/api/standing-bands/${authorization.bandId}/run`,
-        {
-          method: "POST",
-          body: JSON.stringify({ fixtureId: "move-my-focus-block" }),
-        },
-      );
-      if (result.status !== "executed") {
-        throw new Error("The eligible routine unexpectedly required review");
-      }
-      setScreen({
-        kind: "standing-receipt",
-        receipt: result.receipt,
+      await completeStandingRun({
         bandId: authorization.bandId,
+        fixtureId: "move-my-focus-block",
+        requestId: crypto.randomUUID(),
+        expected: "executed",
       });
     } catch (error) {
       setScreen({ kind: "error", message: (error as Error).message });
@@ -486,16 +519,68 @@ export function App() {
   async function tryOutsideStanding(bandId: string) {
     setScreen({ kind: "loading", message: "Checking this request against your Band…" });
     try {
-      const result = await api<StandingRunResponse>(`/api/standing-bands/${bandId}/run`, {
-        method: "POST",
-        body: JSON.stringify({ fixtureId: "move-dinner-under-standing-band" }),
+      await completeStandingRun({
+        bandId,
+        fixtureId: "move-dinner-under-standing-band",
+        requestId: crypto.randomUUID(),
+        expected: "review_required",
       });
-      if (result.status !== "review_required") {
-        throw new Error("The outside request unexpectedly ran automatically");
-      }
-      setScreen({ kind: "card", card: result.card, scenario: "exact" });
     } catch (error) {
       setScreen({ kind: "error", message: (error as Error).message });
+    }
+  }
+
+  async function completeStandingRun(input: StandingRunInput) {
+    const result = await attemptStandingRunWithRecovery(
+      input,
+      (standingInput) =>
+        api<StandingRunResponse>(
+          `/api/standing-bands/${standingInput.bandId}/run`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              fixtureId: standingInput.fixtureId,
+              requestId: standingInput.requestId,
+            }),
+          },
+        ),
+      () => setScreen({ kind: "loading", message: "Checking what happened…" }),
+    );
+    if (result.status === "ambiguous") {
+      setScreen({
+        kind: "standing-recovery",
+        input,
+        message:
+          "Bander couldn’t confirm the result yet. Check this same request again to recover its Receipt or review Card without repeating the action.",
+      });
+      return;
+    }
+    if (input.expected === "executed" && result.value.status === "executed") {
+      setScreen({
+        kind: "standing-receipt",
+        receipt: result.value.receipt,
+        bandId: input.bandId,
+      });
+      return;
+    }
+    if (
+      input.expected === "review_required" &&
+      result.value.status === "review_required"
+    ) {
+      setScreen({ kind: "card", card: result.value.card, scenario: "exact" });
+      return;
+    }
+    throw new Error("The standing request returned an unexpected result");
+  }
+
+  async function recoverStanding(input: StandingRunInput) {
+    setBusy(true);
+    try {
+      await completeStandingRun(input);
+    } catch (error) {
+      setScreen({ kind: "error", message: (error as Error).message });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -615,6 +700,14 @@ export function App() {
             Back to Bander
           </button>
         </main>
+      )}
+      {screen.kind === "standing-recovery" && (
+        <StandingRecoveryView
+          busy={busy}
+          message={screen.message}
+          onCheck={() => recoverStanding(screen.input)}
+          onBack={() => setScreen({ kind: "welcome" })}
+        />
       )}
       {screen.kind === "change" && (
         <main className="result-shell">

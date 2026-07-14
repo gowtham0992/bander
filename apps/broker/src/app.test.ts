@@ -81,6 +81,33 @@ function createApp() {
 }
 
 describe("broker approval boundary", () => {
+  it("requires a client request ID for every standing execution", async () => {
+    const setup = createApp();
+    const candidate = await setup.app.inject({
+      method: "POST",
+      url: "/api/demo/standing-band-candidates",
+    });
+    const candidateBody = candidate.json<{
+      candidateId: string;
+      predicateHash: string;
+    }>();
+    const approval = await setup.app.inject({
+      method: "POST",
+      url: `/api/standing-band-candidates/${candidateBody.candidateId}/approve`,
+      payload: { predicateHash: candidateBody.predicateHash },
+    });
+    const { bandId } = approval.json<{ bandId: string }>();
+
+    const response = await setup.app.inject({
+      method: "POST",
+      url: `/api/standing-bands/${bandId}/run`,
+      payload: { fixtureId: fixture.id },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(setup.adapter.executions).toBe(0);
+  });
+
   it("keeps the optional compiler closed when OPENAI_API_KEY is not configured", async () => {
     const setup = createApp();
     const response = await setup.app.inject({

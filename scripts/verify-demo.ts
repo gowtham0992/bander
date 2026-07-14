@@ -105,11 +105,11 @@ const standing = await post<{ bandId: string }>(
 );
 const eligible = await post<{ status: string }>(
   `/api/standing-bands/${standing.bandId}/run`,
-  { fixtureId: "move-my-focus-block" },
+  { fixtureId: "move-my-focus-block", requestId: "verify-demo-eligible-0001" },
 );
 const adjacent = await post<{ status: string }>(
   `/api/standing-bands/${standing.bandId}/run`,
-  { fixtureId: "move-dinner-under-standing-band" },
+  { fixtureId: "move-dinner-under-standing-band", requestId: "verify-demo-adjacent-0001" },
 );
 
 await reset();
@@ -123,7 +123,7 @@ const revokeStanding = await post<{ bandId: string }>(
 await post<void>(`/api/bands/${revokeStanding.bandId}/revoke`, undefined, 204);
 const revokedRun = await post<{ error: { code: string } }>(
   `/api/standing-bands/${revokeStanding.bandId}/run`,
-  { fixtureId: "move-my-focus-block" },
+  { fixtureId: "move-my-focus-block", requestId: "verify-demo-revoked-0001" },
   409,
 );
 
