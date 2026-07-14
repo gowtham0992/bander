@@ -231,6 +231,19 @@ describe("standing Bands", () => {
     });
     expect(adapter.executions).toHaveLength(0);
   });
+
+  it("rejects replay of a standing-Band approval candidate", async () => {
+    const { engine } = setup();
+    const candidate = engine.createStandingBandCandidate();
+    await engine.approveStandingBand(candidate.candidateId, candidate.predicateHash);
+
+    await expect(
+      engine.approveStandingBand(candidate.candidateId, candidate.predicateHash),
+    ).rejects.toMatchObject({
+      code: "standing_candidate_not_approvable",
+      statusCode: 409,
+    });
+  });
 });
 
 describe("proposal flood control", () => {

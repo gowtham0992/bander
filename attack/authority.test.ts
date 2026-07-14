@@ -227,6 +227,22 @@ describe("authority lifecycle", () => {
 });
 
 describe("standing authority boundaries", () => {
+  it("rejects_standing_approval_replay", async () => {
+    const context = setup();
+    const candidate = context.engine.createStandingBandCandidate();
+    await context.engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+
+    await expect(
+      context.engine.approveStandingBand(
+        candidate.candidateId,
+        candidate.predicateHash,
+      ),
+    ).rejects.toMatchObject({ code: "standing_candidate_not_approvable" });
+  });
+
   it("rejects a tampered standing predicate after approval", async () => {
     const context = setup();
     const candidate = context.engine.createStandingBandCandidate();

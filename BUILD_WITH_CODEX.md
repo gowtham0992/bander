@@ -70,6 +70,7 @@ Each security-critical test will be observed failing after a targeted mutation, 
 | `agent_claimed_request_is_rendered_with_provenance` | Replaced the hearsay label with “Your request was.” | The provenance assertion reported the misleading label. | Included in the restored attack run. |
 | `renders_agent_text_only_in_quoted_preview` | Temporarily rendered agent text as raw HTML. | Static React markup contained an active heading and button instead of escaped text. | Included in the restored attack run. |
 | `rejects a tampered standing predicate after approval` | Forced the standing predicate matcher to return `true` for every Draft. | A Draft outside the approved predicate executed instead of returning for review. | Included in the restored 15-test attack run. |
+| `rejects_standing_approval_replay` | Disabled the proposed-candidate lifecycle check. | The same reviewed candidate minted a second active standing Band. | Included in the restored 16-test attack run. |
 | `pauses repeated agent proposals without affecting execution authority` | Changed the limiter boundary from `>=` to `>`. | The third proposal was accepted with a configured limit of two. | Included in the restored 17-test functional run. |
 | `allowlists only Bander's three narrow MCP tools` | Added OpenClaw's host `exec` tool to the reference allowlist. | The manifest test displayed the unexpected fourth tool and failed. | Included in the restored 19-test functional run. |
 | `can select but cannot alter a versioned Draft fixture` | Let the model-compiler path replace the selected fixture's Calendar start time. | The test showed the unapproved year-2099 payload instead of the versioned fixture value. | Included in the restored 22-test functional run. |
@@ -203,7 +204,7 @@ Deterministic proposal: available and independent of compiler
 
 **Status:** in progress
 
-Codex visually inspected the welcome, one-time, and standing-Band Cards in the real built app. The interface remains a calm consumer flow rather than a security dashboard. Standing authority now has a visible “Turn off this Band” control; the real-process verifier proves that an eligible action after revocation returns `standing_band_inactive`.
+Codex visually inspected the welcome, one-time, and standing-Band Cards in the real built app. The interface remains a calm consumer flow rather than a security dashboard. Standing authority now has a visible “Turn off this Band” control; the real-process verifier proves that an eligible action after revocation returns `standing_band_inactive`. A standing proposal is also single-use: its lifecycle changes from `proposed` to `approved`, and replay cannot mint a second active Band.
 
 When `OPENAI_API_KEY` is configured, the welcome screen now reveals a small natural-language GPT-5.6 entry point. It remains absent in canonical no-key mode. Recording shortcuts can open `?scenario=exact`, `?scenario=conflict`, or `?scenario=standing` without bypassing the corresponding broker flow.
 

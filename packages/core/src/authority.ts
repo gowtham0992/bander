@@ -208,11 +208,12 @@ export class AuthorityEngine {
     };
     const predicateHash = hashCanonical({ predicate, expiresAt });
     const candidate: StandingBandCandidate = {
-      id: `standing_candidate_${predicateHash.slice(0, 16)}`,
+      id: `standing_candidate_${this.#id()}`,
       predicateHash,
       predicate,
       createdAt: createdAt.toISOString(),
       expiresAt,
+      status: "proposed",
     };
     this.#store.saveStandingCandidate(candidate);
     return renderStandingBandCard(candidate);
@@ -229,6 +230,13 @@ export class AuthorityEngine {
           "standing_candidate_not_found",
           "Standing Band proposal not found",
           404,
+        );
+      }
+      if (candidate.status !== "proposed") {
+        throw new AuthorityError(
+          "standing_candidate_not_approvable",
+          "This standing rule has already been used",
+          409,
         );
       }
       if (
@@ -262,6 +270,11 @@ export class AuthorityEngine {
         actionTimestamps: [],
       };
       this.#store.saveBand(band);
+      this.#store.updateStandingCandidate({
+        ...candidate,
+        status: "approved",
+        approvedBandId: band.id,
+      });
       return { bandId: band.id, expiresAt: band.expiresAt };
     });
   }

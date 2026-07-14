@@ -71,12 +71,22 @@ export class AuthorityStore {
   }
 
   saveStandingCandidate(candidate: StandingBandCandidate): void {
+    if (this.#standingCandidates.has(candidate.id)) {
+      throw new Error("Standing Band candidate already exists");
+    }
     this.#standingCandidates.set(candidate.id, copy(candidate));
   }
 
   getStandingCandidate(id: string): StandingBandCandidate | undefined {
     const value = this.#standingCandidates.get(id);
     return value ? copy(value) : undefined;
+  }
+
+  updateStandingCandidate(candidate: StandingBandCandidate): void {
+    if (!this.#standingCandidates.has(candidate.id)) {
+      throw new Error("Standing Band candidate does not exist");
+    }
+    this.#standingCandidates.set(candidate.id, copy(candidate));
   }
 
   reset(): void {
