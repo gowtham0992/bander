@@ -310,10 +310,90 @@ describe("one-time Draft, Card, Band, Permit, Receipt", () => {
       status: "executed",
     });
 
+    const repeatedReceipt = await engine.approveAndExecute(card.draftId, card.draftHash);
+    expect(repeatedReceipt.id).toBe(receipt.id);
+    expect(adapter.executions).toHaveLength(1);
+  });
+
+  it("rejects a different hash when resuming existing authority", async () => {
+    const { adapter, engine } = setup();
+    const card = await engine.proposeFixture(standingFixture);
+    const authorization = await engine.approve(card.draftId, card.draftHash);
+    adapter.loseNextResponseAfterCommit = true;
+    await expect(engine.executePermit(authorization.permitId)).rejects.toThrow(
+      "response_lost_after_commit",
+    );
+
+    await expect(
+      engine.approveAndExecute(card.draftId, "0".repeat(64)),
+    ).rejects.toMatchObject({ code: "draft_hash_mismatch" });
+    expect(adapter.executions).toHaveLength(1);
+  });
+
+  it("does not resume a declined Draft", async () => {
+    const { adapter, engine } = setup();
+    const card = await engine.proposeFixture(standingFixture);
+    engine.decline(card.draftId);
+
     await expect(
       engine.approveAndExecute(card.draftId, card.draftHash),
-    ).rejects.toMatchObject({ code: "draft_not_approvable" });
-    expect(adapter.executions).toHaveLength(1);
+    ).rejects.toMatchObject({ code: "draft_not_resumable" });
+    expect(adapter.executions).toHaveLength(0);
+  });
+
+  it("does not resume a revoked Draft", async () => {
+    const { adapter, engine } = setup();
+    const card = await engine.proposeFixture(standingFixture);
+    const authorization = await engine.approve(card.draftId, card.draftHash);
+    await engine.revokeBand(authorization.bandId);
+
+    await expect(
+      engine.approveAndExecute(card.draftId, card.draftHash),
+    ).rejects.toMatchObject({ code: "draft_not_resumable" });
+    expect(adapter.executions).toHaveLength(0);
+  });
+
+  it("does not resume a conflicted Draft", async () => {
+    const { adapter, engine, store } = setup();
+    const card = await engine.proposeFixture(standingFixture);
+    await engine.approve(card.draftId, card.draftHash);
+    const draft = store.getDraft(card.draftId);
+    expect(draft).toBeDefined();
+    store.updateDraft({ ...draft!, status: "conflict" });
+
+    await expect(
+      engine.approveAndExecute(card.draftId, card.draftHash),
+    ).rejects.toMatchObject({ code: "draft_not_resumable" });
+    expect(adapter.executions).toHaveLength(0);
+  });
+
+  it("does not redispatch an uncommitted operation after its Permit expires", async () => {
+    const { adapter, advance, engine } = setup();
+    const card = await engine.proposeFixture(standingFixture);
+    adapter.failNextBeforeCommit = true;
+    await expect(
+      engine.approveAndExecute(card.draftId, card.draftHash),
+    ).rejects.toThrow("connection_lost_before_commit");
+    advance(31_000);
+
+    await expect(
+      engine.approveAndExecute(card.draftId, card.draftHash),
+    ).rejects.toMatchObject({ code: "permit_expired" });
+    expect(adapter.executions).toHaveLength(0);
+    expect(adapter.reconciliations).toBe(1);
+  });
+
+  it("does not initiate an undispatched operation after its Permit expires", async () => {
+    const { adapter, advance, engine } = setup();
+    const card = await engine.proposeFixture(standingFixture);
+    await engine.approve(card.draftId, card.draftHash);
+    advance(31_000);
+
+    await expect(
+      engine.approveAndExecute(card.draftId, card.draftHash),
+    ).rejects.toMatchObject({ code: "permit_expired" });
+    expect(adapter.executions).toHaveLength(0);
+    expect(adapter.reconciliations).toBe(0);
   });
 });
 

@@ -23,8 +23,11 @@ Run the deterministic verification commands with no personal account or model ke
 npm run check
 npm run attack
 npm run verify:demo
+npm run verify:recovery
 npm run verify:openclaw
 ```
+
+`npm run verify:recovery` opens a real local HTTP listener and proves the ambiguous-response path: the Calendar commits, the first approval response is lost, the same-hash approval is retried, and Bander returns one Receipt without minting new authority or repeating the mutation.
 
 For an interactive MCP probe, keep the demo running and use a second terminal:
 

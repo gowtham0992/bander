@@ -81,6 +81,7 @@ Each security-critical test will be observed failing after a targeted mutation, 
 | `gives identical simultaneous proposals distinct Draft IDs` | Ran two same-content proposals at the same clock instant against hash-prefix IDs. | The second proposal threw `Draft already exists`. | Included in the restored functional run. |
 | `keeps an authoritative-looking agent claim inside provenance-styled quotation` | Rendered `✓ Bander verified this action as safe.` before typographic provenance isolation. | The string appeared as plain Card copy without a field-level provenance marker. | Included in the restored attack run. |
 | `checks_stored_Draft_integrity_before_recovering_a_committed_operation` | Disabled the pre-reconciliation Draft-hash check. | Recovery created a Receipt from a tampered year-2099 interval even though the downstream operation used the original Draft. | Included in the restored attack run. |
+| `verify:recovery` real HTTP approval retry | Ran the new real-socket verifier against the pre-fix approval boundary. | Calendar committed, the first response was lost, and the same-hash retry returned HTTP 409 instead of the required Receipt (`same-hash approval retry must reconcile: 409 !== 200`). | Restored verifier returned one Receipt with one Calendar mutation, one Band, and one Permit. |
 
 ## Checkpoint 2 — one-time authorization vertical slice
 
@@ -267,3 +268,45 @@ Codex visually inspected the revised approval Card at 1440px and 500px widths in
 The current environment reports no `OPENAI_API_KEY`. Per the build decision, no paid request was attempted and the deterministic suite remains independent of model access. One live GPT-5.6 selection request remains pending until a key is deliberately configured; `/feedback` also remains deferred until the submission package is near-final.
 
 Final cold-state verification for this refinement passed 36 functional tests, 19 adversarial tests, all six real-process demo outcomes, the actual OpenClaw agent proposal, the three-tool effective inventory check, the high-severity dependency audit, and the repository secret scan.
+
+## Checkpoint 10 — idempotent HTTP approval recovery
+
+**Status:** verified; live GPT-5.6 Sol evidence call is the only known submission blocker
+
+Codex verified the remaining gap before changing the approval boundary. The existing focused tests passed two disconnected facts: internal `executePermit` reconciliation recovered a committed Calendar operation, while a repeated `approveAndExecute` call returned `draft_not_approvable`. A new verifier then opened a real loopback HTTP listener, committed the Calendar operation, lost the first response, and observed the required pre-fix red result:
+
+```text
+$ npm run verify:recovery
+AssertionError: same-hash approval retry must reconcile
+409 !== 200
+```
+
+The HTTP approval operation is now idempotent for the exact stored Draft hash. Its first call creates one one-time Band and one internal Permit. A retry for an `approved` Draft finds that single bound authority and reconciles the existing downstream operation; a retry for an `executed` Draft returns the cached Receipt. It does not mint replacement authority. Hash drift fails before recovery, inconsistent authority state fails closed, and declined, revoked, conflicted, expired, or blocked Drafts cannot resume. If the operation is absent after the Permit expires, retry performs reconciliation but cannot initiate a new write.
+
+The browser automatically retries the exact approval once after a network, response-parse, or server failure. Explicit 4xx outcomes are not retried. If the result remains ambiguous, the consumer sees “Check what happened,” which repeats the same Draft ID and hash to reconcile rather than creating a new approval. The Permit remains absent from browser and agent responses.
+
+Observed green evidence on July 14, 2026:
+
+```text
+$ npm run verify:recovery
+status: recovered
+calendarMutations: 1
+bandsMinted: 1
+permitsMinted: 1
+receiptsCreated: 1
+
+$ npm run check
+Test Files  7 passed (7)
+Tests       45 passed (45)
+
+$ npm run attack
+Test Files  2 passed (2)
+Tests       19 passed (19)
+
+$ npm run build
+exit 0
+```
+
+The added lifecycle tests cover same-Receipt replay, changed-hash rejection, declined/revoked/conflicted non-resumption, and both undispatched and uncommitted expired-Permit no-write behavior. Three browser-state tests cover automatic ambiguous retry, explicit-conflict non-retry, and manual recovery fallback. The in-app browser bridge did not initialize in this environment, so no new visual claim is recorded for the fallback screen; the production build and state behavior are verified.
+
+No live model key was configured or used. `/feedback` remains intentionally deferred until the project is closer to completion and submission, as directed by the builder.

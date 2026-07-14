@@ -396,7 +396,57 @@ export class AuthorityEngine {
   }
 
   async approveAndExecute(draftId: string, approvedHash: string): Promise<HumanReceipt> {
-    const authorization = await this.approve(draftId, approvedHash);
+    const authorization = await this.#lock.run(draftId, async () => {
+      const draft = this.#requireDraft(draftId);
+      this.#verifyApprovedHash(draft, approvedHash);
+
+      if (draft.status === "proposed") {
+        if (new Date(draft.document.expiresAt).getTime() <= this.#now().getTime()) {
+          this.#store.updateDraft({ ...draft, status: "expired" });
+          throw new AuthorityError("draft_expired", "This deal has expired", 409);
+        }
+        return this.#createOneTimeAuthorization(draft);
+      }
+
+      if (draft.status !== "approved" && draft.status !== "executed") {
+        throw new AuthorityError(
+          "draft_not_resumable",
+          "This Draft cannot resume execution",
+          409,
+        );
+      }
+
+      const bands = this.#store.getOneTimeBandsForDraft(draft.id);
+      const permits = this.#store.getPermitsForDraft(draft.id);
+      if (bands.length !== 1 || permits.length !== 1) {
+        throw new AuthorityError(
+          "invalid_authority_state",
+          "The existing execution authority is inconsistent",
+          409,
+        );
+      }
+      const [band] = bands;
+      const [permit] = permits;
+      if (
+        !band ||
+        band.mode !== "one_time" ||
+        !permit ||
+        band.draftHash !== approvedHash ||
+        permit.bandId !== band.id ||
+        permit.draftHash !== approvedHash ||
+        permit.executor !== "bander_executor" ||
+        (draft.status === "approved" && band.status !== "active") ||
+        (draft.status === "executed" &&
+          (band.status !== "consumed" || !permit.consumedAt || !permit.receiptId))
+      ) {
+        throw new AuthorityError(
+          "invalid_authority_state",
+          "The existing execution authority is inconsistent",
+          409,
+        );
+      }
+      return { bandId: band.id, permitId: permit.id };
+    });
     return this.executePermit(authorization.permitId);
   }
 
@@ -413,31 +463,13 @@ export class AuthorityEngine {
           409,
         );
       }
-      if (draft.hash !== approvedHash || hashDraft(draft.document) !== approvedHash) {
-        throw new AuthorityError(
-          "draft_hash_mismatch",
-          "The approved deal does not match the stored Draft",
-          409,
-        );
-      }
+      this.#verifyApprovedHash(draft, approvedHash);
       if (new Date(draft.document.expiresAt).getTime() <= this.#now().getTime()) {
         this.#store.updateDraft({ ...draft, status: "expired" });
         throw new AuthorityError("draft_expired", "This deal has expired", 409);
       }
 
-      const band: OneTimeBand = {
-        id: `band_${this.#id()}`,
-        mode: "one_time",
-        draftId: draft.id,
-        draftHash: draft.hash,
-        approvedAt: this.#now().toISOString(),
-        expiresAt: draft.document.expiresAt,
-        status: "active",
-      };
-      this.#store.saveBand(band);
-      this.#store.updateDraft({ ...draft, status: "approved" });
-      const permit = this.#createPermit(band.id, draft);
-      return { bandId: band.id, permitId: permit.id };
+      return this.#createOneTimeAuthorization(draft);
     });
   }
 
@@ -569,6 +601,34 @@ export class AuthorityEngine {
     };
     this.#store.savePermit(permit);
     return permit;
+  }
+
+  #createOneTimeAuthorization(
+    draft: StoredDraft,
+  ): { bandId: string; permitId: string } {
+    const band: OneTimeBand = {
+      id: `band_${this.#id()}`,
+      mode: "one_time",
+      draftId: draft.id,
+      draftHash: draft.hash,
+      approvedAt: this.#now().toISOString(),
+      expiresAt: draft.document.expiresAt,
+      status: "active",
+    };
+    this.#store.saveBand(band);
+    this.#store.updateDraft({ ...draft, status: "approved" });
+    const permit = this.#createPermit(band.id, draft);
+    return { bandId: band.id, permitId: permit.id };
+  }
+
+  #verifyApprovedHash(draft: StoredDraft, approvedHash: string): void {
+    if (draft.hash !== approvedHash || hashDraft(draft.document) !== approvedHash) {
+      throw new AuthorityError(
+        "draft_hash_mismatch",
+        "The approved deal does not match the stored Draft",
+        409,
+      );
+    }
   }
 
   async #executeStoredDraft(permitId: string): Promise<HumanReceipt> {

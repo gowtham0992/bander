@@ -41,6 +41,12 @@ export class AuthorityStore {
     return value ? copy(value) : undefined;
   }
 
+  getOneTimeBandsForDraft(draftId: string): Band[] {
+    return [...this.#bands.values()]
+      .filter((band) => band.mode === "one_time" && band.draftId === draftId)
+      .map(copy);
+  }
+
   updateBand(band: Band): void {
     if (!this.#bands.has(band.id)) throw new Error("Band does not exist");
     this.#bands.set(band.id, copy(band));
@@ -53,6 +59,12 @@ export class AuthorityStore {
   getPermit(id: string): Permit | undefined {
     const value = this.#permits.get(id);
     return value ? copy(value) : undefined;
+  }
+
+  getPermitsForDraft(draftId: string): Permit[] {
+    return [...this.#permits.values()]
+      .filter((permit) => permit.draftId === draftId)
+      .map(copy);
   }
 
   updatePermit(permit: Permit): void {

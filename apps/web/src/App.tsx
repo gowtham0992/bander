@@ -20,11 +20,45 @@ type Screen =
   | { kind: "standing-revoked" }
   | { kind: "declined" }
   | { kind: "change"; card: ApprovalCard }
+  | { kind: "approval-recovery"; card: ApprovalCard; message: string }
   | { kind: "error"; message: string };
 
 interface Status {
   fixtureMode: boolean;
   modelCompiler: "available" | "not_configured";
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+export function isAmbiguousApprovalError(error: unknown): boolean {
+  return !(error instanceof ApiError) || error.status >= 500;
+}
+
+export async function attemptApprovalWithRecovery<T>(
+  attempt: () => Promise<T>,
+  onRecoveryAttempt: () => void,
+): Promise<{ status: "confirmed"; value: T } | { status: "ambiguous" }> {
+  try {
+    return { status: "confirmed", value: await attempt() };
+  } catch (error) {
+    if (!isAmbiguousApprovalError(error)) throw error;
+    onRecoveryAttempt();
+  }
+
+  try {
+    return { status: "confirmed", value: await attempt() };
+  } catch (error) {
+    if (!isAmbiguousApprovalError(error)) throw error;
+    return { status: "ambiguous" };
+  }
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -38,7 +72,13 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const body = (await response.json()) as T & {
     error?: { code: string; message: string };
   };
-  if (!response.ok) throw new Error(body.error?.message ?? "Bander could not continue");
+  if (!response.ok) {
+    throw new ApiError(
+      body.error?.message ?? "Bander could not continue",
+      response.status,
+      body.error?.code,
+    );
+  }
   return body;
 }
 
@@ -478,11 +518,28 @@ export function App() {
         scenario === "conflict"
           ? `/api/demo/drafts/${card.draftId}/approve-after-calendar-change`
           : `/api/drafts/${card.draftId}/approve`;
-      const receipt = await api<HumanReceipt>(path, {
-        method: "POST",
-        body: JSON.stringify({ draftHash: card.draftHash }),
-      });
-      setScreen({ kind: "receipt", receipt });
+      const request = () =>
+        api<HumanReceipt>(path, {
+          method: "POST",
+          body: JSON.stringify({ draftHash: card.draftHash }),
+        });
+      if (scenario === "exact") {
+        const result = await attemptApprovalWithRecovery(request, () =>
+          setScreen({ kind: "loading", message: "Checking what happened…" }),
+        );
+        if (result.status === "ambiguous") {
+          setScreen({
+            kind: "approval-recovery",
+            card,
+            message:
+              "Bander couldn’t confirm the result yet. Check the exact deal again to reconcile what happened without repeating the action.",
+          });
+          return;
+        }
+        setScreen({ kind: "receipt", receipt: result.value });
+        return;
+      }
+      setScreen({ kind: "receipt", receipt: await request() });
     } catch (error) {
       setScreen({ kind: "error", message: (error as Error).message });
     } finally {
@@ -577,6 +634,25 @@ export function App() {
           <h1>Not now.</h1>
           <p className="result-summary">Your calendar and messages were left exactly as they were.</p>
           <button className="secondary" onClick={() => setScreen({ kind: "welcome" })}>Back to Bander</button>
+        </main>
+      )}
+      {screen.kind === "approval-recovery" && (
+        <main className="result-shell" role="alert" aria-live="polite">
+          <span className="deal-kicker">Result not confirmed</span>
+          <h1>Let’s check what happened.</h1>
+          <p className="result-summary">{screen.message}</p>
+          <div className="result-actions">
+            <button
+              className="primary"
+              onClick={() => approve(screen.card, "exact")}
+              disabled={busy}
+            >
+              {busy ? "Checking…" : "Check what happened"}
+            </button>
+            <button className="secondary" onClick={() => setScreen({ kind: "welcome" })}>
+              Back to Bander
+            </button>
+          </div>
         </main>
       )}
       {screen.kind === "error" && (
