@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DraftFixture } from "@bander/core";
 import {
   CompilerError,
+  ExactFixtureDraftCompiler,
   FixtureDraftCompiler,
   type CandidateSelector,
 } from "./compiler.js";
@@ -60,5 +61,24 @@ describe("optional model compiler", () => {
     await expect(compiler.compile("Move dinner later")).rejects.toEqual(
       new CompilerError("clarification_required", "What time should dinner move to?"),
     );
+  });
+});
+
+describe("deterministic natural-request compiler", () => {
+  it("selects a bounded fixture without exposing its internal ID", async () => {
+    const compiler = new ExactFixtureDraftCompiler(new Map([[fixture.id, fixture]]));
+
+    const compiled = await compiler.compile("Versioned fixture request.");
+
+    expect(compiled.calendar).toEqual(fixture.calendar);
+    expect(compiled.claimedUserRequest).toBe("Versioned fixture request.");
+  });
+
+  it("requests clarification instead of guessing an adjacent action", async () => {
+    const compiler = new ExactFixtureDraftCompiler(new Map([[fixture.id, fixture]]));
+
+    await expect(compiler.compile("Move dinner sometime later")).rejects.toMatchObject({
+      code: "clarification_required",
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type {
   ApprovalCard,
+  ApprovalEffectPreview,
   HumanReceipt,
   StandingBandCard,
 } from "@bander/contracts";
@@ -122,9 +123,65 @@ export function AgentClaim({ card }: { card: ApprovalCard }) {
   return (
     <div className="agent-claim">
       <span>{card.provenanceLabel}</span>
-      <blockquote>{card.claimedUserRequest}</blockquote>
+      <blockquote data-provenance="agent-claimed">
+        <q className="quoted-data">{card.claimedUserRequest}</q>
+      </blockquote>
     </div>
   );
+}
+
+export function QuotedData({
+  source,
+  children,
+}: {
+  source: string;
+  children: string;
+}) {
+  return (
+    <span className="data-quote" data-provenance={source}>
+      <span className="data-source">{source}</span>
+      <q className="quoted-data">{children}</q>
+    </span>
+  );
+}
+
+export function EffectAllowance({ preview }: { preview: ApprovalEffectPreview }) {
+  if (preview.kind === "calendar.reschedule_event") {
+    return (
+      <span className="effect-copy">
+        Reschedule Calendar event{" "}
+        <QuotedData source="Calendar event title">{preview.eventTitle}</QuotedData>{" "}
+        from {preview.previousInterval} to {preview.resultingInterval}
+      </span>
+    );
+  }
+  return (
+    <span className="effect-copy message-effect">
+      <span>
+        Send one message to{" "}
+        <QuotedData source="Messages recipient">
+          {preview.recipientDisplayName}
+        </QuotedData>
+      </span>
+      <QuotedData source="Agent-proposed message body">{preview.body}</QuotedData>
+    </span>
+  );
+}
+
+function formatReceiptInterval(
+  interval: { startTime: string; endTime: string },
+  timeZone: string,
+): string {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
+  const start = formatter.format(new Date(interval.startTime));
+  const end = formatter.format(new Date(interval.endTime));
+  const startMeridiem = start.match(/ (AM|PM)$/)?.[1];
+  const endMeridiem = end.match(/ (AM|PM)$/)?.[1];
+  return `${startMeridiem === endMeridiem ? start.replace(/ (AM|PM)$/, "") : start}–${end}`;
 }
 
 function DealCard({
@@ -153,10 +210,10 @@ function DealCard({
         <section className="allowance">
           <h2>With this Band, Bander may only:</h2>
           <ul>
-            {card.allows.map((line) => (
-              <li key={line}>
+            {card.effectPreviews.map((preview, index) => (
+              <li key={`${preview.kind}-${index}`}>
                 <span className="check" aria-hidden="true">✓</span>
-                <span>{line}</span>
+                <EffectAllowance preview={preview} />
               </li>
             ))}
           </ul>
@@ -211,8 +268,29 @@ function Receipt({
       <div className="result-mark" aria-hidden="true">✓</div>
       <span className="deal-kicker">Completed as agreed</span>
       <h1>{receipt.title}</h1>
-      <p className="result-summary">{receipt.summary}</p>
-      <p className="result-detail">{receipt.detail}</p>
+      <p className="result-summary">
+        <span>Rescheduled Calendar event </span>
+        <QuotedData source="Calendar event title">{receipt.calendar.title}</QuotedData>
+        <span>
+          {" "}from {formatReceiptInterval(receipt.calendar.previous, receipt.calendar.timeZone)}
+          {" "}to {formatReceiptInterval(receipt.calendar.completed, receipt.calendar.timeZone)}.
+        </span>
+      </p>
+      <p className="result-detail">
+        {receipt.message ? (
+          <>
+            <span>Sent the approved message to </span>
+            <QuotedData source="Messages recipient">
+              {receipt.message.recipientDisplayName}
+            </QuotedData>
+            <span className="receipt-message">
+              <QuotedData source="Approved message body">{receipt.message.body}</QuotedData>
+            </span>
+          </>
+        ) : (
+          "No messages were sent."
+        )}
+      </p>
       <div className="receipt-stamp">
         <span>Receipt</span>
         <code>{receipt.id.replace("receipt_", "").slice(0, 12)}</code>

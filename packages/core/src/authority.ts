@@ -48,6 +48,10 @@ export interface ExecutionAdapter {
     permitNonce: string;
     document: DraftDocument;
   }): Promise<void>;
+  getExecution(input: {
+    draftHash: string;
+    permitNonce: string;
+  }): Promise<boolean>;
 }
 
 export class ExecutionConflictError extends Error {
@@ -88,6 +92,9 @@ function sameIds(actual: string[], expected: string[]): boolean {
 
 function localTimeParts(value: string, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
@@ -99,7 +106,39 @@ function localTimeParts(value: string, timeZone: string) {
   return {
     weekday: find("weekday"),
     time: `${find("hour")}:${find("minute")}`,
+    date: `${find("year")}-${find("month")}-${find("day")}`,
   };
+}
+
+function deriveRescheduledEnd(
+  originalStart: string,
+  originalEnd: string,
+  newStart: string,
+): string {
+  const originalStartMs = new Date(originalStart).getTime();
+  const originalEndMs = new Date(originalEnd).getTime();
+  const newStartMs = new Date(newStart).getTime();
+  if (
+    !Number.isFinite(originalStartMs) ||
+    !Number.isFinite(originalEndMs) ||
+    !Number.isFinite(newStartMs) ||
+    originalEndMs <= originalStartMs
+  ) {
+    throw new AuthorityError(
+      "invalid_calendar_interval",
+      "The Calendar event does not have a valid interval",
+      422,
+    );
+  }
+  const newEndMs = newStartMs + (originalEndMs - originalStartMs);
+  if (!Number.isFinite(newEndMs) || newEndMs <= newStartMs) {
+    throw new AuthorityError(
+      "invalid_calendar_interval",
+      "The proposed Calendar interval is invalid",
+      422,
+    );
+  }
+  return new Date(newEndMs).toISOString();
 }
 
 function standingBandAllows(
@@ -122,23 +161,33 @@ function standingBandAllows(
   ) {
     return false;
   }
-  if (
-    band.predicate.allowedChangedFields.length !== 1 ||
-    band.predicate.allowedChangedFields[0] !== "startTime"
-  ) {
+  if (!band.predicate.duration.mustRemainUnchanged) {
     return false;
   }
 
-  const local = localTimeParts(
+  const localStart = localTimeParts(
     effect.changes.startTime,
     band.predicate.time.timeZone,
   );
+  const localEnd = localTimeParts(
+    effect.changes.endTime,
+    band.predicate.time.timeZone,
+  );
+  const originalDuration =
+    new Date(effect.expected.endTime).getTime() -
+    new Date(effect.expected.startTime).getTime();
+  const resultingDuration =
+    new Date(effect.changes.endTime).getTime() -
+    new Date(effect.changes.startTime).getTime();
   if (
     !band.predicate.time.weekDays.includes(
-      local.weekday as (typeof band.predicate.time.weekDays)[number],
+      localStart.weekday as (typeof band.predicate.time.weekDays)[number],
     ) ||
-    local.time < band.predicate.time.startLocal ||
-    local.time > band.predicate.time.endLocal
+    localStart.date !== localEnd.date ||
+    localStart.time < band.predicate.time.startLocal ||
+    localEnd.time > band.predicate.time.endLocal ||
+    originalDuration <= 0 ||
+    resultingDuration !== originalDuration
   ) {
     return false;
   }
@@ -186,13 +235,13 @@ export class AuthorityEngine {
     const expiresAt = new Date(createdAt.getTime() + 30 * 24 * 60 * 60_000).toISOString();
     const predicate: StandingBandPredicate = {
       version: 1,
-      actionType: "calendar.update_event",
+      actionType: "calendar.reschedule_event",
       ownerId: "person-owner",
       resource: {
         organizerMustBeOwner: true,
         attendeeIdsExactly: ["person-owner"],
       },
-      allowedChangedFields: ["startTime"],
+      duration: { mustRemainUnchanged: true },
       time: {
         weekDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
         startLocal: "09:00",
@@ -456,7 +505,7 @@ export class AuthorityEngine {
 
     const effects: DraftEffect[] = [
       {
-        type: "calendar.update_event",
+        type: "calendar.reschedule_event",
         eventId: event.id,
         expected: {
           etag: event.etag,
@@ -467,7 +516,14 @@ export class AuthorityEngine {
           organizerId: event.organizerId,
           attendeeIds: event.attendeeIds,
         },
-        changes: { startTime: fixture.calendar.newStartTime },
+        changes: {
+          startTime: fixture.calendar.newStartTime,
+          endTime: deriveRescheduledEnd(
+            event.startTime,
+            event.endTime,
+            fixture.calendar.newStartTime,
+          ),
+        },
       },
     ];
     if (fixture.message && person) {
@@ -492,7 +548,7 @@ export class AuthorityEngine {
     };
     const hash = hashDraft(document);
     const draft: StoredDraft = {
-      id: `draft_${hash.slice(0, 16)}`,
+      id: `draft_${this.#id()}`,
       hash,
       document,
       status: "proposed",
@@ -516,24 +572,45 @@ export class AuthorityEngine {
   }
 
   async #executeStoredDraft(permitId: string): Promise<HumanReceipt> {
-    const permit = this.#store.getPermit(permitId);
+    let permit = this.#store.getPermit(permitId);
     if (!permit || permit.executor !== "bander_executor") {
       throw new AuthorityError("invalid_permit", "Execution authority is invalid", 403);
     }
     if (permit.consumedAt) {
+      if (permit.receiptId) return this.getHumanReceipt(permit.receiptId);
       throw new AuthorityError("permit_consumed", "Execution authority was already used", 409);
-    }
-    if (new Date(permit.expiresAt).getTime() <= this.#now().getTime()) {
-      throw new AuthorityError("permit_expired", "Execution authority expired", 409);
     }
 
     const band = this.#store.getBand(permit.bandId);
-    if (!band || band.status !== "active") {
+    if (!band) {
       throw new AuthorityError("invalid_band", "The approved Band is not active", 409);
     }
     const draft = this.#requireDraft(permit.draftId);
     if (draft.hash !== permit.draftHash || hashDraft(draft.document) !== permit.draftHash) {
       throw new AuthorityError("draft_hash_mismatch", "Stored Draft integrity check failed", 409);
+    }
+    if (
+      band.mode === "one_time" &&
+      (band.draftHash !== permit.draftHash || band.draftId !== draft.id)
+    ) {
+      throw new AuthorityError("invalid_band", "The approved Band is not active", 409);
+    }
+
+    if (permit.dispatchedAt) {
+      const committed = await this.#adapter.getExecution({
+        draftHash: permit.draftHash,
+        permitNonce: permit.nonce,
+      });
+      if (committed) {
+        return this.#completeExecution(permit, band, draft);
+      }
+    }
+    if (new Date(permit.expiresAt).getTime() <= this.#now().getTime()) {
+      throw new AuthorityError("permit_expired", "Execution authority expired", 409);
+    }
+
+    if (band.status !== "active") {
+      throw new AuthorityError("invalid_band", "The approved Band is not active", 409);
     }
     if (new Date(band.expiresAt).getTime() <= this.#now().getTime()) {
       if (band.mode === "one_time") {
@@ -542,11 +619,7 @@ export class AuthorityEngine {
       this.#store.updateDraft({ ...draft, status: "expired" });
       throw new AuthorityError("band_expired", "The approved Band expired", 409);
     }
-    if (band.mode === "one_time") {
-      if (band.draftHash !== permit.draftHash || band.draftId !== draft.id) {
-        throw new AuthorityError("invalid_band", "The approved Band is not active", 409);
-      }
-    } else if (!standingBandAllows(band, draft, this.#now())) {
+    if (band.mode === "standing" && !standingBandAllows(band, draft, this.#now())) {
       this.#store.updateDraft({ ...draft, status: "blocked" });
       throw new AuthorityError(
         "standing_band_mismatch",
@@ -556,6 +629,10 @@ export class AuthorityEngine {
     }
 
     try {
+      if (!permit.dispatchedAt) {
+        permit = { ...permit, dispatchedAt: this.#now().toISOString() };
+        this.#store.updatePermit(permit);
+      }
       await this.#adapter.executeDraft({
         draftHash: draft.hash,
         permitNonce: permit.nonce,
@@ -578,8 +655,27 @@ export class AuthorityEngine {
       throw error;
     }
 
+    return this.#completeExecution(permit, band, draft);
+  }
+
+  #completeExecution(
+    permit: Permit,
+    band: Band,
+    draft: StoredDraft,
+  ): HumanReceipt {
     const completedAt = this.#now().toISOString();
-    this.#store.updatePermit({ ...permit, consumedAt: completedAt });
+    const receipt = renderHumanReceipt(
+      `receipt_${this.#id()}`,
+      draft.id,
+      draft.document,
+      completedAt,
+    );
+    this.#store.saveReceipt(receipt);
+    this.#store.updatePermit({
+      ...permit,
+      consumedAt: completedAt,
+      receiptId: receipt.id,
+    });
     if (band.mode === "one_time") {
       this.#store.updateBand({ ...band, status: "consumed" });
     } else {
@@ -589,14 +685,6 @@ export class AuthorityEngine {
       });
     }
     this.#store.updateDraft({ ...draft, status: "executed" });
-
-    const receipt = renderHumanReceipt(
-      `receipt_${this.#id()}`,
-      draft.id,
-      draft.document,
-      completedAt,
-    );
-    this.#store.saveReceipt(receipt);
     return receipt;
   }
 

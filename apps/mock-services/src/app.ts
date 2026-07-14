@@ -10,6 +10,7 @@ interface MockServicesOptions {
 
 interface UpdateEventBody {
   startTime: string;
+  endTime: string;
 }
 
 interface SendMessageBody {
@@ -17,15 +18,16 @@ interface SendMessageBody {
   body: string;
 }
 
-interface ExecuteDealBody {
+interface ExecuteOperationBody {
+  operationKey: string;
   draftHash: string;
-  permitNonce: string;
   calendar: {
     eventId: string;
     expectedEtag: string;
     newStartTime: string;
+    newEndTime: string;
   };
-  message: {
+  message?: {
     recipientId: string;
     expectedRecipientRevision: number;
     body: string;
@@ -52,16 +54,21 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
   const events = new Map<string, CalendarEvent>();
   const people = new Map<string, (typeof options.seed.people)[number]>();
   const messagesByKey = new Map<string, SentMessage>();
-  const dealResults = new Map<
+  const operationResults = new Map<
     string,
-    { event: CalendarEvent; message: SentMessage }
+    {
+      operationKey: string;
+      draftHash: string;
+      event: CalendarEvent;
+      message?: SentMessage;
+    }
   >();
 
   const resetSeed = () => {
     events.clear();
     people.clear();
     messagesByKey.clear();
-    dealResults.clear();
+    operationResults.clear();
     for (const event of structuredClone(options.seed.events)) events.set(event.id, event);
     for (const person of structuredClone(options.seed.people)) people.set(person.id, person);
   };
@@ -114,8 +121,11 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         body: {
           type: "object",
           additionalProperties: false,
-          required: ["startTime"],
-          properties: { startTime: { type: "string", minLength: 20, maxLength: 40 } },
+          required: ["startTime", "endTime"],
+          properties: {
+            startTime: { type: "string", minLength: 20, maxLength: 40 },
+            endTime: { type: "string", minLength: 20, maxLength: 40 },
+          },
         },
       },
     },
@@ -136,10 +146,25 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         });
       }
 
+      if (
+        !Number.isFinite(new Date(request.body.startTime).getTime()) ||
+        !Number.isFinite(new Date(request.body.endTime).getTime()) ||
+        new Date(request.body.endTime).getTime() <=
+          new Date(request.body.startTime).getTime()
+      ) {
+        return reply.code(422).send({
+          error: {
+            code: "invalid_calendar_interval",
+            message: "Calendar end must be after start",
+          },
+        });
+      }
+
       const nextRevision = current.revision + 1;
       const updated: CalendarEvent = {
         ...current,
         startTime: request.body.startTime,
+        endTime: request.body.endTime,
         revision: nextRevision,
         etag: `${current.id}-r${nextRevision}`,
       };
@@ -217,25 +242,51 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
     },
   );
 
-  app.post<{ Body: ExecuteDealBody }>(
-    "/deals/execute",
+  app.get<{ Params: { operationKey: string } }>(
+    "/operations/:operationKey",
+    {
+      schema: {
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["operationKey"],
+          properties: {
+            operationKey: { type: "string", minLength: 16, maxLength: 100 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const result = operationResults.get(request.params.operationKey);
+      if (!result) {
+        return reply.code(404).send({
+          error: { code: "operation_not_found", message: "Operation not found" },
+        });
+      }
+      return result;
+    },
+  );
+
+  app.post<{ Body: ExecuteOperationBody }>(
+    "/operations/execute",
     {
       schema: {
         body: {
           type: "object",
           additionalProperties: false,
-          required: ["draftHash", "permitNonce", "calendar", "message"],
+          required: ["operationKey", "draftHash", "calendar"],
           properties: {
+            operationKey: { type: "string", minLength: 16, maxLength: 100 },
             draftHash: { type: "string", pattern: "^[a-f0-9]{64}$" },
-            permitNonce: { type: "string", minLength: 16, maxLength: 100 },
             calendar: {
               type: "object",
               additionalProperties: false,
-              required: ["eventId", "expectedEtag", "newStartTime"],
+              required: ["eventId", "expectedEtag", "newStartTime", "newEndTime"],
               properties: {
                 eventId: { type: "string", minLength: 1, maxLength: 100 },
                 expectedEtag: { type: "string", minLength: 1, maxLength: 100 },
                 newStartTime: { type: "string", minLength: 20, maxLength: 40 },
+                newEndTime: { type: "string", minLength: 20, maxLength: 40 },
               },
             },
             message: {
@@ -253,19 +304,32 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
       },
     },
     async (request, reply) => {
-      const existing = dealResults.get(request.body.draftHash);
-      if (existing) return existing;
+      const existing = operationResults.get(request.body.operationKey);
+      if (existing) {
+        if (existing.draftHash !== request.body.draftHash) {
+          return reply.code(409).send({
+            error: {
+              code: "operation_key_reused",
+              message: "Operation key is already bound to another Draft",
+            },
+          });
+        }
+        return existing;
+      }
 
       const event = events.get(request.body.calendar.eventId);
-      const person = people.get(request.body.message.recipientId);
-      if (!event || !person) {
+      const person = request.body.message
+        ? people.get(request.body.message.recipientId)
+        : undefined;
+      if (!event || (request.body.message && !person)) {
         return reply.code(404).send({
           error: { code: "resource_not_found", message: "Deal resource not found" },
         });
       }
       if (
         event.etag !== request.body.calendar.expectedEtag ||
-        person.revision !== request.body.message.expectedRecipientRevision
+        (request.body.message &&
+          person?.revision !== request.body.message.expectedRecipientRevision)
       ) {
         return reply.code(412).send({
           error: {
@@ -274,27 +338,49 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
           },
         });
       }
+      if (
+        !Number.isFinite(new Date(request.body.calendar.newStartTime).getTime()) ||
+        !Number.isFinite(new Date(request.body.calendar.newEndTime).getTime()) ||
+        new Date(request.body.calendar.newEndTime).getTime() <=
+          new Date(request.body.calendar.newStartTime).getTime()
+      ) {
+        return reply.code(422).send({
+          error: {
+            code: "invalid_calendar_interval",
+            message: "Calendar end must be after start",
+          },
+        });
+      }
 
       const nextRevision = event.revision + 1;
       const updatedEvent: CalendarEvent = {
         ...event,
         startTime: request.body.calendar.newStartTime,
+        endTime: request.body.calendar.newEndTime,
         revision: nextRevision,
         etag: `${event.id}-r${nextRevision}`,
       };
-      const message: SentMessage = {
-        id: `message-${messagesByKey.size + 1}`,
-        recipientId: person.id,
-        body: request.body.message.body,
-        idempotencyKey: request.body.draftHash,
-        sentAt: now().toISOString(),
-      };
+      const message =
+        request.body.message && person
+          ? {
+              id: `message-${messagesByKey.size + 1}`,
+              recipientId: person.id,
+              body: request.body.message.body,
+              idempotencyKey: request.body.operationKey,
+              sentAt: now().toISOString(),
+            }
+          : undefined;
 
       // Both seeded effects commit together after every precondition has passed.
       events.set(updatedEvent.id, updatedEvent);
-      messagesByKey.set(request.body.draftHash, message);
-      const result = { event: updatedEvent, message };
-      dealResults.set(request.body.draftHash, result);
+      if (message) messagesByKey.set(request.body.operationKey, message);
+      const result = {
+        operationKey: request.body.operationKey,
+        draftHash: request.body.draftHash,
+        event: updatedEvent,
+        ...(message ? { message } : {}),
+      };
+      operationResults.set(request.body.operationKey, result);
       return reply.code(201).send(result);
     },
   );

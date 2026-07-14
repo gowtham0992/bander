@@ -15,9 +15,18 @@ npm install
 npm run demo
 ```
 
-Open `http://127.0.0.1:4310`. The app includes the one-time approval, changed-world refusal, and narrow standing-Band flows. Run `npm run check` and `npm run attack` for the functional and adversarial suites.
+Open `http://127.0.0.1:4310`. The app includes the one-time approval, changed-world refusal, and narrow standing-Band flows. Calendar moves preserve duration and show the complete before/after interval. Every execution shape uses an idempotent operation record so an ambiguous lost response can be reconciled truthfully.
 
-In a second terminal, verify the pinned OpenClaw reference integration while the demo is running:
+Run the deterministic verification commands with no personal account or model key:
+
+```bash
+npm run check
+npm run attack
+npm run verify:demo
+npm run verify:openclaw
+```
+
+For an interactive MCP probe, keep the demo running and use a second terminal:
 
 ```bash
 npm run openclaw -- config validate
@@ -26,6 +35,8 @@ npm run openclaw -- mcp probe bander --json
 ```
 
 OpenClaw runs through the compatible Node runtime pinned inside this project and uses isolated state under `.bander/`. Its versioned config is [openclaw/reference.openclaw.json](./openclaw/reference.openclaw.json).
+
+`npm run verify:openclaw` runs a real local OpenClaw agent turn against a deterministic OpenAI-compatible mock provider. The model receives exactly `bander__list_capabilities`, `bander__propose_action`, and `bander__get_receipt`; it passes the human request through MCP, creates a proposed Draft/Card, and performs no execution.
 
 ## Optional GPT-5.6 compiler
 
@@ -39,6 +50,6 @@ OpenClaw may use network transport to reach its model provider and Bander's MCP 
 
 ## Build status
 
-The current implementation verifies the isolated credential boundary, exact one-time authority, changed-world refusal, attack suite, proposal flood control, the first narrow standing Band, the OpenClaw Streamable HTTP reference integration, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
+The current implementation verifies the isolated credential boundary, exact one-time authority, duration-preserving Calendar reschedules, idempotent response-loss recovery, changed-world refusal, attack suite, proposal flood control, the first narrow standing Band, the real OpenClaw Streamable HTTP proposal flow, effective session tool inventory, provenance-isolated agent text, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
 
 For demo preparation, see [docs/recording-plan.md](./docs/recording-plan.md) and [docs/submission-checklist.md](./docs/submission-checklist.md).

@@ -20,7 +20,8 @@
     "dev": "tsx scripts/dev.ts",
     "demo": "npm run build && tsx scripts/demo.ts",
     "openclaw": "./node_modules/node/bin/node scripts/openclaw.mjs",
-    "verify:demo": "./node_modules/node/bin/node scripts/verify-demo.ts"
+    "verify:demo": "tsx scripts/verify-demo.ts",
+    "verify:openclaw": "npm run build && tsx scripts/verify-openclaw.ts"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

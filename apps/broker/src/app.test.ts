@@ -57,6 +57,9 @@ class FakeAdapter implements ExecutionAdapter {
   }): Promise<void> {
     this.executions += 1;
   }
+  async getExecution(): Promise<boolean> {
+    return false;
+  }
 }
 
 let app: FastifyInstance | undefined;
@@ -138,9 +141,21 @@ describe("broker approval boundary", () => {
         "propose_action",
       ]);
 
+      const capabilities = await client.callTool({
+        name: "list_capabilities",
+        arguments: {},
+      });
+      const capabilityText = (
+        capabilities.content as Array<{ type: string; text?: string }>
+      )[0]?.text;
+      expect(JSON.parse(capabilityText ?? "{}")).toMatchObject({
+        supportedProposalRequests: [fixture.claimedUserRequest],
+      });
+      expect(capabilityText).not.toContain(fixture.id);
+
       const result = await client.callTool({
         name: "propose_action",
-        arguments: { fixtureId: "fixture" },
+        arguments: { request: fixture.claimedUserRequest },
       });
       const first = (result.content as Array<{ type: string; text?: string }>)[0];
       expect(first?.type).toBe("text");

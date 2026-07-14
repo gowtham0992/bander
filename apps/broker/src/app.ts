@@ -7,6 +7,7 @@ interface BrokerAppOptions {
   engine: AuthorityEngine;
   fixtures: Map<string, DraftFixture>;
   compiler?: DraftCompiler;
+  agentCompiler?: DraftCompiler;
   resetDemo?: () => Promise<void>;
   simulateCalendarChange?: () => Promise<void>;
 }

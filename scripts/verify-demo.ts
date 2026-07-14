@@ -1,4 +1,46 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { createRuntimeEnvironments } from "./process-env.js";
+
 const baseUrl = process.env.BANDER_URL ?? "http://127.0.0.1:4310";
+const ownedProcesses: ChildProcess[] = [];
+
+async function brokerIsReady(): Promise<boolean> {
+  try {
+    return (await fetch(`${baseUrl}/api/status`)).ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureLocalServices(): Promise<void> {
+  if (await brokerIsReady()) return;
+  if (baseUrl !== "http://127.0.0.1:4310") {
+    throw new Error(`Bander is not reachable at configured BANDER_URL ${baseUrl}`);
+  }
+  const environments = createRuntimeEnvironments({
+    ...process.env,
+    NODE_ENV: "test",
+  });
+  for (const [workspace, env] of [
+    ["@bander/mock-services", environments["mock-services"]],
+    ["@bander/broker", environments.broker],
+  ] as const) {
+    ownedProcesses.push(
+      spawn("npm", ["run", "start", "--workspace", workspace], {
+        cwd: process.cwd(),
+        env,
+        stdio: "ignore",
+        shell: false,
+      }),
+    );
+  }
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (await brokerIsReady()) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("Timed out starting the local Bander verification services");
+}
 
 async function request<T>(
   path: string,
@@ -27,6 +69,8 @@ const post = <T>(path: string, body?: unknown, expectedStatus = 200) =>
 
 const reset = () => post<void>("/api/demo/reset", undefined, 204);
 
+await ensureLocalServices();
+try {
 await reset();
 const exactCard = await post<{ draftId: string; draftHash: string }>(
   "/api/demo/proposals",
@@ -97,3 +141,6 @@ console.log(
     2,
   ),
 );
+} finally {
+  for (const child of ownedProcesses) child.kill("SIGTERM");
+}

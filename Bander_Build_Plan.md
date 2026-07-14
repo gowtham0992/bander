@@ -100,10 +100,10 @@ A person can approve a small recurring rule rather than seeing a Card for routin
 That sentence is only a rendering. The actual Band is an **enumerated predicate**, not prose:
 
 ```text
-allowed action type:    calendar.update_event
+allowed action type:    calendar.reschedule_event
 resource selector:      organizer == self AND attendees == [self]
-allowed changed fields: start_time only
-time constraint:        weekday, 09:00–17:00 local time
+duration constraint:    resulting duration == original duration
+time constraint:        resulting interval starts and finishes on a weekday, 09:00–17:00 local time
 aggregate limits:       max 3 actions / rolling day; 0 new recipients; $0 spend
 lifecycle:              30-day expiry; user can revoke immediately
 ```
@@ -114,8 +114,8 @@ At standing-Band approval, the person reviews a deterministic clause-by-clause r
 
 ```text
 Only appointments where you are the only attendee
-Only the start time may change; never cancel or change duration
-Only Monday–Friday, 09:00–17:00 local time
+Only reschedule the complete appointment; never cancel or change duration
+The resulting appointment must start and finish Monday–Friday between 09:00 and 17:00 local time
 Never send a message or make a purchase
 At most 3 actions per day · expires 12 August · revoke anytime
 ```

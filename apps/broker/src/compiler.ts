@@ -26,6 +26,47 @@ export interface DraftCompiler {
   compile(agentClaimedRequest: string): Promise<DraftFixture>;
 }
 
+function normalizeRequest(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[’‘]/g, "'")
+    .trim()
+    .replace(/[.!?]+$/, "")
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("en-US");
+}
+
+export class ExactFixtureDraftCompiler implements DraftCompiler {
+  readonly #fixtures: Map<string, DraftFixture>;
+
+  constructor(fixtures: Map<string, DraftFixture>) {
+    this.#fixtures = fixtures;
+  }
+
+  async compile(agentClaimedRequest: string): Promise<DraftFixture> {
+    const normalized = normalizeRequest(agentClaimedRequest);
+    const fixture = [...this.#fixtures.values()].find(
+      (candidate) => normalizeRequest(candidate.claimedUserRequest) === normalized,
+    );
+    if (!fixture) {
+      throw new CompilerError(
+        "clarification_required",
+        "That wording does not exactly match a bounded local action. Ask the person to restate one of Bander’s listed capabilities.",
+      );
+    }
+    return {
+      ...structuredClone(fixture),
+      claimedUserRequest: agentClaimedRequest,
+    };
+  }
+}
+
+export function createDeterministicDraftCompiler(
+  fixtures: Map<string, DraftFixture>,
+): DraftCompiler {
+  return new ExactFixtureDraftCompiler(fixtures);
+}
+
 export class CompilerError extends Error {
   constructor(
     readonly code: "unsupported_request" | "clarification_required" | "model_unavailable",

@@ -1,6 +1,6 @@
 import type {
   CalendarEvent,
-  CalendarUpdateEffect,
+  CalendarRescheduleEffect,
   DraftDocument,
   MessageSendEffect,
   Person,
@@ -38,7 +38,8 @@ export class MockServiceClient implements ExecutionAdapter {
     document: DraftDocument;
   }): Promise<void> {
     const calendar = input.document.effects.find(
-      (effect): effect is CalendarUpdateEffect => effect.type === "calendar.update_event",
+      (effect): effect is CalendarRescheduleEffect =>
+        effect.type === "calendar.reschedule_event",
     );
     const message = input.document.effects.find(
       (effect): effect is MessageSendEffect => effect.type === "messages.send",
@@ -47,36 +48,54 @@ export class MockServiceClient implements ExecutionAdapter {
       throw new Error("Stored Draft does not contain a supported Calendar effect");
     }
 
-    if (!message && input.document.effects.length === 1) {
-      await this.#request(`/calendar/events/${encodeURIComponent(calendar.eventId)}`, {
-        method: "PATCH",
-        headers: { "if-match": calendar.expected.etag },
-        body: JSON.stringify({ startTime: calendar.changes.startTime }),
-      });
-      return;
-    }
-
-    if (!message || input.document.effects.length !== 2) {
+    if (input.document.effects.length !== (message ? 2 : 1)) {
       throw new Error("Stored Draft does not match a supported execution shape");
     }
 
-    await this.#request("/deals/execute", {
+    await this.#request("/operations/execute", {
       method: "POST",
       body: JSON.stringify({
+        operationKey: input.permitNonce,
         draftHash: input.draftHash,
-        permitNonce: input.permitNonce,
         calendar: {
           eventId: calendar.eventId,
           expectedEtag: calendar.expected.etag,
           newStartTime: calendar.changes.startTime,
+          newEndTime: calendar.changes.endTime,
         },
-        message: {
-          recipientId: message.recipientId,
-          expectedRecipientRevision: message.expected.revision,
-          body: message.body,
-        },
+        ...(message
+          ? {
+              message: {
+                recipientId: message.recipientId,
+                expectedRecipientRevision: message.expected.revision,
+                body: message.body,
+              },
+            }
+          : {}),
       }),
     });
+  }
+
+  async getExecution(input: {
+    draftHash: string;
+    permitNonce: string;
+  }): Promise<boolean> {
+    const response = await fetch(
+      `${this.#baseUrl}/operations/${encodeURIComponent(input.permitNonce)}`,
+      {
+        headers: { authorization: this.#authorization },
+        signal: AbortSignal.timeout(this.#timeoutMs),
+      },
+    );
+    if (response.status === 404) return false;
+    const body = (await response.json()) as {
+      draftHash?: string;
+      error?: { code: string };
+    };
+    if (!response.ok) {
+      throw new Error(body.error?.code ?? `mock_service_${response.status}`);
+    }
+    return body.draftHash === input.draftHash;
   }
 
   async resetDemo(): Promise<void> {

@@ -3,10 +3,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod/v4";
 import { AuthorityError, type AuthorityEngine, type DraftFixture } from "@bander/core";
+import {
+  CompilerError,
+  createDeterministicDraftCompiler,
+  type DraftCompiler,
+} from "./compiler.js";
 
 interface McpRoutesOptions {
   engine: AuthorityEngine;
   fixtures: Map<string, DraftFixture>;
+  agentCompiler?: DraftCompiler;
 }
 
 function asToolError(error: unknown) {
@@ -22,6 +28,8 @@ function asToolError(error: unknown) {
 
 export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
   const server = new McpServer({ name: "bander", version: "0.1.0" });
+  const compiler =
+    options.agentCompiler ?? createDeterministicDraftCompiler(options.fixtures);
 
   server.registerTool(
     "list_capabilities",
@@ -37,10 +45,13 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
           type: "text",
           text: JSON.stringify({
             capabilities: [
-              "Propose a seeded Calendar event start-time change",
-              "Propose one seeded Messages send as part of the same deal",
+              "Prepare a bounded Calendar reschedule for human review",
+              "Prepare one bounded Messages send as part of the same reviewed deal",
               "Read only the minimal status of a previously proposed Draft",
             ],
+            supportedProposalRequests: [...options.fixtures.values()].map(
+              (fixture) => fixture.claimedUserRequest,
+            ),
             executionBoundary:
               "OpenClaw can propose actions but cannot approve or execute them.",
           }),
@@ -54,30 +65,30 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
     {
       title: "Propose an action through Bander",
       description:
-        "Create a review Card from a versioned local Draft fixture. This never approves or executes the action.",
+        "Pass the person's natural request verbatim. Bander may create a review Card only when it matches a bounded local candidate. This never approves or executes the action.",
       inputSchema: {
-        fixtureId: z
+        request: z
           .string()
           .min(1)
-          .max(100)
-          .describe("A fixture ID returned by the Bander demo instructions"),
+          .max(1000)
+          .describe("The person's natural-language request, passed verbatim"),
       },
     },
-    async ({ fixtureId }) => {
-      const fixture = options.fixtures.get(fixtureId);
-      if (!fixture) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: "fixture_not_found: Demo fixture not found" }],
-        };
-      }
+    async ({ request }) => {
       try {
+        const fixture = await compiler.compile(request);
         const card = await options.engine.proposeFixture(
           fixture,
           "openclaw-reference",
         );
         return { content: [{ type: "text", text: JSON.stringify(card) }] };
       } catch (error) {
+        if (error instanceof CompilerError) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: `${error.code}: ${error.message}` }],
+          };
+        }
         return asToolError(error);
       }
     },

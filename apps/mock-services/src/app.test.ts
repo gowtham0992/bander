@@ -68,7 +68,10 @@ describe("mock Calendar conditional writes", () => {
       method: "PATCH",
       url: "/calendar/events/event-dinner-sarah",
       headers: { ...authorization, "if-match": "stale-etag" },
-      payload: { startTime: "2026-07-14T19:30:00-06:00" },
+      payload: {
+        startTime: "2026-07-14T19:30:00-06:00",
+        endTime: "2026-07-15T03:00:00.000Z",
+      },
     });
 
     expect(staleWrite.statusCode).toBe(412);
@@ -91,18 +94,21 @@ describe("mock Calendar conditional writes", () => {
     });
   });
 
-  it("updates only the requested start time when the ETag matches", async () => {
+  it("writes the exact duration-preserving interval when the ETag matches", async () => {
     const response = await createApp().inject({
       method: "PATCH",
       url: "/calendar/events/event-dinner-sarah",
       headers: { ...authorization, "if-match": "event-dinner-sarah-r1" },
-      payload: { startTime: "2026-07-14T19:30:00-06:00" },
+      payload: {
+        startTime: "2026-07-14T19:30:00-06:00",
+        endTime: "2026-07-15T03:00:00.000Z",
+      },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       startTime: "2026-07-14T19:30:00-06:00",
-      endTime: "2026-07-14T20:30:00-06:00",
+      endTime: "2026-07-15T03:00:00.000Z",
       revision: 2,
       etag: "event-dinner-sarah-r2",
     });
@@ -136,19 +142,118 @@ describe("mock Messages idempotency", () => {
 });
 
 describe("atomic seeded deal execution", () => {
-  it("commits the exact Calendar and Messages effects after all preconditions pass", async () => {
+  it("returns one Calendar mutation for repeated operation-key execution", async () => {
     const instance = createApp();
-    const deal = await instance.inject({
-      method: "POST",
-      url: "/deals/execute",
+    const request = {
+      method: "POST" as const,
+      url: "/operations/execute",
       headers: authorization,
       payload: {
-        draftHash: "a".repeat(64),
-        permitNonce: "permit-nonce-long-enough",
+        operationKey: "permit-nonce-calendar-only",
+        draftHash: "c".repeat(64),
         calendar: {
           eventId: "event-dinner-sarah",
           expectedEtag: "event-dinner-sarah-r1",
           newStartTime: "2026-07-14T19:30:00-06:00",
+          newEndTime: "2026-07-15T03:00:00.000Z",
+        },
+      },
+    };
+
+    const first = await instance.inject(request);
+    const retry = await instance.inject(request);
+
+    expect(first.statusCode).toBe(201);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual(first.json());
+    expect(retry.json()).toMatchObject({
+      event: {
+        startTime: "2026-07-14T19:30:00-06:00",
+        endTime: "2026-07-15T03:00:00.000Z",
+        revision: 2,
+      },
+    });
+  });
+
+  it("rejects reuse of an operation key for a different Draft", async () => {
+    const instance = createApp();
+    const payload = {
+      operationKey: "permit-nonce-bound-to-one-draft",
+      draftHash: "e".repeat(64),
+      calendar: {
+        eventId: "event-dinner-sarah",
+        expectedEtag: "event-dinner-sarah-r1",
+        newStartTime: "2026-07-14T19:30:00-06:00",
+        newEndTime: "2026-07-15T03:00:00.000Z",
+      },
+    };
+    await instance.inject({
+      method: "POST",
+      url: "/operations/execute",
+      headers: authorization,
+      payload,
+    });
+
+    const reused = await instance.inject({
+      method: "POST",
+      url: "/operations/execute",
+      headers: authorization,
+      payload: { ...payload, draftHash: "f".repeat(64) },
+    });
+
+    expect(reused.statusCode).toBe(409);
+    expect(reused.json()).toMatchObject({
+      error: { code: "operation_key_reused" },
+    });
+  });
+
+  it("returns one combined Calendar and Messages result when retried", async () => {
+    const instance = createApp();
+    const request = {
+      method: "POST" as const,
+      url: "/operations/execute",
+      headers: authorization,
+      payload: {
+        operationKey: "permit-nonce-combined-operation",
+        draftHash: "d".repeat(64),
+        calendar: {
+          eventId: "event-dinner-sarah",
+          expectedEtag: "event-dinner-sarah-r1",
+          newStartTime: "2026-07-14T19:30:00-06:00",
+          newEndTime: "2026-07-15T03:00:00.000Z",
+        },
+        message: {
+          recipientId: "person-sarah",
+          expectedRecipientRevision: 1,
+          body: "See you at 7:30!",
+        },
+      },
+    };
+
+    const first = await instance.inject(request);
+    const retry = await instance.inject(request);
+
+    expect(retry.json()).toEqual(first.json());
+    expect(retry.json()).toMatchObject({
+      event: { revision: 2 },
+      message: { id: "message-1" },
+    });
+  });
+
+  it("commits the exact Calendar and Messages effects after all preconditions pass", async () => {
+    const instance = createApp();
+    const deal = await instance.inject({
+      method: "POST",
+      url: "/operations/execute",
+      headers: authorization,
+      payload: {
+        draftHash: "a".repeat(64),
+        operationKey: "permit-nonce-long-enough",
+        calendar: {
+          eventId: "event-dinner-sarah",
+          expectedEtag: "event-dinner-sarah-r1",
+          newStartTime: "2026-07-14T19:30:00-06:00",
+          newEndTime: "2026-07-15T03:00:00.000Z",
         },
         message: {
           recipientId: "person-sarah",
@@ -171,7 +276,10 @@ describe("atomic seeded deal execution", () => {
       method: "PATCH",
       url: "/calendar/events/event-dinner-sarah",
       headers: { ...authorization, "if-match": "event-dinner-sarah-r1" },
-      payload: { startTime: "2026-07-14T20:00:00-06:00" },
+      payload: {
+        startTime: "2026-07-14T20:00:00-06:00",
+        endTime: "2026-07-15T03:30:00.000Z",
+      },
     });
 
     const reset = await instance.inject({
@@ -197,15 +305,16 @@ describe("atomic seeded deal execution", () => {
     const instance = createApp();
     const deal = await instance.inject({
       method: "POST",
-      url: "/deals/execute",
+      url: "/operations/execute",
       headers: authorization,
       payload: {
         draftHash: "b".repeat(64),
-        permitNonce: "permit-nonce-long-enough",
+        operationKey: "permit-nonce-long-enough",
         calendar: {
           eventId: "event-dinner-sarah",
           expectedEtag: "stale",
           newStartTime: "2026-07-14T19:30:00-06:00",
+          newEndTime: "2026-07-15T03:00:00.000Z",
         },
         message: {
           recipientId: "person-sarah",

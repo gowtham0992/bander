@@ -24,6 +24,7 @@ const app = buildBrokerApp({
   engine,
   fixtures,
   ...(compiler ? { compiler } : {}),
+  ...(compiler ? { agentCompiler: compiler } : {}),
   resetDemo: async () => {
     engine.resetDemo();
     await adapter.resetDemo();

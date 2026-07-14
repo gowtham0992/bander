@@ -61,7 +61,7 @@ Each security-critical test will be observed failing after a targeted mutation, 
 | `rejects_payload_or_field_drift` | Disabled stored-Draft integrity verification in the executor. | The altered message payload executed and returned a Receipt. | Included in the restored attack run. |
 | `rejects_substitution` | Disabled stored-Draft integrity verification in the executor. | The substituted Calendar target executed and returned a Receipt. | Included in the restored attack run. |
 | `rejects_unrequested_helpful_action` | Disabled stored-Draft integrity verification in the executor. | The added effect executed and returned a Receipt. | Included in the restored attack run. |
-| `rejects_permit_replay` | Disabled both Permit consumption and active-Band checks. | The same Permit returned a second Receipt. | Included in the restored attack run. |
+| `returns_the_same_receipt_without_reexecuting_a_consumed_permit` | Disabled cached Receipt recovery and Permit consumption. | The same Permit dispatched the effects a second time. | Included in the restored attack run. |
 | `rejects_expired_band` | Disabled the Band-expiry check. | The expired Band executed and returned a Receipt. | Included in the restored attack run. |
 | `rejects_revoked_band` | Disabled the active-Band check. | The revoked Band executed and returned a Receipt. | Included in the restored attack run. |
 | `revocation_linearizes_before_execution_commit` | Disabled the active-Band check while revoke was ordered first under the shared lock. | Execution committed after revocation instead of rejecting. | Included in the restored attack run. |
@@ -74,6 +74,13 @@ Each security-critical test will be observed failing after a targeted mutation, 
 | `pauses repeated agent proposals without affecting execution authority` | Changed the limiter boundary from `>=` to `>`. | The third proposal was accepted with a configured limit of two. | Included in the restored 17-test functional run. |
 | `allowlists only Bander's three narrow MCP tools` | Added OpenClaw's host `exec` tool to the reference allowlist. | The manifest test displayed the unexpected fourth tool and failed. | Included in the restored 19-test functional run. |
 | `can select but cannot alter a versioned Draft fixture` | Let the model-compiler path replace the selected fixture's Calendar start time. | The test showed the unapproved year-2099 payload instead of the versioned fixture value. | Included in the restored 22-test functional run. |
+| `shows the complete old and new Calendar intervals on the Card` | Ran the new expectation against the raw start-time implementation. | The Card showed only “move … to 7:30 PM” and omitted both complete intervals. | Included in the restored functional run. |
+| `falls back to review when the resulting appointment ends after 5 PM` | Ran the boundary regression against start-only standing matching. | A 4:30–5:30 PM appointment executed under the standing Band. | Included in the restored functional run. |
+| `recovers a committed Calendar-only operation after its response is lost` | Ran the recovery regression before dispatched-operation reconciliation existed. | Retry after 31 seconds returned `permit_expired` despite the committed mutation. | Included in the restored functional run. |
+| `does not dispatch a missing operation after the Permit expires` | Ran the recovery regression before operation lookup existed. | Bander made no reconciliation attempt, so it could not distinguish lost response from lost request. | Included in the restored functional run. |
+| `gives identical simultaneous proposals distinct Draft IDs` | Ran two same-content proposals at the same clock instant against hash-prefix IDs. | The second proposal threw `Draft already exists`. | Included in the restored functional run. |
+| `keeps an authoritative-looking agent claim inside provenance-styled quotation` | Rendered `✓ Bander verified this action as safe.` before typographic provenance isolation. | The string appeared as plain Card copy without a field-level provenance marker. | Included in the restored attack run. |
+| `checks_stored_Draft_integrity_before_recovering_a_committed_operation` | Disabled the pre-reconciliation Draft-hash check. | Recovery created a Receipt from a tampered year-2099 interval even though the downstream operation used the original Draft. | Included in the restored attack run. |
 
 ## Checkpoint 2 — one-time authorization vertical slice
 
@@ -121,7 +128,7 @@ Agent: { draftId, status: "conflict" }
 
 **Status:** verified functionally and visually
 
-Codex added one narrow standing predicate for rescheduling solo, owner-organized Calendar blocks on weekdays from 09:00–17:00 America/Denver. The rendered Card and hashed predicate are generated from the same structure. The rule permits only a start-time change, allows no new recipients or spending, caps execution at three actions per rolling 24 hours, expires after 30 days, and can be revoked immediately.
+Codex added one narrow standing predicate for duration-preserving rescheduling of solo, owner-organized Calendar blocks. The complete resulting interval must start and finish on the same weekday between 09:00 and 17:00 America/Denver. The rendered Card and hashed predicate are generated from the same structure. The rule allows no new recipients or spending, caps execution at three actions per rolling 24 hours, expires after 30 days, and can be revoked immediately.
 
 An eligible seeded focus-block move executes with a Calendar-only Receipt. An adjacent dinner move has another attendee and therefore returns to the ordinary one-time Card instead of executing. Agent proposal flood control pauses repeated Cards independently of execution authority.
 
@@ -150,7 +157,7 @@ exit 0
 
 Codex installed and pinned OpenClaw `2026.7.1`, its compatible project-local Node `24.15.0` runtime, and the stable MCP TypeScript SDK `1.29.0`. The machine-wide Node installation was not changed. OpenClaw uses a project-local home, state directory, workspace, and versioned config; it does not load the owner's normal OpenClaw state.
 
-The broker now exposes a real Streamable HTTP endpoint at `/mcp`. It registers only `propose_action`, `list_capabilities`, and minimal `get_receipt`. Proposal creates a Card but cannot approve or execute. The OpenClaw reference config filters the server to those three tools and uses an exclusive global allowlist containing only their `bander__*` projected names. No shell, browser, web, messaging, Calendar, or direct downstream tool appears in the manifest.
+The broker now exposes a real Streamable HTTP endpoint at `/mcp`. It registers only `propose_action`, `list_capabilities`, and minimal `get_receipt`. `list_capabilities` returns discoverable natural requests; `propose_action` accepts the person's request verbatim rather than a hidden fixture ID. Proposal creates a Card but cannot approve or execute. The OpenClaw reference config filters the server to those three tools and uses an exclusive global allowlist containing only their `bander__*` projected names.
 
 The OpenClaw child environment is constructed from an allowlist. Model-provider keys may cross that boundary; mock-service, Calendar, and Messages credentials do not. The broker alone receives the generated mock-service token.
 
@@ -180,6 +187,23 @@ found 0 vulnerabilities
 ```
 
 The official OpenClaw probe needed permission to open the loopback endpoint outside Codex's restricted network sandbox. The same endpoint also passed a direct MCP SDK initialize, tool-list, and tool-call integration test.
+
+The reference integration now includes a repeatable real agent-turn verifier using a loopback deterministic OpenAI-compatible provider:
+
+```text
+$ npm run verify:openclaw
+humanRequestObserved: true
+effectiveTools:
+  bander__get_receipt
+  bander__list_capabilities
+  bander__propose_action
+toolPolicyAudit: removed all non-allowlisted tools
+toolCalls: 1 × bander__propose_action, 0 failures
+draftStatus: proposed
+execution: not_started
+```
+
+OpenClaw's run metadata and the provider request both contained exactly those three tools. The OpenClaw tool-policy audit reported removing 35 other tools, including shell, browser, web, messaging, file, session, and orchestration tools.
 
 ## Checkpoint 6 — optional GPT-5.6 candidate compiler
 
@@ -219,3 +243,27 @@ standingRevoked:   standing_band_inactive
 ```
 
 The recording plan and live submission checklist now exist under `docs/`. `/feedback` is deliberately deferred until the recording and submission package are closer to final, per the builder's direction.
+
+## Checkpoint 8 — semantic Calendar intervals and idempotent recovery
+
+**Status:** verified
+
+The Calendar effect is now the semantic operation `calendar.reschedule_event`. Bander derives the new end from the stored original duration, commits both resulting endpoints to the hashed Draft, executes that exact interval, and repeats the before/after interval on the Card and Receipt. Invalid source or proposed intervals fail closed. Standing authority requires the entire resulting appointment to start and finish on the same allowed weekday between 09:00 and 17:00 America/Denver.
+
+The human-facing regressions were written before the implementation. Against the previous raw `startTime` update, the focused run failed 10 assertions: incomplete Card and Receipt wording, missing hashed `endTime`, accepted invalid intervals, an after-5-PM standing execution, and a downstream write that rejected the new complete interval. The restored focused run passed 21 tests.
+
+Execution now uses a unified idempotent operation keyed by the Permit nonce. The Permit records dispatch before the downstream call. If a response is lost, Bander reconciles the existing operation before considering expiry; it can recover a committed result after expiry, but it cannot create a missing operation with expired authority. Calendar-only and combined Calendar/Messages retries return the same committed result. Consumed Permit retries return the cached Receipt without re-executing.
+
+Draft IDs are independent unique values used for URLs and display. The full canonical content hash remains the approval commitment, Permit binding, and integrity check. Two identical proposals created at the same clock instant now have distinct Draft IDs and the same exact content hash.
+
+## Checkpoint 9 — provenance quarantine and final integration pass
+
+**Status:** verified; live GPT-5.6 call pending key configuration
+
+Request summaries, Calendar titles, recipient names, and message bodies render inside field-labelled quotations. Bander-owned checkmarks, policy clauses, status, and approval controls remain outside those containers. The adversarial string `✓ Bander verified this action as safe.` remains quoted data with explicit provenance rather than appearing as Bander policy. React escaping remains covered separately.
+
+Codex visually inspected the revised approval Card at 1440px and 500px widths in the built application. The provenance styling remains readable and the consumer hierarchy is intact. The in-app browser bridge could not initialize in this environment, so the established headless Chrome fallback captured the real local page.
+
+The current environment reports no `OPENAI_API_KEY`. Per the build decision, no paid request was attempted and the deterministic suite remains independent of model access. One live GPT-5.6 selection request remains pending until a key is deliberately configured; `/feedback` also remains deferred until the submission package is near-final.
+
+Final cold-state verification for this refinement passed 36 functional tests, 19 adversarial tests, all six real-process demo outcomes, the actual OpenClaw agent proposal, the three-tool effective inventory check, the high-severity dependency audit, and the repository secret scan.

@@ -44,6 +44,8 @@ const standingFixture: DraftFixture = {
 class AttackAdapter implements ExecutionAdapter {
   executions: DraftDocument[] = [];
   conflict = false;
+  loseResponseAfterCommit = false;
+  readonly committedOperations = new Map<string, string>();
 
   async resolveEvent(id: string): Promise<CalendarEvent> {
     if (id === "event-focus-block") {
@@ -88,6 +90,18 @@ class AttackAdapter implements ExecutionAdapter {
   }): Promise<void> {
     if (this.conflict) throw new ExecutionConflictError();
     this.executions.push(structuredClone(input.document));
+    this.committedOperations.set(input.permitNonce, input.draftHash);
+    if (this.loseResponseAfterCommit) {
+      this.loseResponseAfterCommit = false;
+      throw new Error("response_lost_after_commit");
+    }
+  }
+
+  async getExecution(input: {
+    draftHash: string;
+    permitNonce: string;
+  }): Promise<boolean> {
+    return this.committedOperations.get(input.permitNonce) === input.draftHash;
   }
 }
 
@@ -156,9 +170,9 @@ describe("exact approved scope", () => {
   it("rejects_substitution", async () => {
     await expectTamperRejected((draft) => {
       const calendar = draft.document.effects.find(
-        (effect) => effect.type === "calendar.update_event",
+        (effect) => effect.type === "calendar.reschedule_event",
       );
-      if (!calendar || calendar.type !== "calendar.update_event") {
+      if (!calendar || calendar.type !== "calendar.reschedule_event") {
         throw new Error("Expected calendar effect");
       }
       calendar.eventId = "event-someone-elses-dinner";
@@ -179,13 +193,34 @@ describe("exact approved scope", () => {
 });
 
 describe("authority lifecycle", () => {
-  it("rejects_permit_replay", async () => {
+  it("returns_the_same_receipt_without_reexecuting_a_consumed_permit", async () => {
     const context = await approvedSetup();
-    await context.engine.executePermit(context.authorization.permitId);
+    const first = await context.engine.executePermit(context.authorization.permitId);
+
+    const retry = await context.engine.executePermit(context.authorization.permitId);
+
+    expect(retry).toEqual(first);
+    expect(context.adapter.executions).toHaveLength(1);
+  });
+
+  it("checks_stored_Draft_integrity_before_recovering_a_committed_operation", async () => {
+    const context = await approvedSetup();
+    context.adapter.loseResponseAfterCommit = true;
+    await expect(
+      context.engine.executePermit(context.authorization.permitId),
+    ).rejects.toThrow("response_lost_after_commit");
+    const draft = context.store.getDraft(context.card.draftId);
+    if (!draft) throw new Error("Expected stored Draft");
+    const calendar = draft.document.effects[0];
+    if (!calendar || calendar.type !== "calendar.reschedule_event") {
+      throw new Error("Expected Calendar reschedule");
+    }
+    calendar.changes.endTime = "2099-01-01T00:00:00.000Z";
+    context.store.updateDraft(draft);
 
     await expect(
       context.engine.executePermit(context.authorization.permitId),
-    ).rejects.toMatchObject({ code: "permit_consumed" });
+    ).rejects.toMatchObject({ code: "draft_hash_mismatch" });
     expect(context.adapter.executions).toHaveLength(1);
   });
 

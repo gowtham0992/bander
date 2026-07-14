@@ -1,7 +1,36 @@
 {
   "agents": {
     "defaults": {
-      "workspace": ".bander/openclaw-workspace"
+      "workspace": ".bander/openclaw-workspace",
+      "model": {
+        "primary": "bander-mock/reference-model"
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "bander-mock": {
+        "baseUrl": "http://127.0.0.1:4313/v1",
+        "apiKey": "bander-local-verification",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "reference-model",
+            "name": "Bander deterministic OpenClaw verifier",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 32000,
+            "maxTokens": 1000
+          }
+        ]
+      }
     }
   },
   "tools": {

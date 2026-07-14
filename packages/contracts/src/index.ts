@@ -30,8 +30,8 @@ export interface MockSeed {
   people: Person[];
 }
 
-export interface CalendarUpdateEffect {
-  type: "calendar.update_event";
+export interface CalendarRescheduleEffect {
+  type: "calendar.reschedule_event";
   eventId: string;
   expected: {
     etag: string;
@@ -44,6 +44,7 @@ export interface CalendarUpdateEffect {
   };
   changes: {
     startTime: string;
+    endTime: string;
   };
 }
 
@@ -57,7 +58,7 @@ export interface MessageSendEffect {
   body: string;
 }
 
-export type DraftEffect = CalendarUpdateEffect | MessageSendEffect;
+export type DraftEffect = CalendarRescheduleEffect | MessageSendEffect;
 
 export interface DraftDocument {
   version: 1;
@@ -92,6 +93,7 @@ export interface ApprovalCard {
   provenanceLabel: "Your agent says your request was:";
   claimedUserRequest: string;
   allows: string[];
+  effectPreviews: ApprovalEffectPreview[];
   notAllowed: string;
   boundary: string;
   connections: string[];
@@ -102,6 +104,19 @@ export interface ApprovalCard {
     windowMinutes: number;
   };
 }
+
+export type ApprovalEffectPreview =
+  | {
+      kind: "calendar.reschedule_event";
+      eventTitle: string;
+      previousInterval: string;
+      resultingInterval: string;
+    }
+  | {
+      kind: "messages.send";
+      recipientDisplayName: string;
+      body: string;
+    };
 
 export interface OneTimeBand {
   id: string;
@@ -115,13 +130,15 @@ export interface OneTimeBand {
 
 export interface StandingBandPredicate {
   version: 1;
-  actionType: "calendar.update_event";
+  actionType: "calendar.reschedule_event";
   ownerId: string;
   resource: {
     organizerMustBeOwner: true;
     attendeeIdsExactly: string[];
   };
-  allowedChangedFields: ["startTime"];
+  duration: {
+    mustRemainUnchanged: true;
+  };
   time: {
     weekDays: ["Mon", "Tue", "Wed", "Thu", "Fri"];
     startLocal: "09:00";
@@ -175,7 +192,9 @@ export interface Permit {
   draftHash: string;
   executor: "bander_executor";
   expiresAt: string;
+  dispatchedAt?: string;
   consumedAt?: string;
+  receiptId?: string;
 }
 
 export interface HumanReceipt {
@@ -184,6 +203,16 @@ export interface HumanReceipt {
   title: "Done";
   summary: string;
   detail: string;
+  calendar: {
+    title: string;
+    previous: { startTime: string; endTime: string };
+    completed: { startTime: string; endTime: string };
+    timeZone: string;
+  };
+  message?: {
+    recipientDisplayName: string;
+    body: string;
+  };
   completedAt: string;
 }
 
