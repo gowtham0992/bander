@@ -1,0 +1,617 @@
+import { randomUUID } from "node:crypto";
+import type {
+  AgentReceipt,
+  ApprovalCard,
+  Band,
+  CalendarEvent,
+  DraftDocument,
+  DraftEffect,
+  HumanReceipt,
+  OneTimeBand,
+  Permit,
+  Person,
+  StandingBand,
+  StandingBandCandidate,
+  StandingBandCard,
+  StandingBandPredicate,
+  StoredDraft,
+} from "@bander/contracts";
+import { hashCanonical, hashDraft } from "./canonical.js";
+import {
+  renderApprovalCard,
+  renderHumanReceipt,
+  renderStandingBandCard,
+} from "./card.js";
+import { KeyedLock } from "./lock.js";
+import { AuthorityStore } from "./store.js";
+
+export interface DraftFixture {
+  id: string;
+  claimedUserRequest: string;
+  calendar: {
+    eventId: string;
+    expectedEtag: string;
+    newStartTime: string;
+  };
+  message?: {
+    recipientId: string;
+    expectedRecipientRevision: number;
+    body: string;
+  };
+}
+
+export interface ExecutionAdapter {
+  resolveEvent(id: string): Promise<CalendarEvent>;
+  resolvePerson(id: string): Promise<Person>;
+  executeDraft(input: {
+    draftHash: string;
+    permitNonce: string;
+    document: DraftDocument;
+  }): Promise<void>;
+}
+
+export class ExecutionConflictError extends Error {
+  constructor() {
+    super("A downstream resource changed");
+  }
+}
+
+export class AuthorityError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+  }
+}
+
+interface AuthorityEngineOptions {
+  store: AuthorityStore;
+  adapter: ExecutionAdapter;
+  now?: () => Date;
+  id?: () => string;
+  proposalLimit?: number;
+  proposalWindowMinutes?: number;
+}
+
+export type StandingRunResult =
+  | { status: "executed"; receipt: HumanReceipt }
+  | { status: "review_required"; card: ApprovalCard };
+
+function sameIds(actual: string[], expected: string[]): boolean {
+  return (
+    actual.length === expected.length &&
+    [...actual].sort().every((value, index) => value === [...expected].sort()[index])
+  );
+}
+
+function localTimeParts(value: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).formatToParts(new Date(value));
+  const find = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    weekday: find("weekday"),
+    time: `${find("hour")}:${find("minute")}`,
+  };
+}
+
+function standingBandAllows(
+  band: StandingBand,
+  draft: StoredDraft,
+  now: Date,
+): boolean {
+  if (
+    band.predicateHash !==
+    hashCanonical({ predicate: band.predicate, expiresAt: band.expiresAt })
+  ) {
+    return false;
+  }
+  if (draft.document.effects.length !== 1) return false;
+  const effect = draft.document.effects[0];
+  if (!effect || effect.type !== band.predicate.actionType) return false;
+  if (
+    effect.expected.organizerId !== band.predicate.ownerId ||
+    !sameIds(effect.expected.attendeeIds, band.predicate.resource.attendeeIdsExactly)
+  ) {
+    return false;
+  }
+  if (
+    band.predicate.allowedChangedFields.length !== 1 ||
+    band.predicate.allowedChangedFields[0] !== "startTime"
+  ) {
+    return false;
+  }
+
+  const local = localTimeParts(
+    effect.changes.startTime,
+    band.predicate.time.timeZone,
+  );
+  if (
+    !band.predicate.time.weekDays.includes(
+      local.weekday as (typeof band.predicate.time.weekDays)[number],
+    ) ||
+    local.time < band.predicate.time.startLocal ||
+    local.time > band.predicate.time.endLocal
+  ) {
+    return false;
+  }
+
+  const cutoff = now.getTime() - band.predicate.limits.rollingHours * 60 * 60_000;
+  const recentActions = band.actionTimestamps.filter(
+    (timestamp) => new Date(timestamp).getTime() > cutoff,
+  );
+  return recentActions.length < band.predicate.limits.maxActions;
+}
+
+export class AuthorityEngine {
+  readonly #store: AuthorityStore;
+  readonly #adapter: ExecutionAdapter;
+  readonly #now: () => Date;
+  readonly #id: () => string;
+  readonly #lock = new KeyedLock();
+  readonly #proposalHistory = new Map<string, number[]>();
+  readonly #proposalLimit: number;
+  readonly #proposalWindowMinutes: number;
+
+  constructor(options: AuthorityEngineOptions) {
+    this.#store = options.store;
+    this.#adapter = options.adapter;
+    this.#now = options.now ?? (() => new Date());
+    this.#id = options.id ?? randomUUID;
+    this.#proposalLimit = options.proposalLimit ?? 5;
+    this.#proposalWindowMinutes = options.proposalWindowMinutes ?? 10;
+  }
+
+  async proposeFixture(
+    fixture: DraftFixture,
+    agentId = "demo-agent",
+  ): Promise<ApprovalCard> {
+    const activity = this.#recordProposal(agentId);
+    const draft = await this.#storeFixtureDraft(fixture);
+    return {
+      ...renderApprovalCard(draft.id, draft.hash, draft.document),
+      proposalActivity: activity,
+    };
+  }
+
+  createStandingBandCandidate(): StandingBandCard {
+    const createdAt = this.#now();
+    const expiresAt = new Date(createdAt.getTime() + 30 * 24 * 60 * 60_000).toISOString();
+    const predicate: StandingBandPredicate = {
+      version: 1,
+      actionType: "calendar.update_event",
+      ownerId: "person-owner",
+      resource: {
+        organizerMustBeOwner: true,
+        attendeeIdsExactly: ["person-owner"],
+      },
+      allowedChangedFields: ["startTime"],
+      time: {
+        weekDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+        startLocal: "09:00",
+        endLocal: "17:00",
+        timeZone: "America/Denver",
+      },
+      limits: {
+        maxActions: 3,
+        rollingHours: 24,
+        maxNewRecipients: 0,
+        maxSpendCents: 0,
+      },
+    };
+    const predicateHash = hashCanonical({ predicate, expiresAt });
+    const candidate: StandingBandCandidate = {
+      id: `standing_candidate_${predicateHash.slice(0, 16)}`,
+      predicateHash,
+      predicate,
+      createdAt: createdAt.toISOString(),
+      expiresAt,
+    };
+    this.#store.saveStandingCandidate(candidate);
+    return renderStandingBandCard(candidate);
+  }
+
+  async approveStandingBand(
+    candidateId: string,
+    predicateHash: string,
+  ): Promise<{ bandId: string; expiresAt: string }> {
+    return this.#lock.run(candidateId, async () => {
+      const candidate = this.#store.getStandingCandidate(candidateId);
+      if (!candidate) {
+        throw new AuthorityError(
+          "standing_candidate_not_found",
+          "Standing Band proposal not found",
+          404,
+        );
+      }
+      if (
+        candidate.predicateHash !== predicateHash ||
+        hashCanonical({
+          predicate: candidate.predicate,
+          expiresAt: candidate.expiresAt,
+        }) !== predicateHash
+      ) {
+        throw new AuthorityError(
+          "standing_predicate_hash_mismatch",
+          "The standing rule does not match what was reviewed",
+          409,
+        );
+      }
+      if (new Date(candidate.expiresAt).getTime() <= this.#now().getTime()) {
+        throw new AuthorityError(
+          "standing_candidate_expired",
+          "This standing rule proposal expired",
+          409,
+        );
+      }
+      const band: StandingBand = {
+        id: `band_${this.#id()}`,
+        mode: "standing",
+        predicateHash: candidate.predicateHash,
+        predicate: candidate.predicate,
+        approvedAt: this.#now().toISOString(),
+        expiresAt: candidate.expiresAt,
+        status: "active",
+        actionTimestamps: [],
+      };
+      this.#store.saveBand(band);
+      return { bandId: band.id, expiresAt: band.expiresAt };
+    });
+  }
+
+  async runStandingBand(
+    bandId: string,
+    fixture: DraftFixture,
+    agentId = "demo-agent",
+  ): Promise<StandingRunResult> {
+    const draft = await this.#storeFixtureDraft(fixture);
+    const band = this.#store.getBand(bandId);
+    if (!band || band.mode !== "standing") {
+      throw new AuthorityError("standing_band_not_found", "Standing Band not found", 404);
+    }
+
+    return this.#lock.run(band.id, async () => {
+      const currentBand = this.#store.getBand(band.id);
+      if (
+        !currentBand ||
+        currentBand.mode !== "standing" ||
+        currentBand.status !== "active" ||
+        new Date(currentBand.expiresAt).getTime() <= this.#now().getTime()
+      ) {
+        throw new AuthorityError(
+          "standing_band_inactive",
+          "This standing Band is not active",
+          409,
+        );
+      }
+
+      if (!standingBandAllows(currentBand, draft, this.#now())) {
+        const activity = this.#recordProposal(agentId);
+        return {
+          status: "review_required",
+          card: {
+            ...renderApprovalCard(draft.id, draft.hash, draft.document),
+            proposalActivity: activity,
+          },
+        };
+      }
+
+      this.#store.updateDraft({ ...draft, status: "approved" });
+      const permit = this.#createPermit(currentBand.id, draft);
+      return {
+        status: "executed",
+        receipt: await this.#executeStoredDraft(permit.id),
+      };
+    });
+  }
+
+  resetDemo(): void {
+    this.#store.reset();
+    this.#proposalHistory.clear();
+  }
+
+  getCard(draftId: string): ApprovalCard {
+    const draft = this.#requireDraft(draftId);
+    return renderApprovalCard(draft.id, draft.hash, draft.document);
+  }
+
+  getAgentReceipt(draftId: string): AgentReceipt {
+    const draft = this.#requireDraft(draftId);
+    return { draftId: draft.id, status: draft.status };
+  }
+
+  getHumanReceipt(receiptId: string): HumanReceipt {
+    const receipt = this.#store.getReceipt(receiptId);
+    if (!receipt) throw new AuthorityError("receipt_not_found", "Receipt not found", 404);
+    return receipt;
+  }
+
+  async approveAndExecute(draftId: string, approvedHash: string): Promise<HumanReceipt> {
+    const authorization = await this.approve(draftId, approvedHash);
+    return this.executePermit(authorization.permitId);
+  }
+
+  async approve(
+    draftId: string,
+    approvedHash: string,
+  ): Promise<{ bandId: string; permitId: string }> {
+    return this.#lock.run(draftId, async () => {
+      const draft = this.#requireDraft(draftId);
+      if (draft.status !== "proposed") {
+        throw new AuthorityError(
+          "draft_not_approvable",
+          "This Draft is no longer awaiting approval",
+          409,
+        );
+      }
+      if (draft.hash !== approvedHash || hashDraft(draft.document) !== approvedHash) {
+        throw new AuthorityError(
+          "draft_hash_mismatch",
+          "The approved deal does not match the stored Draft",
+          409,
+        );
+      }
+      if (new Date(draft.document.expiresAt).getTime() <= this.#now().getTime()) {
+        this.#store.updateDraft({ ...draft, status: "expired" });
+        throw new AuthorityError("draft_expired", "This deal has expired", 409);
+      }
+
+      const band: OneTimeBand = {
+        id: `band_${this.#id()}`,
+        mode: "one_time",
+        draftId: draft.id,
+        draftHash: draft.hash,
+        approvedAt: this.#now().toISOString(),
+        expiresAt: draft.document.expiresAt,
+        status: "active",
+      };
+      this.#store.saveBand(band);
+      this.#store.updateDraft({ ...draft, status: "approved" });
+      const permit = this.#createPermit(band.id, draft);
+      return { bandId: band.id, permitId: permit.id };
+    });
+  }
+
+  async executePermit(permitId: string): Promise<HumanReceipt> {
+    const permit = this.#store.getPermit(permitId);
+    if (!permit) {
+      throw new AuthorityError("invalid_permit", "Execution authority is invalid", 403);
+    }
+    const band = this.#store.getBand(permit.bandId);
+    if (!band) {
+      throw new AuthorityError("invalid_band", "The approved Band is not active", 409);
+    }
+    return this.#lock.run(band.id, () => this.#executeStoredDraft(permitId));
+  }
+
+  async revokeBand(bandId: string): Promise<void> {
+    const band = this.#store.getBand(bandId);
+    if (!band) throw new AuthorityError("band_not_found", "Band not found", 404);
+    await this.#lock.run(band.id, async () => {
+      const currentBand = this.#store.getBand(bandId);
+      if (!currentBand || currentBand.status !== "active") return;
+      this.#store.updateBand({ ...currentBand, status: "revoked" });
+      if (currentBand.mode === "one_time") {
+        const draft = this.#requireDraft(currentBand.draftId);
+        if (draft.status === "approved") {
+          this.#store.updateDraft({ ...draft, status: "revoked" });
+        }
+      }
+    });
+  }
+
+  decline(draftId: string): AgentReceipt {
+    const draft = this.#requireDraft(draftId);
+    if (draft.status !== "proposed") {
+      throw new AuthorityError("draft_not_declinable", "This Draft is no longer pending", 409);
+    }
+    const declined: StoredDraft = { ...draft, status: "declined" };
+    this.#store.updateDraft(declined);
+    return { draftId, status: "declined" };
+  }
+
+  async #storeFixtureDraft(fixture: DraftFixture): Promise<StoredDraft> {
+    const event = await this.#adapter.resolveEvent(fixture.calendar.eventId);
+    const person = fixture.message
+      ? await this.#adapter.resolvePerson(fixture.message.recipientId)
+      : undefined;
+
+    if (event.etag !== fixture.calendar.expectedEtag) {
+      throw new AuthorityError(
+        "fixture_precondition_mismatch",
+        "The seeded calendar no longer matches this proposal",
+        409,
+      );
+    }
+    if (
+      fixture.message &&
+      (!person || person.revision !== fixture.message.expectedRecipientRevision)
+    ) {
+      throw new AuthorityError(
+        "fixture_precondition_mismatch",
+        "The seeded recipient no longer matches this proposal",
+        409,
+      );
+    }
+
+    const effects: DraftEffect[] = [
+      {
+        type: "calendar.update_event",
+        eventId: event.id,
+        expected: {
+          etag: event.etag,
+          title: event.title,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          timeZone: event.timeZone,
+          organizerId: event.organizerId,
+          attendeeIds: event.attendeeIds,
+        },
+        changes: { startTime: fixture.calendar.newStartTime },
+      },
+    ];
+    if (fixture.message && person) {
+      effects.push({
+        type: "messages.send",
+        recipientId: person.id,
+        expected: { revision: person.revision, displayName: person.displayName },
+        body: fixture.message.body,
+      });
+    }
+
+    const createdAt = this.#now();
+    const document: DraftDocument = {
+      version: 1,
+      source: {
+        provenance: "agent_claimed",
+        claimedUserRequest: fixture.claimedUserRequest,
+      },
+      effects,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + 10 * 60_000).toISOString(),
+    };
+    const hash = hashDraft(document);
+    const draft: StoredDraft = {
+      id: `draft_${hash.slice(0, 16)}`,
+      hash,
+      document,
+      status: "proposed",
+    };
+    this.#store.saveDraft(draft);
+    return draft;
+  }
+
+  #createPermit(bandId: string, draft: StoredDraft): Permit {
+    const permit: Permit = {
+      id: `permit_${this.#id()}`,
+      nonce: this.#id(),
+      bandId,
+      draftId: draft.id,
+      draftHash: draft.hash,
+      executor: "bander_executor",
+      expiresAt: new Date(this.#now().getTime() + 30_000).toISOString(),
+    };
+    this.#store.savePermit(permit);
+    return permit;
+  }
+
+  async #executeStoredDraft(permitId: string): Promise<HumanReceipt> {
+    const permit = this.#store.getPermit(permitId);
+    if (!permit || permit.executor !== "bander_executor") {
+      throw new AuthorityError("invalid_permit", "Execution authority is invalid", 403);
+    }
+    if (permit.consumedAt) {
+      throw new AuthorityError("permit_consumed", "Execution authority was already used", 409);
+    }
+    if (new Date(permit.expiresAt).getTime() <= this.#now().getTime()) {
+      throw new AuthorityError("permit_expired", "Execution authority expired", 409);
+    }
+
+    const band = this.#store.getBand(permit.bandId);
+    if (!band || band.status !== "active") {
+      throw new AuthorityError("invalid_band", "The approved Band is not active", 409);
+    }
+    const draft = this.#requireDraft(permit.draftId);
+    if (draft.hash !== permit.draftHash || hashDraft(draft.document) !== permit.draftHash) {
+      throw new AuthorityError("draft_hash_mismatch", "Stored Draft integrity check failed", 409);
+    }
+    if (new Date(band.expiresAt).getTime() <= this.#now().getTime()) {
+      if (band.mode === "one_time") {
+        this.#store.updateBand({ ...band, status: "consumed" });
+      }
+      this.#store.updateDraft({ ...draft, status: "expired" });
+      throw new AuthorityError("band_expired", "The approved Band expired", 409);
+    }
+    if (band.mode === "one_time") {
+      if (band.draftHash !== permit.draftHash || band.draftId !== draft.id) {
+        throw new AuthorityError("invalid_band", "The approved Band is not active", 409);
+      }
+    } else if (!standingBandAllows(band, draft, this.#now())) {
+      this.#store.updateDraft({ ...draft, status: "blocked" });
+      throw new AuthorityError(
+        "standing_band_mismatch",
+        "This needs you: it would change the deal you approved.",
+        409,
+      );
+    }
+
+    try {
+      await this.#adapter.executeDraft({
+        draftHash: draft.hash,
+        permitNonce: permit.nonce,
+        document: draft.document,
+      });
+    } catch (error) {
+      if (error instanceof ExecutionConflictError) {
+        const completedAt = this.#now().toISOString();
+        this.#store.updatePermit({ ...permit, consumedAt: completedAt });
+        if (band.mode === "one_time") {
+          this.#store.updateBand({ ...band, status: "consumed" });
+        }
+        this.#store.updateDraft({ ...draft, status: "conflict" });
+        throw new AuthorityError(
+          "conflict",
+          "Your calendar changed after you approved this. I didn’t act.",
+          409,
+        );
+      }
+      throw error;
+    }
+
+    const completedAt = this.#now().toISOString();
+    this.#store.updatePermit({ ...permit, consumedAt: completedAt });
+    if (band.mode === "one_time") {
+      this.#store.updateBand({ ...band, status: "consumed" });
+    } else {
+      this.#store.updateBand({
+        ...band,
+        actionTimestamps: [...band.actionTimestamps, completedAt],
+      });
+    }
+    this.#store.updateDraft({ ...draft, status: "executed" });
+
+    const receipt = renderHumanReceipt(
+      `receipt_${this.#id()}`,
+      draft.id,
+      draft.document,
+      completedAt,
+    );
+    this.#store.saveReceipt(receipt);
+    return receipt;
+  }
+
+  #recordProposal(agentId: string) {
+    const now = this.#now().getTime();
+    const cutoff = now - this.#proposalWindowMinutes * 60_000;
+    const recent = (this.#proposalHistory.get(agentId) ?? []).filter(
+      (timestamp) => timestamp > cutoff,
+    );
+    if (recent.length >= this.#proposalLimit) {
+      throw new AuthorityError(
+        "proposal_flood",
+        `Your agent has already asked ${recent.length} times in ${this.#proposalWindowMinutes} minutes. Proposals are paused.`,
+        429,
+      );
+    }
+    recent.push(now);
+    this.#proposalHistory.set(agentId, recent);
+    return {
+      count: recent.length,
+      limit: this.#proposalLimit,
+      windowMinutes: this.#proposalWindowMinutes,
+    };
+  }
+
+  #requireDraft(draftId: string): StoredDraft {
+    const draft = this.#store.getDraft(draftId);
+    if (!draft) throw new AuthorityError("draft_not_found", "Draft not found", 404);
+    return draft;
+  }
+}

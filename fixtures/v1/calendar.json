@@ -1,0 +1,26 @@
+{
+  "events": [
+    {
+      "id": "event-dinner-sarah",
+      "title": "Dinner with Sarah",
+      "startTime": "2026-07-14T19:00:00-06:00",
+      "endTime": "2026-07-14T20:30:00-06:00",
+      "timeZone": "America/Denver",
+      "organizerId": "person-owner",
+      "attendeeIds": ["person-owner", "person-sarah"],
+      "revision": 1,
+      "etag": "event-dinner-sarah-r1"
+    },
+    {
+      "id": "event-focus-block",
+      "title": "Focus block",
+      "startTime": "2026-07-15T10:00:00-06:00",
+      "endTime": "2026-07-15T11:00:00-06:00",
+      "timeZone": "America/Denver",
+      "organizerId": "person-owner",
+      "attendeeIds": ["person-owner"],
+      "revision": 1,
+      "etag": "event-focus-block-r1"
+    }
+  ]
+}

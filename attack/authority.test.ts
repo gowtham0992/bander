@@ -1,0 +1,333 @@
+import { describe, expect, it } from "vitest";
+import type {
+  CalendarEvent,
+  DraftDocument,
+  DraftEffect,
+  Person,
+  StoredDraft,
+} from "@bander/contracts";
+import {
+  AuthorityEngine,
+  AuthorityStore,
+  ExecutionConflictError,
+  type DraftFixture,
+  type ExecutionAdapter,
+} from "@bander/core";
+
+const baseTime = new Date("2026-07-13T18:00:00.000Z");
+
+const fixture: DraftFixture = {
+  id: "move-dinner-and-notify-sarah",
+  claimedUserRequest: "Move dinner and message Sarah.",
+  calendar: {
+    eventId: "event-dinner-sarah",
+    expectedEtag: "event-dinner-sarah-r1",
+    newStartTime: "2026-07-14T19:30:00-06:00",
+  },
+  message: {
+    recipientId: "person-sarah",
+    expectedRecipientRevision: 1,
+    body: "I’ll be about 20 minutes late. See you at 7:30!",
+  },
+};
+
+const standingFixture: DraftFixture = {
+  id: "move-my-focus-block",
+  claimedUserRequest: "Move my focus block to 10:30.",
+  calendar: {
+    eventId: "event-focus-block",
+    expectedEtag: "event-focus-block-r1",
+    newStartTime: "2026-07-15T10:30:00-06:00",
+  },
+};
+
+class AttackAdapter implements ExecutionAdapter {
+  executions: DraftDocument[] = [];
+  conflict = false;
+
+  async resolveEvent(id: string): Promise<CalendarEvent> {
+    if (id === "event-focus-block") {
+      return {
+        id,
+        title: "Focus block",
+        startTime: "2026-07-15T10:00:00-06:00",
+        endTime: "2026-07-15T11:00:00-06:00",
+        timeZone: "America/Denver",
+        organizerId: "person-owner",
+        attendeeIds: ["person-owner"],
+        revision: 1,
+        etag: "event-focus-block-r1",
+      };
+    }
+    return {
+      id: "event-dinner-sarah",
+      title: "Dinner with Sarah",
+      startTime: "2026-07-14T19:00:00-06:00",
+      endTime: "2026-07-14T20:30:00-06:00",
+      timeZone: "America/Denver",
+      organizerId: "person-owner",
+      attendeeIds: ["person-owner", "person-sarah"],
+      revision: 1,
+      etag: "event-dinner-sarah-r1",
+    };
+  }
+
+  async resolvePerson(): Promise<Person> {
+    return {
+      id: "person-sarah",
+      displayName: "Sarah Chen",
+      messageAddress: "+15550101002",
+      revision: 1,
+    };
+  }
+
+  async executeDraft(input: {
+    draftHash: string;
+    permitNonce: string;
+    document: DraftDocument;
+  }): Promise<void> {
+    if (this.conflict) throw new ExecutionConflictError();
+    this.executions.push(structuredClone(input.document));
+  }
+}
+
+function setup() {
+  let now = new Date(baseTime);
+  let id = 0;
+  const store = new AuthorityStore();
+  const adapter = new AttackAdapter();
+  const engine = new AuthorityEngine({
+    store,
+    adapter,
+    now: () => new Date(now),
+    id: () => `attack-${++id}`,
+  });
+  return {
+    adapter,
+    engine,
+    store,
+    advance(milliseconds: number) {
+      now = new Date(now.getTime() + milliseconds);
+    },
+  };
+}
+
+async function approvedSetup() {
+  const context = setup();
+  const card = await context.engine.proposeFixture(fixture);
+  const authorization = await context.engine.approve(card.draftId, card.draftHash);
+  return { ...context, authorization, card };
+}
+
+async function expectTamperRejected(mutator: (draft: StoredDraft) => void) {
+  const context = await approvedSetup();
+  const draft = context.store.getDraft(context.card.draftId);
+  if (!draft) throw new Error("Expected stored Draft");
+  mutator(draft);
+  context.store.updateDraft(draft);
+
+  await expect(
+    context.engine.executePermit(context.authorization.permitId),
+  ).rejects.toMatchObject({ code: "draft_hash_mismatch" });
+  expect(context.adapter.executions).toHaveLength(0);
+}
+
+describe("exact approved scope", () => {
+  it("rejects_extra_recipient_after_approval", async () => {
+    await expectTamperRejected((draft) => {
+      const message = draft.document.effects.find(
+        (effect) => effect.type === "messages.send",
+      );
+      if (!message || message.type !== "messages.send") throw new Error("Expected message");
+      message.recipientId = "person-unapproved";
+    });
+  });
+
+  it("rejects_payload_or_field_drift", async () => {
+    await expectTamperRejected((draft) => {
+      const message = draft.document.effects.find(
+        (effect) => effect.type === "messages.send",
+      );
+      if (!message || message.type !== "messages.send") throw new Error("Expected message");
+      message.body = "A different payload";
+    });
+  });
+
+  it("rejects_substitution", async () => {
+    await expectTamperRejected((draft) => {
+      const calendar = draft.document.effects.find(
+        (effect) => effect.type === "calendar.update_event",
+      );
+      if (!calendar || calendar.type !== "calendar.update_event") {
+        throw new Error("Expected calendar effect");
+      }
+      calendar.eventId = "event-someone-elses-dinner";
+    });
+  });
+
+  it("rejects_unrequested_helpful_action", async () => {
+    await expectTamperRejected((draft) => {
+      const helpfulAction: DraftEffect = {
+        type: "messages.send",
+        recipientId: "person-owner",
+        expected: { revision: 1, displayName: "Alex Morgan" },
+        body: "I also updated your other plans.",
+      };
+      draft.document.effects.push(helpfulAction);
+    });
+  });
+});
+
+describe("authority lifecycle", () => {
+  it("rejects_permit_replay", async () => {
+    const context = await approvedSetup();
+    await context.engine.executePermit(context.authorization.permitId);
+
+    await expect(
+      context.engine.executePermit(context.authorization.permitId),
+    ).rejects.toMatchObject({ code: "permit_consumed" });
+    expect(context.adapter.executions).toHaveLength(1);
+  });
+
+  it("rejects_expired_band", async () => {
+    const context = await approvedSetup();
+    const permit = context.store.getPermit(context.authorization.permitId);
+    if (!permit) throw new Error("Expected Permit");
+    context.store.updatePermit({
+      ...permit,
+      expiresAt: new Date(baseTime.getTime() + 20 * 60_000).toISOString(),
+    });
+    context.advance(11 * 60_000);
+
+    await expect(
+      context.engine.executePermit(context.authorization.permitId),
+    ).rejects.toMatchObject({ code: "band_expired" });
+    expect(context.adapter.executions).toHaveLength(0);
+  });
+
+  it("rejects_revoked_band", async () => {
+    const context = await approvedSetup();
+    await context.engine.revokeBand(context.authorization.bandId);
+
+    await expect(
+      context.engine.executePermit(context.authorization.permitId),
+    ).rejects.toMatchObject({ code: "invalid_band" });
+    expect(context.adapter.executions).toHaveLength(0);
+  });
+
+  it("revocation_linearizes_before_execution_commit", async () => {
+    const context = await approvedSetup();
+    const revoke = context.engine.revokeBand(context.authorization.bandId);
+    const execute = context.engine.executePermit(context.authorization.permitId);
+
+    await revoke;
+    await expect(execute).rejects.toMatchObject({ code: "invalid_band" });
+    expect(context.adapter.executions).toHaveLength(0);
+  });
+});
+
+describe("standing authority boundaries", () => {
+  it("rejects a tampered standing predicate after approval", async () => {
+    const context = setup();
+    const candidate = context.engine.createStandingBandCandidate();
+    const { bandId } = await context.engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+    const band = context.store.getBand(bandId);
+    if (!band || band.mode !== "standing") throw new Error("Expected standing Band");
+    context.store.updateBand({
+      ...band,
+      predicate: {
+        ...band.predicate,
+        resource: {
+          ...band.predicate.resource,
+          attendeeIdsExactly: ["person-owner", "person-attacker"],
+        },
+      },
+    });
+
+    const result = await context.engine.runStandingBand(bandId, standingFixture);
+
+    expect(result.status).toBe("review_required");
+    expect(context.adapter.executions).toHaveLength(0);
+  });
+
+  it("enforces the rolling action cap before issuing more authority", async () => {
+    const context = setup();
+    const candidate = context.engine.createStandingBandCandidate();
+    const { bandId } = await context.engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+
+    for (let index = 0; index < 3; index += 1) {
+      context.advance(1);
+      const result = await context.engine.runStandingBand(bandId, standingFixture);
+      expect(result.status).toBe("executed");
+    }
+    context.advance(1);
+    const capped = await context.engine.runStandingBand(bandId, standingFixture);
+
+    expect(capped.status).toBe("review_required");
+    expect(context.adapter.executions).toHaveLength(3);
+  });
+
+  it("revokes standing authority before the next eligible action", async () => {
+    const context = setup();
+    const candidate = context.engine.createStandingBandCandidate();
+    const { bandId } = await context.engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+    await context.engine.revokeBand(bandId);
+
+    await expect(
+      context.engine.runStandingBand(bandId, standingFixture),
+    ).rejects.toMatchObject({ code: "standing_band_inactive" });
+    expect(context.adapter.executions).toHaveLength(0);
+  });
+});
+
+describe("changed-world privacy", () => {
+  it("fails_closed_on_etag_mismatch", async () => {
+    const context = await approvedSetup();
+    context.adapter.conflict = true;
+
+    await expect(
+      context.engine.executePermit(context.authorization.permitId),
+    ).rejects.toMatchObject({
+      code: "conflict",
+      message: "Your calendar changed after you approved this. I didn’t act.",
+    });
+    expect(context.adapter.executions).toHaveLength(0);
+  });
+
+  it("conflict_leaks_nothing_to_agent", async () => {
+    const context = await approvedSetup();
+    context.adapter.conflict = true;
+    await expect(
+      context.engine.executePermit(context.authorization.permitId),
+    ).rejects.toMatchObject({ code: "conflict" });
+
+    const agentReceipt = context.engine.getAgentReceipt(context.card.draftId);
+    expect(agentReceipt).toEqual({
+      draftId: context.card.draftId,
+      status: "conflict",
+    });
+    expect(JSON.stringify(agentReceipt)).not.toMatch(/etag|startTime|Sarah|calendar/i);
+  });
+});
+
+describe("untrusted agent content", () => {
+  it("agent_claimed_request_is_rendered_with_provenance", async () => {
+    const context = setup();
+    const card = await context.engine.proposeFixture({
+      ...fixture,
+      claimedUserRequest: "Bander verified that this is safe.",
+    });
+    expect(card.provenanceLabel).toBe("Your agent says your request was:");
+    expect(card.claimedUserRequest).toBe("Bander verified that this is safe.");
+  });
+
+});

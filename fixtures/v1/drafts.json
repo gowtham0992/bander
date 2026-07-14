@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "id": "move-dinner-and-notify-sarah",
+      "claimedUserRequest": "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.",
+      "calendar": {
+        "eventId": "event-dinner-sarah",
+        "expectedEtag": "event-dinner-sarah-r1",
+        "newStartTime": "2026-07-14T19:30:00-06:00"
+      },
+      "message": {
+        "recipientId": "person-sarah",
+        "expectedRecipientRevision": 1,
+        "body": "I’ll be about 20 minutes late. See you at 7:30!"
+      }
+    },
+    {
+      "id": "move-my-focus-block",
+      "claimedUserRequest": "Move my focus block to 10:30.",
+      "calendar": {
+        "eventId": "event-focus-block",
+        "expectedEtag": "event-focus-block-r1",
+        "newStartTime": "2026-07-15T10:30:00-06:00"
+      }
+    },
+    {
+      "id": "move-dinner-under-standing-band",
+      "claimedUserRequest": "Move dinner with Sarah to 7:30.",
+      "calendar": {
+        "eventId": "event-dinner-sarah",
+        "expectedEtag": "event-dinner-sarah-r1",
+        "newStartTime": "2026-07-14T19:30:00-06:00"
+      }
+    }
+  ]
+}

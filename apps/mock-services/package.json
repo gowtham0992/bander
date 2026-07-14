@@ -1,0 +1,15 @@
+{
+  "name": "@bander/mock-services",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bander/contracts": "*",
+    "fastify": "5.10.0"
+  }
+}

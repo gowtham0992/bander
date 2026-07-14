@@ -1,0 +1,33 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": ".bander/openclaw-workspace"
+    }
+  },
+  "tools": {
+    "profile": "full",
+    "allow": [
+      "bander__list_capabilities",
+      "bander__propose_action",
+      "bander__get_receipt"
+    ]
+  },
+  "mcp": {
+    "servers": {
+      "bander": {
+        "url": "http://localhost:4310/mcp",
+        "transport": "streamable-http",
+        "connectTimeout": 5,
+        "timeout": 20,
+        "supportsParallelToolCalls": false,
+        "toolFilter": {
+          "include": [
+            "list_capabilities",
+            "propose_action",
+            "get_receipt"
+          ]
+        }
+      }
+    }
+  }
+}

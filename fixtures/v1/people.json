@@ -1,0 +1,16 @@
+{
+  "people": [
+    {
+      "id": "person-owner",
+      "displayName": "Alex Morgan",
+      "messageAddress": "+15550101001",
+      "revision": 1
+    },
+    {
+      "id": "person-sarah",
+      "displayName": "Sarah Chen",
+      "messageAddress": "+15550101002",
+      "revision": 1
+    }
+  ]
+}
