@@ -50,7 +50,7 @@ const app = buildBrokerApp({
     ? {
         deliverAgentProposal: (card) => telegramService.deliverProposal(card),
         runAgentStandingAction: (fixture, requestId) =>
-          telegramService.runStandingAction(
+          telegramService.handleAgentAction(
             fixture,
             requestId,
             "openclaw-reference",

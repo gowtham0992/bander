@@ -28,6 +28,27 @@ function formatInterval(start: string, end: string, timeZone: string): string {
   return `${compactStart}–${endLabel}`;
 }
 
+export function formatCalendarIntervalWithContext(
+  start: string,
+  end: string,
+  timeZone: string,
+): string {
+  const date = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone,
+  }).format(new Date(start));
+  const zone =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "short",
+    })
+      .formatToParts(new Date(start))
+      .find((part) => part.type === "timeZoneName")?.value ?? timeZone;
+  return `${date}, ${formatInterval(start, end, timeZone)} ${zone}`;
+}
+
 function calendarLine(effect: CalendarRescheduleEffect): string {
   const previous = formatInterval(
     effect.expected.startTime,

@@ -347,7 +347,7 @@ try {
     fixtures,
     deliverAgentProposal: (card) => telegramService.deliverProposal(card),
     runAgentStandingAction: (fixture, requestId) =>
-      telegramService.runStandingAction(
+      telegramService.handleAgentAction(
         fixture,
         requestId,
         "openclaw-reference",
@@ -358,7 +358,12 @@ try {
   const brokerUrl = await broker.listen({ host: "127.0.0.1", port: 0 });
   provider = buildOpenClawMockProvider(
     scenario === "standing"
-      ? { canonicalRequest: standingRequest, standingRequestId }
+      ? {
+          canonicalRequest: standingRequest,
+          supportedRequests: [
+            { request: standingRequest, requestId: standingRequestId },
+          ],
+        }
       : {},
   );
   const providerUrl = await provider.app.listen({ host: "127.0.0.1", port: 0 });
@@ -466,7 +471,11 @@ try {
     );
     assert.equal(outcomeMessages.length, 1);
     const outcomeText = outcomeMessages[0]!.text;
-    assert.match(outcomeText, /Moved “Focus block” within your approved routine/);
+    assert.match(outcomeText, /“Focus block”/);
+    assert.match(
+      outcomeText,
+      /Wed, Jul 15, 10:00–11:00 AM MDT → Wed, Jul 15, 10:30–11:30 AM MDT/,
+    );
     assert.match(outcomeText, /No one was messaged/);
     assert.match(outcomeText, /2 of 3 actions used today/);
     assert.equal(authorityStore.draftWrites, 1);
@@ -554,20 +563,47 @@ try {
     });
     assert.equal(telegramStore.read().standingOutcomes[0]?.revokedAt, revokedAt);
     assert.equal(authorityStore.getBand(standingBandId)?.status, "revoked");
-    await assert.rejects(
-      telegramService.runStandingAction(
-        standingFixture,
-        "openclaw-telegram-standing-after-revoke-0002",
-        "openclaw-reference",
-      ),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "standing_band_inactive",
+    assert.equal(telegramStore.read().standingBand, undefined);
+    assert.equal(
+      telegramApi.messages.filter((message) =>
+        message.text.startsWith("Back in control"),
+      ).length,
+      1,
     );
     assert.equal(adapter.executionCalls, 1);
     assert.equal(authorityStore.receiptWrites, 1);
-    console.log("PASS standing revoke: idempotent and future execution blocked");
+    console.log("PASS standing revoke: idempotent, detached, and Back in control delivered");
+
+    await telegramApi.sendMessage(
+      installation.chatId,
+      [
+        "Owner: send the same request again. It must become a one-time deal:",
+        standingRequest,
+      ].join("\n"),
+    );
+    console.log("WAITING next owner request to become a one-time Bander Card");
+    await waitFor(
+      "post-revoke one-time proposal",
+      () =>
+        telegramStore.read().proposals.length === 1 &&
+        provider!.evidence.toolResults.some((value) => {
+          try {
+            return JSON.parse(value).status === "proposed";
+          } catch {
+            return false;
+          }
+        }),
+      5 * 60_000,
+    );
+    const oneTimeBinding = telegramStore.read().proposals[0]!;
+    const oneTimeCard = engine.getCard(oneTimeBinding.draftId);
+    assert.equal(oneTimeCard.claimedUserRequest, standingRequest);
+    assert.equal(engine.getAgentReceipt(oneTimeBinding.draftId).status, "proposed");
+    assert.equal(authorityStore.oneTimeBandWrites, 0);
+    assert.equal(authorityStore.permitWrites, 1);
+    assert.equal(adapter.executionCalls, 1);
+    assert.equal(authorityStore.receiptWrites, 1);
+    console.log("PASS post-revoke loop: next request produced a one-time Card; no execution");
 
     const modelInputs = provider.evidence.modelInputTexts.join("\n");
     for (const forbidden of [
@@ -578,6 +614,10 @@ try {
       outcomeText,
       "Bander handled this",
       "2 of 3 actions used today",
+      oneTimeBinding.callbackValue,
+      oneTimeCard.title,
+      oneTimeCard.draftHash,
+      ...oneTimeCard.allows,
     ]) {
       assert.equal(modelInputs.includes(forbidden), false);
     }
@@ -623,6 +663,10 @@ try {
       outcomeText,
       "Bander handled this",
       "2 of 3 actions used today",
+      oneTimeBinding.callbackValue,
+      oneTimeCard.title,
+      oneTimeCard.draftHash,
+      ...oneTimeCard.allows,
     ]) {
       assert.equal(bundleText.includes(forbidden), false);
     }
@@ -642,6 +686,8 @@ try {
         permits: authorityStore.permitWrites,
         downstreamDispatches: adapter.executionCalls,
         receipts: authorityStore.receiptWrites,
+        oneTimeCardsPending: telegramStore.read().proposals.length,
+        oneTimeBands: authorityStore.oneTimeBandWrites,
         actionsUsed: completedBand.actionTimestamps.length,
         maxActions: completedBand.predicate.limits.maxActions,
         revoked: authorityStore.getBand(standingBandId)?.status === "revoked",
@@ -650,6 +696,7 @@ try {
         outcomeAbsentFromModelAndTrajectory: true,
         genuineCallbackAbsentFromOpenClaw: true,
         receiptAbsentFromModelAndTrajectory: true,
+        postRevokeCardAbsentFromModelAndTrajectory: true,
         banderTokenAbsentFromOpenClawEnvironment: true,
       },
       evidenceDirectory: path.relative(process.cwd(), runRoot),

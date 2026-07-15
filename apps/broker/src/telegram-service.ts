@@ -2,7 +2,12 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { AgentReceipt, ApprovalCard, HumanReceipt } from "@bander/contracts";
-import { AuthorityEngine, AuthorityError, KeyedLock } from "@bander/core";
+import {
+  AuthorityEngine,
+  AuthorityError,
+  formatCalendarIntervalWithContext,
+  KeyedLock,
+} from "@bander/core";
 import type { DraftFixture, StandingRunResult } from "@bander/core";
 
 export interface TelegramUser {
@@ -180,6 +185,7 @@ export interface TelegramStandingOutcomeBinding {
   messageId?: number;
   deliveredAt?: string;
   revokedAt?: string;
+  revocationDeliveredAt?: string;
 }
 
 export interface TelegramServiceState {
@@ -189,6 +195,7 @@ export interface TelegramServiceState {
   pairing?: TelegramPairingChallenge;
   proposals: TelegramProposalBinding[];
   standingBand?: TelegramStandingBandBinding;
+  oneTimeReviewMode?: { detachedBandId: string; activatedAt: string };
   standingOutcomes: TelegramStandingOutcomeBinding[];
 }
 
@@ -319,7 +326,18 @@ function standingOutcomeText(
 ): string {
   return [
     "Bander handled this",
-    `Moved “${receipt.calendar.title}” within your approved routine`,
+    "",
+    `“${receipt.calendar.title}”`,
+    `${formatCalendarIntervalWithContext(
+      receipt.calendar.previous.startTime,
+      receipt.calendar.previous.endTime,
+      receipt.calendar.timeZone,
+    )} → ${formatCalendarIntervalWithContext(
+      receipt.calendar.completed.startTime,
+      receipt.calendar.completed.endTime,
+      receipt.calendar.timeZone,
+    )}`,
+    "",
     "No one was messaged",
     `${actionsUsed} of ${maxActions} actions used today`,
   ].join("\n");
@@ -437,6 +455,7 @@ export class TelegramService {
         bandId,
         activatedAt: this.#now().toISOString(),
       };
+      delete state.oneTimeReviewMode;
       this.#store.write(state);
     });
   }
@@ -448,6 +467,23 @@ export class TelegramService {
   ): Promise<AgentReceipt | undefined> {
     const configured = this.#store.read().standingBand;
     if (!configured) return undefined;
+    let summary: ReturnType<AuthorityEngine["getStandingBandSummary"]>;
+    try {
+      summary = this.#engine.getStandingBandSummary(configured.bandId);
+    } catch (error) {
+      if (
+        error instanceof AuthorityError &&
+        error.code === "standing_band_not_found"
+      ) {
+        await this.#detachStandingBand(configured.bandId);
+        return undefined;
+      }
+      throw error;
+    }
+    if (summary.status !== "active") {
+      await this.#detachStandingBand(configured.bandId);
+      return undefined;
+    }
     if (!requestId) {
       throw new AuthorityError(
         "invalid_standing_request_id",
@@ -468,6 +504,13 @@ export class TelegramService {
           );
         } catch (error) {
           if (error instanceof AuthorityError) {
+            if (
+              error.code === "standing_band_inactive" ||
+              error.code === "standing_band_not_found"
+            ) {
+              await this.#detachStandingBand(configured.bandId);
+              return undefined;
+            }
             const minimalStatus = this.#engine.getStandingAgentReceipt(
               configured.bandId,
               requestId,
@@ -481,7 +524,7 @@ export class TelegramService {
           return this.#engine.getAgentReceipt(result.card.draftId);
         }
 
-        const summary = this.#engine.getStandingBandSummary(configured.bandId);
+        summary = this.#engine.getStandingBandSummary(configured.bandId);
         let outcome = await this.#stateLock.run("telegram-state", async () => {
           const state = this.#store.read();
           const installation = state.installation;
@@ -581,6 +624,33 @@ export class TelegramService {
         return this.#engine.getAgentReceipt(outcome.draftId);
       },
     );
+  }
+
+  async handleAgentAction(
+    fixture: DraftFixture,
+    requestId: string | undefined,
+    agentId = "openclaw-reference",
+  ): Promise<AgentReceipt> {
+    const standing = await this.runStandingAction(fixture, requestId, agentId);
+    if (standing) return standing;
+    const card = this.#store.read().oneTimeReviewMode
+      ? await this.#engine.proposeFixtureForFreshReview(fixture, agentId)
+      : await this.#engine.proposeFixture(fixture, agentId);
+    await this.deliverProposal(card);
+    return this.#engine.getAgentReceipt(card.draftId);
+  }
+
+  async #detachStandingBand(bandId: string): Promise<void> {
+    await this.#stateLock.run("telegram-state", async () => {
+      const state = this.#store.read();
+      if (state.standingBand?.bandId !== bandId) return;
+      delete state.standingBand;
+      state.oneTimeReviewMode = {
+        detachedBandId: bandId,
+        activatedAt: this.#now().toISOString(),
+      };
+      this.#store.write(state);
+    });
   }
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -868,13 +938,43 @@ export class TelegramService {
         (outcome) => outcome.callbackValue === callback.data,
       );
       const currentBinding = current.standingOutcomes[currentIndex];
+      const revocationDeliveryPending =
+        currentBinding && !currentBinding.revocationDeliveredAt;
       if (currentBinding && currentBinding.lifecycle !== "revoked") {
         current.standingOutcomes[currentIndex] = {
           ...currentBinding,
           lifecycle: "revoked",
           revokedAt: this.#now().toISOString(),
         };
-        this.#store.write(current);
+      }
+      if (current.standingBand?.bandId === binding.bandId) {
+        delete current.standingBand;
+      }
+      current.oneTimeReviewMode = {
+        detachedBandId: binding.bandId,
+        activatedAt: currentBinding?.revokedAt ?? this.#now().toISOString(),
+      };
+      this.#store.write(current);
+      if (revocationDeliveryPending) {
+        await this.#api.sendMessage(
+          binding.chatId,
+          [
+            "Back in control",
+            "Future matching requests will come back as one-time deals.",
+          ].join("\n"),
+        );
+        const delivered = this.#store.read();
+        const deliveredIndex = delivered.standingOutcomes.findIndex(
+          (outcome) => outcome.callbackValue === callback.data,
+        );
+        const deliveredBinding = delivered.standingOutcomes[deliveredIndex];
+        if (deliveredBinding && !deliveredBinding.revocationDeliveredAt) {
+          delivered.standingOutcomes[deliveredIndex] = {
+            ...deliveredBinding,
+            revocationDeliveredAt: this.#now().toISOString(),
+          };
+          this.#store.write(delivered);
+        }
       }
       await this.#api.answerCallback(
         callback.id,

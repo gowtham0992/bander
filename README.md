@@ -61,7 +61,7 @@ Authority execution and human Telegram delivery have different retry guarantees.
 
 An approved standing Band can also handle the bounded Focus-block move without another approval. Bander posts a human-only outcome with the current rolling counter and a distinct owner-bound **Turn off** callback. The service persists one outcome per standing request ID before delivery; retry reconciles the same Draft, Permit and Receipt, while Telegram notification remains at least once. Revocation uses the authority engine's Band lock, is idempotent, and blocks future standing execution.
 
-`npm run verify:telegram-standing` runs that path through real OpenClaw and Telegram. It proves one Draft, one standing Band, one Permit, one downstream execution and one Receipt; rejects the wrong user, chat, Bander message and callback; observes the genuine owner revoke; and confirms the complete human outcome, Receipt and callback are absent from OpenClaw's model input and exported trajectory.
+`npm run verify:telegram-standing` runs that path through real OpenClaw and Telegram. It proves one autonomous Draft, one standing Band, one Permit, one downstream execution and one Receipt; rejects the wrong user, chat, Bander message and callback; observes the genuine owner revoke; then proves the same natural request returns as a pending one-time Card with no new authority or execution. The complete human outcome, Receipt, callback and post-revoke Card remain absent from OpenClaw's model input and exported trajectory.
 
 ## Optional GPT-5.6 compiler
 

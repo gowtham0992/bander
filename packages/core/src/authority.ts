@@ -262,6 +262,20 @@ export class AuthorityEngine {
     };
   }
 
+  async proposeFixtureForFreshReview(
+    fixture: DraftFixture,
+    agentId = "demo-agent",
+  ): Promise<ApprovalCard> {
+    // The requested effect stays fixture-defined; only the human-visible expected
+    // state is rebound to the authoritative world for a new one-time review.
+    const activity = this.#recordProposal(agentId);
+    const draft = await this.#storeFixtureDraft(fixture, true);
+    return {
+      ...renderApprovalCard(draft.id, draft.hash, draft.document),
+      proposalActivity: activity,
+    };
+  }
+
   createStandingBandCandidate(): StandingBandCard {
     const createdAt = this.#now();
     const expiresAt = new Date(createdAt.getTime() + 30 * 24 * 60 * 60_000).toISOString();
@@ -723,13 +737,16 @@ export class AuthorityEngine {
     return { draftId, status: "declined" };
   }
 
-  async #storeFixtureDraft(fixture: DraftFixture): Promise<StoredDraft> {
+  async #storeFixtureDraft(
+    fixture: DraftFixture,
+    bindToCurrentState = false,
+  ): Promise<StoredDraft> {
     const event = await this.#adapter.resolveEvent(fixture.calendar.eventId);
     const person = fixture.message
       ? await this.#adapter.resolvePerson(fixture.message.recipientId)
       : undefined;
 
-    if (event.etag !== fixture.calendar.expectedEtag) {
+    if (!bindToCurrentState && event.etag !== fixture.calendar.expectedEtag) {
       throw new AuthorityError(
         "fixture_precondition_mismatch",
         "The seeded calendar no longer matches this proposal",
@@ -737,6 +754,7 @@ export class AuthorityEngine {
       );
     }
     if (
+      !bindToCurrentState &&
       fixture.message &&
       (!person || person.revision !== fixture.message.expectedRecipientRevision)
     ) {

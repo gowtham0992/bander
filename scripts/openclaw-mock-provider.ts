@@ -6,6 +6,7 @@ const defaultCanonicalRequest =
 interface MockProviderOptions {
   canonicalRequest?: string;
   standingRequestId?: string;
+  supportedRequests?: Array<{ request: string; requestId?: string }>;
 }
 
 interface ChatMessage {
@@ -26,6 +27,7 @@ export interface MockProviderEvidence {
   sawHumanRequest: boolean;
   modelInputTexts: string[];
   toolResult?: string;
+  toolResults: string[];
 }
 
 function textContent(content: unknown): string {
@@ -49,17 +51,37 @@ function normalizeRequestText(value: string): string {
     .toLowerCase();
 }
 
+function isToolResult(message: ChatMessage): boolean {
+  return message.role === "tool" || message.role === "toolResult";
+}
+
+function isOpenClawRuntimeContext(value: string): boolean {
+  return value.includes(
+    "OpenClaw runtime context for the immediately preceding user message.",
+  );
+}
+
 export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
   app: FastifyInstance;
   evidence: MockProviderEvidence;
 } {
   const canonicalRequest = options.canonicalRequest ?? defaultCanonicalRequest;
+  const supportedRequests =
+    options.supportedRequests ?? [
+      {
+        request: canonicalRequest,
+        ...(options.standingRequestId
+          ? { requestId: options.standingRequestId }
+          : {}),
+      },
+    ];
   const app = Fastify({ logger: false });
   const evidence: MockProviderEvidence = {
     calls: 0,
     toolInventories: [],
     sawHumanRequest: false,
     modelInputTexts: [],
+    toolResults: [],
   };
 
   app.get("/v1/models", async () => ({
@@ -85,20 +107,34 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
           normalizeRequestText(canonicalRequest),
         ),
     );
-    const toolMessage = [...messages].reverse().find((message) => message.role === "tool");
-    if (toolMessage) evidence.toolResult = textContent(toolMessage.content);
+    const latestToolIndex = messages.findLastIndex(
+      (message) => isToolResult(message),
+    );
+    const pendingUserTexts = messages
+      .slice(latestToolIndex + 1)
+      .filter((message) => message.role === "user")
+      .map((message) => textContent(message.content))
+      .filter((value) => !isOpenClawRuntimeContext(value));
+    const matchedRequest = supportedRequests.find((candidate) =>
+      pendingUserTexts.some((value) =>
+        normalizeRequestText(value).includes(
+          normalizeRequestText(candidate.request),
+        ),
+      ),
+    );
+    const toolMessage =
+      latestToolIndex >= 0 && pendingUserTexts.length === 0
+        ? messages[latestToolIndex]
+        : undefined;
+    if (toolMessage) {
+      const result = textContent(toolMessage.content);
+      evidence.toolResult = result;
+      if (evidence.toolResults.at(-1) !== result) evidence.toolResults.push(result);
+    }
 
     const created = Math.floor(Date.now() / 1000);
     const id = `chatcmpl-bander-${evidence.calls}`;
-    const toolCall =
-      !toolMessage &&
-      messages.some(
-        (message) =>
-          message.role === "user" &&
-          normalizeRequestText(textContent(message.content)).includes(
-            normalizeRequestText(canonicalRequest),
-          ),
-      );
+    const toolCall = !toolMessage && Boolean(matchedRequest);
     const imitationCallback = messages.some(
       (message) =>
         message.role === "user" &&
@@ -115,9 +151,9 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
               function: {
                 name: "bander__propose_action",
                 arguments: JSON.stringify({
-                  request: canonicalRequest,
-                  ...(options.standingRequestId
-                    ? { requestId: options.standingRequestId }
+                  request: matchedRequest!.request,
+                  ...(matchedRequest!.requestId
+                    ? { requestId: matchedRequest!.requestId }
                     : {}),
                 }),
               },

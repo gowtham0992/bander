@@ -585,3 +585,52 @@ OpenClaw: exactly three Bander tools; Bander token absent from its environment
 The final matrix passed 71 functional tests, 20 attack tests, the six-outcome demo verifier, both real-process recovery verifiers, the real OpenClaw verifier with friendly unsupported input, the production build, the moderate dependency audit with zero vulnerabilities, and the tracked-secret scan. The live evidence is stored under ignored owner-only `.bander/telegram-service-verification-standing-1784092942010-fd901f48/`.
 
 `OPENAI_API_KEY` remains unavailable, so the live GPT-5.6 Sol selection and off-script natural-request evidence are still external blockers. `/feedback` remains intentionally deferred.
+
+## Checkpoint 18 — standing Turn off returns to one-time review
+
+**Status:** verified end to end on July 15, 2026; live GPT-5.6 Sol evidence remains pending
+
+Turning off a standing Band now preserves the revoked Band and its audit history in the authority engine while detaching the Telegram installation's active standing pointer. The installation enters persistent one-time-review mode until another active standing Band is explicitly installed. A naturally expired or missing configured Band follows the same safe detachment path. Exhausted and predicate-mismatched active Bands retain their existing `review_required` behavior.
+
+The next matching natural request uses the ordinary one-time Draft/Card/approval lifecycle. Its deterministic requested effect is unchanged, while its expected Calendar and recipient revisions are rebound from the authoritative current world before the new Card hash is rendered. Ordinary fixture proposals remain strict, so this does not weaken changed-world refusal. When the prior standing action already reached the requested target, the Card truthfully displays the current interval to the same interval and still requires owner approval; no authority or write exists before that approval.
+
+The required service regression was first observed red:
+
+```text
+$ npx vitest run apps/broker/src/telegram-service.test.ts
+Test Files  1 failed (1)
+Tests       3 failed | 10 passed (13)
+Failures: exact standing interval absent; standing pointer remained attached after revoke; handleAgentAction missing
+```
+
+After the initial correction, the realistic mutating-adapter and OpenClaw-history regressions were also observed red before their fixes:
+
+```text
+$ npx vitest run scripts/openclaw-mock-provider.test.ts apps/broker/src/telegram-service.test.ts
+Test Files  2 failed (2)
+Tests       2 failed | 14 passed (16)
+Failures: stale historical request selected after toolResult; post-revoke fixture_precondition_mismatch
+```
+
+The standing human outcome is now rendered exclusively from the committed `HumanReceipt` and the shared canonical interval formatter. It discloses the title, complete before and after start/end intervals, date, and `MDT` timezone context while preserving duration. None of those details return through MCP.
+
+The live verifier uncovered one harness-specific OpenClaw detail: OpenClaw appends a trusted runtime-context user wrapper after a `toolResult`. The deterministic mock provider now ignores only that recognized wrapper when classifying a completed tool turn. A later genuine unsupported user request is still distinguished and receives the friendly clarification. Focused provider regressions pin both cases.
+
+Restored live evidence:
+
+```text
+$ npm run verify:telegram-standing
+PASS standing execution: minimal MCP status, one effect, one Receipt, counter 2 of 3
+PASS standing surface rejection: wrong user, chat, message and callback denied
+PASS standing revoke: idempotent, detached, and Back in control delivered
+PASS post-revoke loop: same request produced a one-time Card; no execution
+
+authority: 2 Drafts · 1 standing Band · 1 Permit · 1 downstream dispatch · 1 Receipt
+pending review: 1 one-time Card · 0 one-time Bands
+privacy: standing outcome, genuine callback, Receipt and post-revoke Card absent from model input and trajectory
+evidence: .bander/telegram-service-verification-standing-1784095475951-b4effef0/
+```
+
+The final matrix passed 75 functional tests, 20 attack tests, the six-outcome demo verifier, both real-process recovery verifiers, the real OpenClaw verifier with exactly three effective Bander tools and friendly unsupported input, the production build, and the moderate dependency audit with zero vulnerabilities. The tracked-file scan found no OpenAI- or Telegram-token-shaped secrets. The live standing verifier also re-ran the Telegram privacy assertions against the exact-effect and post-revoke Card paths.
+
+The live GPT-5.6 Sol selection and genuinely off-script request remain the next external evidence requirement. `/feedback` remains intentionally deferred.

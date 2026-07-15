@@ -43,20 +43,21 @@ const standingFixture: DraftFixture = {
 class FakeAdapter implements ExecutionAdapter {
   executions = 0;
   conflict = false;
+  focusEvent: CalendarEvent = {
+    id: "event-focus-block",
+    title: "Focus block",
+    startTime: "2026-07-15T09:30:00-06:00",
+    endTime: "2026-07-15T10:30:00-06:00",
+    timeZone: "America/Denver",
+    organizerId: "person-owner",
+    attendeeIds: ["person-owner"],
+    revision: 1,
+    etag: "event-focus-block-r1",
+  };
 
   async resolveEvent(id: string): Promise<CalendarEvent> {
     if (id === "event-focus-block") {
-      return {
-        id,
-        title: "Focus block",
-        startTime: "2026-07-15T09:30:00-06:00",
-        endTime: "2026-07-15T10:30:00-06:00",
-        timeZone: "America/Denver",
-        organizerId: "person-owner",
-        attendeeIds: ["person-owner"],
-        revision: 1,
-        etag: "event-focus-block-r1",
-      };
+      return structuredClone(this.focusEvent);
     }
     return {
       id: "event-dinner-sarah",
@@ -80,13 +81,25 @@ class FakeAdapter implements ExecutionAdapter {
     };
   }
 
-  async executeDraft(_input: {
+  async executeDraft(input: {
     draftHash: string;
     permitNonce: string;
     document: DraftDocument;
   }): Promise<void> {
     this.executions += 1;
     if (this.conflict) throw new ExecutionConflictError();
+    const calendar = input.document.effects.find(
+      (effect) => effect.type === "calendar.reschedule_event",
+    );
+    if (calendar?.eventId === "event-focus-block") {
+      this.focusEvent = {
+        ...this.focusEvent,
+        startTime: calendar.changes.startTime,
+        endTime: calendar.changes.endTime,
+        revision: this.focusEvent.revision + 1,
+        etag: "event-focus-block-r2",
+      };
+    }
   }
 
   async getExecution(): Promise<boolean> {
@@ -163,12 +176,13 @@ function messageUpdate(input: {
 }
 
 function setup() {
+  let currentTime = new Date("2026-07-14T18:00:00.000Z");
   const adapter = new FakeAdapter();
   const authorityStore = new AuthorityStore();
   const engine = new AuthorityEngine({
     store: authorityStore,
     adapter,
-    now: () => new Date("2026-07-14T18:00:00.000Z"),
+    now: () => currentTime,
   });
   const api = new FakeTelegramApi();
   const store = new MemoryTelegramServiceStore();
@@ -178,10 +192,20 @@ function setup() {
     api,
     engine,
     store,
-    now: () => new Date("2026-07-14T18:00:00.000Z"),
+    now: () => currentTime,
     randomValue: () => values[tokenIndex++] ?? `random-${tokenIndex}`,
   });
-  return { adapter, api, authorityStore, engine, service, store };
+  return {
+    adapter,
+    api,
+    authorityStore,
+    engine,
+    service,
+    store,
+    setNow: (value: string) => {
+      currentTime = new Date(value);
+    },
+  };
 }
 
 async function pairOwner(setupResult: ReturnType<typeof setup>) {
@@ -571,7 +595,10 @@ describe("Bander Telegram service", () => {
       message.text.startsWith("Bander handled this"),
     );
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.text).toContain("Moved “Focus block” within your approved routine");
+    expect(messages[0]?.text).toContain("“Focus block”");
+    expect(messages[0]?.text).toContain(
+      "Wed, Jul 15, 9:30–10:30 AM MDT → Wed, Jul 15, 10:30–11:30 AM MDT",
+    );
     expect(messages[0]?.text).toContain("No one was messaged");
     expect(messages[0]?.text).toContain("2 of 3 actions used today");
     expect(messages[0]?.replyMarkup).toMatchObject({
@@ -579,7 +606,7 @@ describe("Bander Telegram service", () => {
     });
   });
 
-  it("authorizes standing revocation on the exact owner surface and prevents future actions", async () => {
+  it("detaches a revoked standing Band and returns the next request to one-time review", async () => {
     const current = setup();
     await pairOwner(current);
     const bandId = await activateStandingBand(current);
@@ -635,14 +662,58 @@ describe("Bander Telegram service", () => {
       lifecycle: "revoked",
       revokedAt: expect.any(String),
     });
-    await expect(
-      current.service.runStandingAction(
-        standingFixture,
-        "telegram-standing-after-revoke-0002",
-        "openclaw-reference",
-      ),
-    ).rejects.toMatchObject({ code: "standing_band_inactive" });
+    expect(current.store.read().standingBand).toBeUndefined();
+    expect(
+      current.api.messages.filter((message) => message.text.startsWith("Back in control")),
+    ).toHaveLength(1);
+
+    const next = await current.service.handleAgentAction(
+      standingFixture,
+      "telegram-standing-after-revoke-0002",
+      "openclaw-reference",
+    );
+    expect(next).toMatchObject({ status: "proposed" });
     expect(current.adapter.executions).toBe(1);
+    expect(current.store.read().proposals).toHaveLength(1);
+    const proposal = current.store.read().proposals[0]!;
+    expect(proposal.draftId).toBe(next.draftId);
+
+    await current.service.handleUpdate({
+      update_id: 63,
+      callback_query: {
+        id: "standing-next-one-time-approval",
+        from: { id: 101, is_bot: false },
+        data: proposal.callbackValue,
+        message: {
+          message_id: proposal.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+    expect(current.adapter.executions).toBe(2);
+    expect(current.authorityStore.getBand(bandId)).toMatchObject({ status: "revoked" });
+  });
+
+  it("detaches a naturally expired standing Band and falls back to one-time review", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const bandId = await activateStandingBand(current);
+    current.setNow("2026-08-15T18:00:00.000Z");
+
+    const next = await current.service.handleAgentAction(
+      standingFixture,
+      "telegram-standing-after-expiry-0001",
+      "openclaw-reference",
+    );
+
+    expect(next).toMatchObject({ status: "proposed" });
+    expect(current.store.read().standingBand).toBeUndefined();
+    expect(current.store.read().proposals).toHaveLength(1);
+    expect(current.store.read().proposals[0]?.draftId).toBe(next.draftId);
+    expect(current.adapter.executions).toBe(0);
+    expect(current.engine.getStandingBandSummary(bandId)).toMatchObject({
+      status: "expired",
+    });
   });
 
   it("returns the same human Card when a standing request needs review", async () => {
