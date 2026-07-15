@@ -278,10 +278,10 @@ describe("standing authority boundaries", () => {
     expect(context.adapter.executions).toHaveLength(1);
   });
 
-  it("rejects_standing_approval_replay", async () => {
+  it("standing approval replay cannot mint or change authority", async () => {
     const context = setup();
     const candidate = context.engine.createStandingBandCandidate();
-    await context.engine.approveStandingBand(
+    const first = await context.engine.approveStandingBand(
       candidate.candidateId,
       candidate.predicateHash,
     );
@@ -291,7 +291,17 @@ describe("standing authority boundaries", () => {
         candidate.candidateId,
         candidate.predicateHash,
       ),
-    ).rejects.toMatchObject({ code: "standing_candidate_not_approvable" });
+    ).resolves.toEqual(first);
+    await expect(
+      context.engine.approveStandingBand(
+        candidate.candidateId,
+        "0".repeat(64),
+      ),
+    ).rejects.toMatchObject({ code: "standing_predicate_hash_mismatch" });
+    expect(context.store.getBand(first.bandId)).toMatchObject({
+      id: first.bandId,
+      predicateHash: candidate.predicateHash,
+    });
   });
 
   it("rejects a tampered standing predicate after approval", async () => {

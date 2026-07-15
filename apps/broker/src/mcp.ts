@@ -19,6 +19,9 @@ interface McpRoutesOptions {
   fixtures: Map<string, DraftFixture>;
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
+  proposeAgentStandingOptIn?: (
+    request: string,
+  ) => Promise<{ status: "proposed" } | undefined>;
   runAgentStandingAction?: (
     fixture: DraftFixture,
     requestId?: string,
@@ -70,6 +73,10 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
             ],
             supportedProposalRequests: [...options.fixtures.values()].map(
               (fixture) => fixture.claimedUserRequest,
+            ).concat(
+              options.proposeAgentStandingOptIn
+                ? ["Handle my focus time automatically."]
+                : [],
             ),
             executionBoundary:
               "OpenClaw cannot approve authority. Eligible execution can occur only inside a standing Band the person previously approved.",
@@ -102,6 +109,14 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
     },
     async ({ request, requestId }) => {
       try {
+        const standingOptIn = await options.proposeAgentStandingOptIn?.(request);
+        if (standingOptIn) {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(standingOptIn) },
+            ],
+          };
+        }
         const fixture = await compiler.compile(request);
         const standingStatus = await options.runAgentStandingAction?.(
           fixture,

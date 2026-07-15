@@ -31,6 +31,7 @@ import { createRuntimeEnvironments } from "./process-env.js";
 const oneTimeRequest =
   "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.";
 const standingRequest = "Move my focus block to 10:30.";
+const standingOptInRequest = "Handle my focus time automatically.";
 const standingRequestId = "openclaw-telegram-standing-0001";
 const conflictExplanation =
   "Stopped — your calendar changed\nI didn’t move the event or send the message.\nAsk OpenClaw to check again.";
@@ -295,6 +296,7 @@ if (reusedInstallation) {
     version: 1,
     installation: reusedInstallation,
     proposals: [],
+    standingCandidates: [],
     standingOutcomes: [],
   });
 } else {
@@ -330,25 +332,12 @@ try {
   assert.notEqual(installation.ownerTelegramId, prior.nonOwnerId);
 
   let standingBandId: string | undefined;
-  if (scenario === "standing") {
-    const candidate = engine.createStandingBandCandidate();
-    const standing = await engine.approveStandingBand(
-      candidate.candidateId,
-      candidate.predicateHash,
-    );
-    standingBandId = standing.bandId;
-    const band = authorityStore.getBand(standingBandId);
-    assert.ok(band && band.mode === "standing");
-    authorityStore.updateBand({
-      ...band,
-      actionTimestamps: [new Date(Date.now() - 60 * 60_000).toISOString()],
-    });
-    await telegramService.activateStandingBand(standingBandId);
-  }
 
   broker = buildBrokerApp({
     engine,
     fixtures,
+    proposeAgentStandingOptIn: (request) =>
+      telegramService.proposeStandingOptIn(request),
     deliverAgentProposal: (card) => telegramService.deliverProposal(card),
     runAgentStandingAction: (fixture, requestId) =>
       telegramService.handleAgentAction(
@@ -365,6 +354,7 @@ try {
       ? {
           canonicalRequest: standingRequest,
           supportedRequests: [
+            { request: standingOptInRequest },
             { request: standingRequest, requestId: standingRequestId },
           ],
         }
@@ -446,7 +436,144 @@ try {
   console.log("PASS OpenClaw: pinned policy and isolated environment validated");
 
   if (scenario === "standing") {
+    await telegramApi.sendMessage(
+      installation.chatId,
+      [
+        "Owner: first ask OpenClaw to prepare automatic handling:",
+        standingOptInRequest,
+      ].join("\n"),
+    );
+    console.log("WAITING owner natural standing opt-in request");
+    await waitFor(
+      "OpenClaw standing candidate and Bander opt-in message",
+      () =>
+        telegramStore.read().standingCandidates.length === 1 &&
+        provider!.evidence.toolResults.some((value) => {
+          try {
+            return JSON.parse(value).status === "proposed";
+          } catch {
+            return false;
+          }
+        }),
+      5 * 60_000,
+    );
+    const activation = telegramStore.read().standingCandidates[0]!;
+    const activationMessage = telegramApi.messages.find(
+      (message) => message.messageId === activation.messageId,
+    );
+    assert.ok(activationMessage);
+    for (const clause of [
+      "Move events you organize and attend alone",
+      "Keep them the same length",
+      "Keep them within weekdays, 9 AM–5 PM",
+      "Make at most 3 automatic moves per day",
+      "Never message anyone or spend money",
+    ]) {
+      assert.equal(activationMessage.text.includes(clause), true);
+    }
+    assert.equal(authorityStore.standingBandWrites, 0);
+    assert.equal(adapter.executionCalls, 0);
+
+    const deniedActivations = [
+      {
+        id: "synthetic:activation-non-owner",
+        fromId: Number(prior.nonOwnerId),
+        chatId: Number(activation.chatId),
+        messageId: activation.messageId,
+        botId: Number(activation.botTelegramId),
+        data: activation.approveCallbackValue,
+      },
+      {
+        id: "synthetic:activation-wrong-chat",
+        fromId: Number(installation.ownerTelegramId),
+        chatId: Number(activation.chatId) - 1,
+        messageId: activation.messageId,
+        botId: Number(activation.botTelegramId),
+        data: activation.approveCallbackValue,
+      },
+      {
+        id: "synthetic:activation-wrong-message",
+        fromId: Number(installation.ownerTelegramId),
+        chatId: Number(activation.chatId),
+        messageId: activation.messageId + 1,
+        botId: Number(activation.botTelegramId),
+        data: activation.approveCallbackValue,
+      },
+      {
+        id: "synthetic:activation-wrong-bot",
+        fromId: Number(installation.ownerTelegramId),
+        chatId: Number(activation.chatId),
+        messageId: activation.messageId,
+        botId: Number(activation.botTelegramId) + 1,
+        data: activation.approveCallbackValue,
+      },
+      {
+        id: "synthetic:activation-wrong-control",
+        fromId: Number(installation.ownerTelegramId),
+        chatId: Number(activation.chatId),
+        messageId: activation.messageId,
+        botId: Number(activation.botTelegramId),
+        data: "bander-auto:wrong-value",
+      },
+    ];
+    for (const denied of deniedActivations) {
+      await telegramService.handleUpdate({
+        update_id: -1,
+        callback_query: {
+          id: denied.id,
+          from: { id: denied.fromId, is_bot: false },
+          data: denied.data,
+          message: {
+            message_id: denied.messageId,
+            from: { id: denied.botId, is_bot: true },
+            chat: { id: denied.chatId, type: "supergroup" },
+          },
+        },
+      });
+    }
+    assert.equal(authorityStore.standingBandWrites, 0);
+    console.log(
+      "PASS standing opt-in rejection: wrong user, chat, message, bot and callback created no authority",
+    );
+
+    console.log("WAITING owner tap on genuine Turn on automatic");
+    await waitFor(
+      "owner Telegram standing activation",
+      () => telegramStore.read().standingCandidates[0]?.lifecycle === "activated",
+      5 * 60_000,
+    );
+    standingBandId = telegramStore.read().standingBand?.bandId;
     assert.ok(standingBandId);
+    await telegramService.handleUpdate({
+      update_id: -1,
+      callback_query: {
+        id: "synthetic:activation-owner-replay",
+        from: { id: Number(installation.ownerTelegramId), is_bot: false },
+        data: activation.approveCallbackValue,
+        message: {
+          message_id: activation.messageId,
+          from: { id: Number(activation.botTelegramId), is_bot: true },
+          chat: { id: Number(activation.chatId), type: "supergroup" },
+        },
+      },
+    });
+    assert.equal(authorityStore.standingBandWrites, 1);
+    assert.equal(
+      telegramApi.messages.filter((message) =>
+        message.text.startsWith("Automatic handling is on."),
+      ).length,
+      1,
+    );
+    const activatedBand = authorityStore.getBand(standingBandId);
+    assert.ok(activatedBand && activatedBand.mode === "standing");
+    authorityStore.updateBand({
+      ...activatedBand,
+      actionTimestamps: [new Date(Date.now() - 60 * 60_000).toISOString()],
+    });
+    console.log(
+      "PASS standing opt-in: Telegram-only owner activation minted one replay-safe authority",
+    );
+
     const standingFixture = fixtures.get("move-my-focus-block");
     assert.ok(standingFixture);
     await telegramApi.sendMessage(
@@ -462,12 +589,26 @@ try {
       "OpenClaw standing execution and Bander outcome",
       () =>
         telegramStore.read().standingOutcomes.length === 1 &&
-        Boolean(provider!.evidence.toolResult),
+        provider!.evidence.toolResults.some((value) => {
+          try {
+            return JSON.parse(value).status === "executed";
+          } catch {
+            return false;
+          }
+        }),
       5 * 60_000,
     );
     const outcome = telegramStore.read().standingOutcomes[0]!;
     const receipt = engine.getHumanReceipt(outcome.receiptId);
-    const agentStatus = JSON.parse(provider.evidence.toolResult!) as Record<
+    const executedToolResult = provider.evidence.toolResults.findLast((value) => {
+      try {
+        return JSON.parse(value).status === "executed";
+      } catch {
+        return false;
+      }
+    });
+    assert.ok(executedToolResult);
+    const agentStatus = JSON.parse(executedToolResult) as Record<
       string,
       unknown
     >;
@@ -619,6 +760,11 @@ try {
 
     const modelInputs = provider.evidence.modelInputTexts.join("\n");
     for (const forbidden of [
+      activation.approveCallbackValue,
+      activation.declineCallbackValue,
+      activation.candidateId,
+      activation.predicateHash,
+      activationMessage.text,
       outcome.callbackValue,
       receipt.id,
       receipt.summary,
@@ -668,6 +814,11 @@ try {
     );
     const bundleText = readBundleText(bundlePath);
     for (const forbidden of [
+      activation.approveCallbackValue,
+      activation.declineCallbackValue,
+      activation.candidateId,
+      activation.predicateHash,
+      activationMessage.text,
       outcome.callbackValue,
       receipt.id,
       receipt.summary,
@@ -691,7 +842,17 @@ try {
       effectiveTools: BANDER_OPENCLAW_TOOLS,
       mcpResultFields: ["draftId", "status"],
       humanOutcome: outcomeText,
-      rejected: ["non-owner", "wrong chat", "wrong message", "wrong callback"],
+      rejected: [
+        "activation non-owner",
+        "activation wrong chat",
+        "activation wrong message",
+        "activation wrong bot",
+        "activation wrong callback",
+        "revocation non-owner",
+        "revocation wrong chat",
+        "revocation wrong message",
+        "revocation wrong callback",
+      ],
       authority: {
         drafts: authorityStore.draftWrites,
         standingBands: authorityStore.standingBandWrites,
@@ -705,6 +866,8 @@ try {
         revoked: authorityStore.getBand(standingBandId)?.status === "revoked",
       },
       privacy: {
+        activationCardAbsentFromModelAndTrajectory: true,
+        activationCallbacksAbsentFromOpenClaw: true,
         outcomeAbsentFromModelAndTrajectory: true,
         genuineCallbackAbsentFromOpenClaw: true,
         receiptAbsentFromModelAndTrajectory: true,

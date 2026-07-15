@@ -675,3 +675,49 @@ standing regression: .bander/telegram-service-verification-standing-178409983871
 ```
 
 The final Slice 1 matrix passed 87 functional tests, 20 attack tests, the six-outcome demo verifier, both recovery verifiers, the real OpenClaw verifier, all three real Telegram service scenarios, production build, dependency audit and tracked-secret scan. `transcription_day2.md` remains untouched. Live GPT-5.6 Sol evidence and `/feedback` remain deferred.
+
+## Checkpoint 20 — Telegram standing-autonomy opt-in
+
+**Status:** verified end to end on July 15, 2026
+
+Standing autonomy can now be enabled entirely inside Telegram through the existing `propose_action` MCP tool. The supported natural request is matched narrowly by deterministic Bander service code. Bander calls `createStandingBandCandidate()` without model-supplied predicate input, renders every visible clause from that fixed predicate, and returns only `{status:"proposed"}` through MCP. The activation Card, predicate hash, candidate ID, callbacks and eventual human outcomes do not enter OpenClaw's model input or exported trajectory. The effective OpenClaw inventory remains exactly three Bander tools.
+
+The Telegram service persists each candidate against the authenticated installation, owner ID, group, Bander bot ID, Bander-authored message ID, two opaque controls, candidate ID, predicate hash, expiry and lifecycle. **Turn on automatic** and **Ask me each time** independently validate that complete surface. Wrong user, chat, message, bot, callback, expired candidate or changed predicate fails closed. Decline is terminal and idempotent. An identical approval replay returns the already-created standing authority; changed hashes remain rejected. Replaying an old activation after later revocation cannot restore authority.
+
+The main focused slice was observed red before implementation:
+
+```text
+$ npx vitest run packages/core/src/authority.test.ts apps/broker/src/telegram-service.test.ts
+Test Files  2 failed (2)
+Tests       7 failed | 43 passed (50)
+Failures: Telegram standing opt-in method absent; identical engine activation replay rejected
+```
+
+The MCP routing regression was separately observed red: the standing request fell through to the action compiler and the standing callback was never invoked. A delivery-recovery regression was also observed red after implementation: when the first human expiry message failed, retry did not resend it. The restored path persists terminal expiry first and marks delivery complete only after Telegram accepts the message.
+
+Focused green evidence now covers the required named behaviors, including `owner_can_activate_standing_from_telegram`, `agent_cannot_activate_standing_authority`, wrong-user/chat/message/bot/callback rejection, replay idempotency, deterministic clause provenance, Telegram-only activation, Ask-me-each-time terminal decline, changed-content rejection, expiry, and prevention of post-revocation reactivation. The focused set passed 73 tests; the full functional run passed 99 tests and the attack suite passed 20.
+
+The real standing verifier was converted from pre-seeded web approval to one continuous parent journey. Its first run exposed a verifier-only race red: the automatic outcome existed before the mock provider's latest result advanced from the earlier `{status:"proposed"}` to `{draftId,status:"executed"}`. The verifier now waits for the executed result specifically. The corrected live run passed:
+
+```text
+natural Telegram opt-in -> real OpenClaw -> propose_action -> Bander limits Card
+wrong user/chat/message/bot/callback -> 0 standing authorities
+genuine owner activation + replay -> 1 standing authority
+eligible Focus move -> 1 Permit · 1 downstream dispatch · 1 truthful outcome
+Turn off automatic -> revoked and detached
+same request -> 1 pending one-time Card · 0 new execution
+
+evidence: .bander/telegram-service-verification-standing-1784127151427-3f805331/
+```
+
+Fresh unchanged-path live regressions also passed:
+
+```text
+one-time approval + replay + Not now + imitation resistance
+  .bander/telegram-service-verification-success-1784127698812-b8074a2b/
+
+changed-world refusal + replay + imitation resistance
+  .bander/telegram-service-verification-conflict-1784127828045-9c4c8d7e/
+```
+
+The final matrix is green: typecheck, 99 functional tests, 20 attack tests, six-outcome demo verifier, both real-process recovery verifiers, real OpenClaw verifier with exactly three tools, all three real Telegram scenarios, production build, moderate dependency audit with zero vulnerabilities, and tracked token-shaped secret scan. `transcription_day2.md` remains untouched. Live GPT-5.6 Sol evidence and `/feedback` remain deferred.

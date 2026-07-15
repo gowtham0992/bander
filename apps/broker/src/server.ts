@@ -48,6 +48,8 @@ const app = buildBrokerApp({
   ...(compiler ? { agentCompiler: compiler } : {}),
   ...(telegramService
     ? {
+        proposeAgentStandingOptIn: (request: string) =>
+          telegramService.proposeStandingOptIn(request),
         deliverAgentProposal: (card) => telegramService.deliverProposal(card),
         runAgentStandingAction: (fixture, requestId) =>
           telegramService.handleAgentAction(

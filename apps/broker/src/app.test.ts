@@ -380,4 +380,48 @@ describe("broker approval boundary", () => {
       await server.close();
     }
   });
+
+  it("standing_activation_details_do_not_enter_agent_trajectory", async () => {
+    const setup = createApp();
+    let receivedRequest: string | undefined;
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: setup.fixtures,
+      agentCompiler: {
+        compile: async () => {
+          throw new Error("standing opt-in must be handled before action compilation");
+        },
+      },
+      proposeAgentStandingOptIn: async (request) => {
+        receivedRequest = request;
+        return { status: "proposed" };
+      },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-standing-opt-in", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const tools = await client.listTools();
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: { request: "Handle my focus time automatically." },
+      });
+      const text = (result.content as Array<{ type: string; text?: string }>)[0]?.text ?? "";
+
+      expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+        "get_receipt",
+        "list_capabilities",
+        "propose_action",
+      ]);
+      expect(receivedRequest).toBe("Handle my focus time automatically.");
+      expect(JSON.parse(text)).toEqual({ status: "proposed" });
+      expect(text).not.toContain("predicate");
+      expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
 });

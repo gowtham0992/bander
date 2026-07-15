@@ -252,6 +252,380 @@ function declineCallbackValue(binding: unknown): string {
 }
 
 describe("Bander Telegram service", () => {
+  it("owner_can_activate_standing_from_telegram", async () => {
+    const current = setup();
+    await pairOwner(current);
+
+    const agentResult = await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    expect(agentResult).toEqual({ status: "proposed" });
+    const binding = current.store.read().standingCandidates[0]!;
+    expect(current.store.read().standingBand).toBeUndefined();
+
+    const callback: TelegramUpdate = {
+      update_id: 10,
+      callback_query: {
+        id: "activate-standing",
+        from: { id: 101, is_bot: false },
+        data: binding.approveCallbackValue,
+        message: {
+          message_id: binding.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+    await current.service.handleUpdate(callback);
+
+    const activated = current.store.read();
+    expect(activated.standingBand?.bandId).toMatch(/^band_/);
+    expect(activated.standingCandidates[0]).toMatchObject({
+      lifecycle: "activated",
+      bandId: activated.standingBand?.bandId,
+    });
+    expect(current.api.messages.at(-1)?.text).toBe(
+      "Automatic handling is on.\nI’ll show you every move, and you can turn it off anytime.",
+    );
+  });
+
+  it("agent_cannot_activate_standing_authority", async () => {
+    const current = setup();
+    await pairOwner(current);
+
+    const result = await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+
+    expect(result).toEqual({ status: "proposed" });
+    expect(Object.keys(result ?? {})).toEqual(["status"]);
+    expect(current.store.read().standingBand).toBeUndefined();
+    const binding = current.store.read().standingCandidates[0]!;
+    expect(
+      current.authorityStore.getStandingCandidate(binding.candidateId),
+    ).toMatchObject({ status: "proposed" });
+  });
+
+  it("standing_activation_rejects_wrong_user_chat_and_message", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+    const attempts = [
+      { id: "wrong-user", fromId: 202, chatId: -500, messageId: binding.messageId, botId: 900, data: binding.approveCallbackValue },
+      { id: "wrong-chat", fromId: 101, chatId: -501, messageId: binding.messageId, botId: 900, data: binding.approveCallbackValue },
+      { id: "wrong-message", fromId: 101, chatId: -500, messageId: binding.messageId + 1, botId: 900, data: binding.approveCallbackValue },
+      { id: "wrong-bot", fromId: 101, chatId: -500, messageId: binding.messageId, botId: 901, data: binding.approveCallbackValue },
+      { id: "wrong-control", fromId: 101, chatId: -500, messageId: binding.messageId, botId: 900, data: "bander-auto:forged" },
+    ];
+    for (const attempt of attempts) {
+      await current.service.handleUpdate({
+        update_id: 20,
+        callback_query: {
+          id: attempt.id,
+          from: { id: attempt.fromId, is_bot: false },
+          data: attempt.data,
+          message: {
+            message_id: attempt.messageId,
+            from: { id: attempt.botId, is_bot: true },
+            chat: { id: attempt.chatId, type: "supergroup" },
+          },
+        },
+      });
+    }
+
+    expect(current.store.read().standingBand).toBeUndefined();
+    expect(
+      current.authorityStore.getStandingCandidate(binding.candidateId),
+    ).toMatchObject({ status: "proposed" });
+  });
+
+  it("standing_activation_replay_is_idempotent", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+    const callback: TelegramUpdate = {
+      update_id: 30,
+      callback_query: {
+        id: "standing-replay-1",
+        from: { id: 101, is_bot: false },
+        data: binding.approveCallbackValue,
+        message: {
+          message_id: binding.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+    await current.service.handleUpdate(callback);
+    const first = current.store.read();
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 31,
+      callback_query: { ...callback.callback_query!, id: "standing-replay-2" },
+    });
+    const repeated = current.store.read();
+
+    expect(repeated.standingBand?.bandId).toBe(first.standingBand?.bandId);
+    expect(repeated.standingCandidates).toHaveLength(1);
+    expect(
+      current.api.messages.filter((message) =>
+        message.text.startsWith("Automatic handling is on."),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("rendered_standing_clauses_come_from_enforced_predicate", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+    const candidate = current.authorityStore.getStandingCandidate(
+      binding.candidateId,
+    )!;
+    const message = current.api.messages.at(-1)?.text ?? "";
+
+    expect(binding.predicateHash).toBe(candidate.predicateHash);
+    expect(message).toContain("Move events you organize and attend alone");
+    expect(message).toContain("Keep them the same length");
+    expect(message).toContain("Keep them within weekdays, 9 AM–5 PM");
+    expect(message).toContain("Make at most 3 automatic moves per day");
+    expect(message).toContain("Never message anyone or spend money");
+    expect(message).not.toContain("Draft");
+    expect(message).not.toContain("Band");
+  });
+
+  it("telegram_standing_activation_requires_no_web_app", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+
+    await current.service.handleUpdate({
+      update_id: 40,
+      callback_query: {
+        id: "telegram-only-activation",
+        from: { id: 101, is_bot: false },
+        data: binding.approveCallbackValue,
+        message: {
+          message_id: binding.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+
+    expect(current.store.read().standingBand?.bandId).toMatch(/^band_/);
+  });
+
+  it("keeps automatic handling off when the owner chooses Ask me each time", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+    const callback: TelegramUpdate = {
+      update_id: 41,
+      callback_query: {
+        id: "standing-ask-each-time",
+        from: { id: 101, is_bot: false },
+        data: binding.declineCallbackValue,
+        message: {
+          message_id: binding.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+
+    await current.service.handleUpdate(callback);
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 42,
+      callback_query: { ...callback.callback_query!, id: "standing-decline-replay" },
+    });
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 43,
+      callback_query: {
+        ...callback.callback_query!,
+        id: "standing-approval-after-decline",
+        data: binding.approveCallbackValue,
+      },
+    });
+
+    expect(current.store.read().standingBand).toBeUndefined();
+    expect(current.store.read().standingCandidates[0]?.lifecycle).toBe("declined");
+    const declined = current.authorityStore.getStandingCandidate(
+      binding.candidateId,
+    );
+    expect(declined).toMatchObject({ status: "declined" });
+    expect(declined?.approvedBandId).toBeUndefined();
+    expect(
+      current.api.messages.filter((message) =>
+        message.text.startsWith("Automatic handling stays off."),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("rejects an expired standing activation without creating authority", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+    current.setNow("2026-08-14T18:00:01.000Z");
+
+    await current.service.handleUpdate({
+      update_id: 43,
+      callback_query: {
+        id: "expired-standing-activation",
+        from: { id: 101, is_bot: false },
+        data: binding.approveCallbackValue,
+        message: {
+          message_id: binding.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+
+    expect(current.store.read().standingBand).toBeUndefined();
+    expect(current.store.read().standingCandidates[0]?.lifecycle).toBe("expired");
+    expect(current.adapter.executions).toBe(0);
+  });
+
+  it("retries delivery of an expired standing request outcome", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+    current.setNow("2026-08-14T18:00:01.000Z");
+    current.api.failNextMessageMatching = (text) =>
+      text.startsWith("That request expired.");
+    const callback: TelegramUpdate = {
+      update_id: 44,
+      callback_query: {
+        id: "expired-delivery-first",
+        from: { id: 101, is_bot: false },
+        data: binding.approveCallbackValue,
+        message: {
+          message_id: binding.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+
+    await expect(current.service.handleUpdate(callback)).rejects.toThrow(
+      "simulated Telegram send failure",
+    );
+    expect(current.store.read().standingCandidates[0]?.lifecycle).toBe("expired");
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 45,
+      callback_query: { ...callback.callback_query!, id: "expired-delivery-retry" },
+    });
+
+    expect(
+      current.api.messages.filter((message) =>
+        message.text.startsWith("That request expired."),
+      ),
+    ).toHaveLength(1);
+    expect(current.store.read().standingBand).toBeUndefined();
+  });
+
+  it("rejects a standing candidate whose enforced content changed", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const binding = current.store.read().standingCandidates[0]!;
+    const candidate = current.authorityStore.getStandingCandidate(
+      binding.candidateId,
+    )!;
+    current.authorityStore.updateStandingCandidate({
+      ...candidate,
+      predicate: {
+        ...candidate.predicate,
+        time: {
+          ...candidate.predicate.time,
+          timeZone: "America/New_York",
+        },
+      },
+    });
+
+    await current.service.handleUpdate({
+      update_id: 44,
+      callback_query: {
+        id: "changed-standing-content",
+        from: { id: 101, is_bot: false },
+        data: binding.approveCallbackValue,
+        message: {
+          message_id: binding.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+
+    expect(current.store.read().standingBand).toBeUndefined();
+    expect(current.adapter.executions).toBe(0);
+    expect(current.api.callbackAnswers.at(-1)?.text).toContain(
+      "no longer matches",
+    );
+  });
+
+  it("does not let a used activation button restore revoked authority", async () => {
+    const current = setup();
+    await pairOwner(current);
+    await current.service.proposeStandingOptIn(
+      "Handle my focus time automatically.",
+    );
+    const candidate = current.store.read().standingCandidates[0]!;
+    const activation: TelegramUpdate = {
+      update_id: 45,
+      callback_query: {
+        id: "activate-before-revoke",
+        from: { id: 101, is_bot: false },
+        data: candidate.approveCallbackValue,
+        message: {
+          message_id: candidate.messageId,
+          from: { id: 900, is_bot: true },
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+    await current.service.handleUpdate(activation);
+    const bandId = current.store.read().standingBand!.bandId;
+    await current.engine.revokeBand(bandId);
+
+    await current.service.handleUpdate({
+      ...activation,
+      update_id: 46,
+      callback_query: { ...activation.callback_query!, id: "old-activation-replay" },
+    });
+
+    expect(current.engine.getStandingBandSummary(bandId).status).toBe("revoked");
+    expect(current.api.callbackAnswers.at(-1)?.text).toContain(
+      "can’t turn automatic handling back on",
+    );
+  });
+
   it("pairs one owner and group through a private single-use token and private chat picker", async () => {
     const current = setup();
     await pairOwner(current);

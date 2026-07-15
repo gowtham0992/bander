@@ -1,7 +1,12 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { AgentReceipt, ApprovalCard, HumanReceipt } from "@bander/contracts";
+import type {
+  AgentReceipt,
+  ApprovalCard,
+  HumanReceipt,
+  StandingBandCard,
+} from "@bander/contracts";
 import {
   AuthorityEngine,
   AuthorityError,
@@ -173,6 +178,24 @@ export interface TelegramStandingBandBinding {
   activatedAt: string;
 }
 
+export interface TelegramStandingCandidateBinding {
+  installationId: string;
+  ownerTelegramId: string;
+  chatId: string;
+  botTelegramId: string;
+  messageId: number;
+  approveCallbackValue: string;
+  declineCallbackValue: string;
+  candidateId: string;
+  predicateHash: string;
+  expiresAt: string;
+  lifecycle: "pending" | "activated" | "declined" | "expired";
+  bandId?: string;
+  activationDeliveredAt?: string;
+  declineDeliveredAt?: string;
+  expiryDeliveredAt?: string;
+}
+
 export interface TelegramStandingOutcomeBinding {
   installationId: string;
   ownerTelegramId: string;
@@ -196,6 +219,7 @@ export interface TelegramServiceState {
   installation?: TelegramInstallation;
   pairing?: TelegramPairingChallenge;
   proposals: TelegramProposalBinding[];
+  standingCandidates: TelegramStandingCandidateBinding[];
   standingBand?: TelegramStandingBandBinding;
   oneTimeReviewMode?: { detachedBandId: string; activatedAt: string };
   standingOutcomes: TelegramStandingOutcomeBinding[];
@@ -207,7 +231,12 @@ export interface TelegramServiceStore {
 }
 
 function emptyState(): TelegramServiceState {
-  return { version: 1, proposals: [], standingOutcomes: [] };
+  return {
+    version: 1,
+    proposals: [],
+    standingCandidates: [],
+    standingOutcomes: [],
+  };
 }
 
 function copy<T>(value: T): T {
@@ -239,7 +268,11 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
     if (state.version !== 1 || !Array.isArray(state.proposals)) {
       throw new Error("Unsupported Telegram service state");
     }
-    return copy({ ...state, standingOutcomes: state.standingOutcomes ?? [] });
+    return copy({
+      ...state,
+      standingCandidates: state.standingCandidates ?? [],
+      standingOutcomes: state.standingOutcomes ?? [],
+    });
   }
 
   write(state: TelegramServiceState): void {
@@ -399,6 +432,37 @@ function standingOutcomeText(
   ].join("\n");
 }
 
+const supportedStandingOptInRequests = new Set([
+  "handle my focus time automatically",
+  "let bander handle my focus time automatically",
+]);
+
+function normalizedNaturalRequest(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/, "")
+    .toLocaleLowerCase("en-US");
+}
+
+function standingCandidateText(card: StandingBandCard): string {
+  const ends = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    timeZone: "America/Denver",
+  }).format(new Date(card.expiresAt));
+  return [
+    "Would you like me to handle this automatically?",
+    "",
+    "I would only:",
+    ...card.clauses.map((clause) => `• ${clause}`),
+    "",
+    `Ends ${ends}. You can turn this off anytime.`,
+  ].join("\n");
+}
+
 export class TelegramService {
   readonly #api: TelegramBotApi;
   readonly #engine: AuthorityEngine;
@@ -483,6 +547,71 @@ export class TelegramService {
         lifecycle: "pending",
       });
       this.#store.write(state);
+    });
+  }
+
+  async proposeStandingOptIn(
+    request: string,
+  ): Promise<{ status: "proposed" } | undefined> {
+    if (!supportedStandingOptInRequests.has(normalizedNaturalRequest(request))) {
+      return undefined;
+    }
+    return this.#stateLock.run("telegram-state", async () => {
+      const state = this.#store.read();
+      const installation = state.installation;
+      if (!installation) throw new Error("Telegram installation is not paired");
+      const existing = state.standingCandidates.find(
+        (candidate) =>
+          candidate.installationId === installation.id &&
+          candidate.lifecycle === "pending" &&
+          this.#now().getTime() < new Date(candidate.expiresAt).getTime(),
+      );
+      if (existing) return { status: "proposed" as const };
+
+      const card = this.#engine.createStandingBandCandidate();
+      const bot = await this.#api.getMe();
+      if (!bot.is_bot) throw new Error("Bander Telegram identity is unavailable");
+      const approveCallbackValue = `bander-auto:${this.#randomValue()}`;
+      const declineCallbackValue = `bander-each:${this.#randomValue()}`;
+      if (
+        Buffer.byteLength(approveCallbackValue, "utf8") > 64 ||
+        Buffer.byteLength(declineCallbackValue, "utf8") > 64
+      ) {
+        throw new Error("Telegram callback value exceeds 64 bytes");
+      }
+      const message = await this.#api.sendMessage(
+        installation.chatId,
+        standingCandidateText(card),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: "Turn on automatic",
+                callback_data: approveCallbackValue,
+              },
+              {
+                text: "Ask me each time",
+                callback_data: declineCallbackValue,
+              },
+            ],
+          ],
+        },
+      );
+      state.standingCandidates.push({
+        installationId: installation.id,
+        ownerTelegramId: installation.ownerTelegramId,
+        chatId: installation.chatId,
+        botTelegramId: String(bot.id),
+        messageId: message.message_id,
+        approveCallbackValue,
+        declineCallbackValue,
+        candidateId: card.candidateId,
+        predicateHash: card.predicateHash,
+        expiresAt: card.expiresAt,
+        lifecycle: "pending",
+      });
+      this.#store.write(state);
+      return { status: "proposed" as const };
     });
   }
 
@@ -845,9 +974,18 @@ export class TelegramService {
         proposal.callbackValue === callback.data ||
         proposal.declineCallbackValue === callback.data,
     );
+    const standingActivation = snapshot.standingCandidates.find(
+      (candidate) =>
+        candidate.approveCallbackValue === callback.data ||
+        candidate.declineCallbackValue === callback.data,
+    );
     const standingCandidate = snapshot.standingOutcomes.find(
       (outcome) => outcome.callbackValue === callback.data,
     );
+    if (standingActivation) {
+      await this.#handleStandingActivationCallback(callback, standingActivation);
+      return;
+    }
     if (standingCandidate) {
       await this.#handleStandingCallback(callback, standingCandidate);
       return;
@@ -1066,6 +1204,245 @@ export class TelegramService {
         );
       }
     });
+  }
+
+  async #handleStandingActivationCallback(
+    callback: TelegramCallbackQuery,
+    candidate: TelegramStandingCandidateBinding,
+  ): Promise<void> {
+    await this.#callbackLock.run(
+      `standing-candidate:${candidate.candidateId}`,
+      async () => {
+        const state = this.#store.read();
+        const index = state.standingCandidates.findIndex(
+          (binding) =>
+            binding.approveCallbackValue === callback.data ||
+            binding.declineCallbackValue === callback.data,
+        );
+        const binding = state.standingCandidates[index];
+        const installation = state.installation;
+        const messageAuthor = callback.message?.from;
+        const exactSurface =
+          binding &&
+          installation &&
+          callback.message &&
+          installation.id === binding.installationId &&
+          String(callback.from.id) === binding.ownerTelegramId &&
+          String(callback.message.chat.id) === binding.chatId &&
+          callback.message.message_id === binding.messageId &&
+          messageAuthor?.is_bot === true &&
+          String(messageAuthor.id) === binding.botTelegramId;
+        if (!binding || !exactSurface) {
+          await this.#api.answerCallback(
+            callback.id,
+            "Only the connected person can use this button on Bander’s message.",
+          );
+          return;
+        }
+
+        const isDecline = binding.declineCallbackValue === callback.data;
+        const deliverExpiry = async () => {
+          const current = this.#store.read();
+          const currentIndex = current.standingCandidates.findIndex(
+            (entry) => entry.candidateId === binding.candidateId,
+          );
+          const currentBinding = current.standingCandidates[currentIndex];
+          if (!currentBinding || currentBinding.expiryDeliveredAt) return;
+          await this.#api.sendMessage(
+            binding.chatId,
+            "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again.",
+          );
+          const delivered = this.#store.read();
+          const deliveredIndex = delivered.standingCandidates.findIndex(
+            (entry) => entry.candidateId === binding.candidateId,
+          );
+          delivered.standingCandidates[deliveredIndex] = {
+            ...delivered.standingCandidates[deliveredIndex]!,
+            expiryDeliveredAt: this.#now().toISOString(),
+          };
+          this.#store.write(delivered);
+        };
+        if (
+          binding.lifecycle === "pending" &&
+          this.#now().getTime() >= new Date(binding.expiresAt).getTime()
+        ) {
+          state.standingCandidates[index] = {
+            ...binding,
+            lifecycle: "expired",
+          };
+          this.#store.write(state);
+          await deliverExpiry();
+          await this.#api.answerCallback(
+            callback.id,
+            "That request expired. Nothing happened.",
+          );
+          return;
+        }
+
+        if (binding.lifecycle === "expired") {
+          await deliverExpiry();
+          await this.#api.answerCallback(
+            callback.id,
+            "That request expired. Nothing happened.",
+          );
+          return;
+        }
+        if (binding.lifecycle === "declined") {
+          if (isDecline && !binding.declineDeliveredAt) {
+            await this.#api.sendMessage(
+              binding.chatId,
+              "Automatic handling stays off.\nI’ll check with you each time.",
+            );
+            const delivered = this.#store.read();
+            const deliveredIndex = delivered.standingCandidates.findIndex(
+              (entry) => entry.candidateId === binding.candidateId,
+            );
+            delivered.standingCandidates[deliveredIndex] = {
+              ...delivered.standingCandidates[deliveredIndex]!,
+              declineDeliveredAt: this.#now().toISOString(),
+            };
+            this.#store.write(delivered);
+          }
+          await this.#api.answerCallback(
+            callback.id,
+            isDecline
+              ? "I’ll keep checking with you each time."
+              : "You already chose to be asked each time.",
+          );
+          return;
+        }
+        if (binding.lifecycle === "activated") {
+          if (isDecline) {
+            await this.#api.answerCallback(
+              callback.id,
+              "Automatic handling is already on. Use Turn off automatic on an outcome.",
+            );
+            return;
+          }
+          const stillActive =
+            binding.bandId &&
+            state.standingBand?.bandId === binding.bandId &&
+            this.#engine.getStandingBandSummary(binding.bandId).status === "active";
+          await this.#api.answerCallback(
+            callback.id,
+            stillActive
+              ? "Automatic handling was already on."
+              : "That old button can’t turn automatic handling back on.",
+          );
+          return;
+        }
+
+        if (isDecline) {
+          await this.#engine.declineStandingBandCandidate(
+            binding.candidateId,
+            binding.predicateHash,
+          );
+          state.standingCandidates[index] = {
+            ...binding,
+            lifecycle: "declined",
+          };
+          this.#store.write(state);
+          await this.#api.sendMessage(
+            binding.chatId,
+            "Automatic handling stays off.\nI’ll check with you each time.",
+          );
+          const delivered = this.#store.read();
+          const deliveredIndex = delivered.standingCandidates.findIndex(
+            (entry) => entry.candidateId === binding.candidateId,
+          );
+          delivered.standingCandidates[deliveredIndex] = {
+            ...delivered.standingCandidates[deliveredIndex]!,
+            declineDeliveredAt: this.#now().toISOString(),
+          };
+          this.#store.write(delivered);
+          await this.#api.answerCallback(
+            callback.id,
+            "I’ll check with you each time.",
+          );
+          return;
+        }
+
+        if (state.standingBand && state.standingBand.bandId !== binding.bandId) {
+          const existing = this.#engine.getStandingBandSummary(
+            state.standingBand.bandId,
+          );
+          if (existing.status === "active") {
+            await this.#api.answerCallback(
+              callback.id,
+              "Automatic handling is already on for this installation.",
+            );
+            return;
+          }
+          delete state.standingBand;
+        }
+
+        try {
+          const approved = await this.#engine.approveStandingBand(
+            binding.candidateId,
+            binding.predicateHash,
+          );
+          const current = this.#store.read();
+          const currentIndex = current.standingCandidates.findIndex(
+            (entry) => entry.candidateId === binding.candidateId,
+          );
+          const currentBinding = current.standingCandidates[currentIndex];
+          if (!currentBinding) {
+            throw new AuthorityError(
+              "standing_candidate_state_missing",
+              "The Telegram standing request is missing",
+              409,
+            );
+          }
+          current.standingBand = {
+            installationId: binding.installationId,
+            ownerTelegramId: binding.ownerTelegramId,
+            chatId: binding.chatId,
+            bandId: approved.bandId,
+            activatedAt: this.#now().toISOString(),
+          };
+          delete current.oneTimeReviewMode;
+          const deliveryPending = !currentBinding.activationDeliveredAt;
+          current.standingCandidates[currentIndex] = {
+            ...currentBinding,
+            lifecycle: "activated",
+            bandId: approved.bandId,
+          };
+          this.#store.write(current);
+          if (deliveryPending) {
+            await this.#api.sendMessage(
+              binding.chatId,
+              "Automatic handling is on.\nI’ll show you every move, and you can turn it off anytime.",
+            );
+            const delivered = this.#store.read();
+            const deliveredIndex = delivered.standingCandidates.findIndex(
+              (entry) => entry.candidateId === binding.candidateId,
+            );
+            delivered.standingCandidates[deliveredIndex] = {
+              ...delivered.standingCandidates[deliveredIndex]!,
+              activationDeliveredAt: this.#now().toISOString(),
+            };
+            this.#store.write(delivered);
+          }
+          await this.#api.answerCallback(
+            callback.id,
+            deliveryPending
+              ? "Automatic handling is on."
+              : "Automatic handling was already on.",
+          );
+        } catch (error) {
+          if (error instanceof AuthorityError) {
+            await this.#api.answerCallback(
+              callback.id,
+              error.code === "standing_candidate_expired"
+                ? "That request expired. Nothing happened."
+                : "That automatic request no longer matches what you reviewed.",
+            );
+            return;
+          }
+          throw error;
+        }
+      },
+    );
   }
 
   async #handleStandingCallback(

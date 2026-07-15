@@ -14,6 +14,9 @@ interface BrokerAppOptions {
   compiler?: DraftCompiler;
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
+  proposeAgentStandingOptIn?: (
+    request: string,
+  ) => Promise<{ status: "proposed" } | undefined>;
   runAgentStandingAction?: (
     fixture: DraftFixture,
     requestId?: string,

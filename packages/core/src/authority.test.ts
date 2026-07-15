@@ -466,11 +466,11 @@ describe("standing Bands", () => {
     const candidate = engine.createStandingBandCandidate();
 
     expect(candidate.clauses).toEqual([
-      "Only appointments where you are the organizer and only attendee",
-      "Only reschedule the complete appointment; never cancel or change duration",
-      "The resulting appointment must start and finish Monday–Friday between 09:00 and 17:00 America/Denver",
-      "Never send a message or make a purchase",
-      expect.stringContaining("At most 3 actions per rolling day"),
+      "Move events you organize and attend alone",
+      "Keep them the same length",
+      "Keep them within weekdays, 9 AM–5 PM",
+      "Make at most 3 automatic moves per day",
+      "Never message anyone or spend money",
     ]);
 
     const { bandId } = await engine.approveStandingBand(
@@ -517,17 +517,17 @@ describe("standing Bands", () => {
     expect(adapter.executions).toHaveLength(0);
   });
 
-  it("rejects replay of a standing-Band approval candidate", async () => {
+  it("returns the same standing Band for an identical approval replay", async () => {
     const { engine } = setup();
     const candidate = engine.createStandingBandCandidate();
-    await engine.approveStandingBand(candidate.candidateId, candidate.predicateHash);
+    const first = await engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
 
     await expect(
       engine.approveStandingBand(candidate.candidateId, candidate.predicateHash),
-    ).rejects.toMatchObject({
-      code: "standing_candidate_not_approvable",
-      statusCode: 409,
-    });
+    ).resolves.toEqual(first);
   });
 
   it("falls back to review when the resulting appointment ends after 5 PM", async () => {

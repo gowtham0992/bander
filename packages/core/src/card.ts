@@ -172,16 +172,38 @@ export function renderStandingBandCard(
   candidate: StandingBandCandidate,
 ): StandingBandCard {
   const { predicate } = candidate;
+  const supportedWeekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const supportedPredicate =
+    predicate.resource.organizerMustBeOwner === true &&
+    predicate.resource.attendeeIdsExactly.length === 1 &&
+    predicate.resource.attendeeIdsExactly[0] === predicate.ownerId &&
+    predicate.duration.mustRemainUnchanged === true &&
+    predicate.time.weekDays.join(",") === supportedWeekdays.join(",") &&
+    predicate.limits.rollingHours === 24 &&
+    predicate.limits.maxNewRecipients === 0 &&
+    predicate.limits.maxSpendCents === 0;
+  if (!supportedPredicate) {
+    throw new Error("Unsupported standing predicate cannot be rendered");
+  }
+  const displayClock = (value: string) => {
+    const [hoursText, minutes = "00"] = value.split(":");
+    const hours = Number(hoursText);
+    const suffix = hours >= 12 ? "PM" : "AM";
+    const clockHour = hours % 12 || 12;
+    return `${clockHour}${minutes === "00" ? "" : `:${minutes}`} ${suffix}`;
+  };
+  const start = displayClock(predicate.time.startLocal);
+  const end = displayClock(predicate.time.endLocal);
   return {
     candidateId: candidate.id,
     predicateHash: candidate.predicateHash,
     title: "A small routine, handled",
     clauses: [
-      "Only appointments where you are the organizer and only attendee",
-      "Only reschedule the complete appointment; never cancel or change duration",
-      `The resulting appointment must start and finish Monday–Friday between ${predicate.time.startLocal} and ${predicate.time.endLocal} ${predicate.time.timeZone}`,
-      "Never send a message or make a purchase",
-      `At most ${predicate.limits.maxActions} actions per rolling day · expires ${new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", timeZone: predicate.time.timeZone }).format(new Date(candidate.expiresAt))} · revoke anytime`,
+      "Move events you organize and attend alone",
+      "Keep them the same length",
+      `Keep them within weekdays, ${start}–${end}`,
+      `Make at most ${predicate.limits.maxActions} automatic moves per day`,
+      "Never message anyone or spend money",
     ],
     expiresAt: candidate.expiresAt,
   };

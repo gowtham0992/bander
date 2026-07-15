@@ -159,7 +159,7 @@ export interface StandingBandCandidate {
   predicate: StandingBandPredicate;
   createdAt: string;
   expiresAt: string;
-  status: "proposed" | "approved";
+  status: "proposed" | "approved" | "declined";
   approvedBandId?: string;
 }
 

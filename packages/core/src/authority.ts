@@ -327,13 +327,6 @@ export class AuthorityEngine {
           404,
         );
       }
-      if (candidate.status !== "proposed") {
-        throw new AuthorityError(
-          "standing_candidate_not_approvable",
-          "This standing rule has already been used",
-          409,
-        );
-      }
       if (
         candidate.predicateHash !== predicateHash ||
         hashCanonical({
@@ -344,6 +337,33 @@ export class AuthorityEngine {
         throw new AuthorityError(
           "standing_predicate_hash_mismatch",
           "The standing rule does not match what was reviewed",
+          409,
+        );
+      }
+      if (candidate.status === "approved" && candidate.approvedBandId) {
+        const existing = this.#store.getBand(candidate.approvedBandId);
+        if (
+          !existing ||
+          existing.mode !== "standing" ||
+          existing.predicateHash !== predicateHash ||
+          existing.expiresAt !== candidate.expiresAt ||
+          hashCanonical({
+            predicate: existing.predicate,
+            expiresAt: existing.expiresAt,
+          }) !== predicateHash
+        ) {
+          throw new AuthorityError(
+            "standing_candidate_state_mismatch",
+            "The approved standing rule is inconsistent",
+            409,
+          );
+        }
+        return { bandId: existing.id, expiresAt: existing.expiresAt };
+      }
+      if (candidate.status !== "proposed") {
+        throw new AuthorityError(
+          "standing_candidate_not_approvable",
+          "This standing rule has already been used",
           409,
         );
       }
@@ -371,6 +391,45 @@ export class AuthorityEngine {
         approvedBandId: band.id,
       });
       return { bandId: band.id, expiresAt: band.expiresAt };
+    });
+  }
+
+  async declineStandingBandCandidate(
+    candidateId: string,
+    predicateHash: string,
+  ): Promise<{ status: "declined" }> {
+    return this.#lock.run(candidateId, async () => {
+      const candidate = this.#store.getStandingCandidate(candidateId);
+      if (!candidate) {
+        throw new AuthorityError(
+          "standing_candidate_not_found",
+          "Standing rule proposal not found",
+          404,
+        );
+      }
+      if (
+        candidate.predicateHash !== predicateHash ||
+        hashCanonical({
+          predicate: candidate.predicate,
+          expiresAt: candidate.expiresAt,
+        }) !== predicateHash
+      ) {
+        throw new AuthorityError(
+          "standing_predicate_hash_mismatch",
+          "The standing rule does not match what was reviewed",
+          409,
+        );
+      }
+      if (candidate.status === "declined") return { status: "declined" };
+      if (candidate.status !== "proposed") {
+        throw new AuthorityError(
+          "standing_candidate_not_declineable",
+          "This standing rule has already been used",
+          409,
+        );
+      }
+      this.#store.updateStandingCandidate({ ...candidate, status: "declined" });
+      return { status: "declined" };
     });
   }
 
