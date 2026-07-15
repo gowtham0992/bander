@@ -52,6 +52,8 @@ Set separate `OPENCLAW_TELEGRAM_BOT_TOKEN` and `BANDER_TELEGRAM_BOT_TOKEN` value
 
 The Bander-owned service persists the one-owner installation and every approval surface under `.bander/telegram-service/`. It posts the human Card, checks the owner, chat, Bander-authored message and opaque per-proposal callback value, calls the existing idempotent approval engine, and posts the human Receipt. OpenClaw receives only Draft ID and lifecycle status.
 
+Authority execution and human Telegram delivery have different retry guarantees. Downstream execution is exactly once through the existing idempotent operation record. Human outcomes are at least once: Bander marks a Receipt or changed-world refusal delivered only after Telegram confirms `sendMessage`. A retry after an ambiguous crash may duplicate the same truthful notification; this is safer than silently completing an action without human confirmation.
+
 `npm run verify:telegram-privacy` runs this real service with real Telegram and OpenClaw. It requires the owner and non-owner taps described in the terminal. The older `scripts/telegram-privacy-spike.ts` remains historical evidence; it is not the active verifier or production implementation.
 
 `npm run verify:telegram-conflict` changes the seeded Calendar after the real service posts its Card. The owner's approval produces one human-only refusal, no Bander mutation and no Receipt; replay stays closed, and the exported OpenClaw trajectory contains none of the refusal explanation.

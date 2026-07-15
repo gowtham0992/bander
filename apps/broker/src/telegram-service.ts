@@ -153,6 +153,7 @@ export interface TelegramProposalBinding {
   lifecycle: "pending" | "executed" | "conflict" | "expired";
   receiptId?: string;
   receiptDeliveredAt?: string;
+  conflictMessage?: string;
   conflictDeliveredAt?: string;
 }
 
@@ -396,6 +397,17 @@ export class TelegramService {
       await this.#api.sendMessage(String(message.chat.id), "That pairing link is invalid or expired.");
       return;
     }
+    if (
+      pairing.ownerTelegramId &&
+      (pairing.ownerTelegramId !== String(from.id) ||
+        pairing.ownerPrivateChatId !== String(message.chat.id))
+    ) {
+      await this.#api.sendMessage(
+        String(message.chat.id),
+        "That pairing attempt is already claimed.",
+      );
+      return;
+    }
     const requestId = chatRequestId(pairing.tokenHash);
     state.pairing = {
       ...pairing,
@@ -516,34 +528,31 @@ export class TelegramService {
           (proposal) => proposal.callbackValue === callback.data,
         );
         const currentBinding = current.proposals[currentIndex]!;
-        const firstDelivery = !currentBinding.receiptDeliveredAt;
+        const deliveryPending = !currentBinding.receiptDeliveredAt;
         current.proposals[currentIndex] = {
           ...currentBinding,
           lifecycle: "executed",
           receiptId: receipt.id,
-          ...(firstDelivery ? { receiptDeliveredAt: this.#now().toISOString() } : {}),
         };
         this.#store.write(current);
-        if (firstDelivery) {
-          try {
-            await this.#api.sendMessage(binding.chatId, receiptText(receipt));
-          } catch (error) {
-            const retryState = this.#store.read();
-            const retryIndex = retryState.proposals.findIndex(
-              (proposal) => proposal.callbackValue === callback.data,
-            );
-            const retryBinding = retryState.proposals[retryIndex];
-            if (retryBinding) {
-              const { receiptDeliveredAt: _removed, ...withoutDelivery } = retryBinding;
-              retryState.proposals[retryIndex] = withoutDelivery;
-              this.#store.write(retryState);
-            }
-            throw error;
+        if (deliveryPending) {
+          await this.#api.sendMessage(binding.chatId, receiptText(receipt));
+          const deliveredState = this.#store.read();
+          const deliveredIndex = deliveredState.proposals.findIndex(
+            (proposal) => proposal.callbackValue === callback.data,
+          );
+          const deliveredBinding = deliveredState.proposals[deliveredIndex];
+          if (deliveredBinding && !deliveredBinding.receiptDeliveredAt) {
+            deliveredState.proposals[deliveredIndex] = {
+              ...deliveredBinding,
+              receiptDeliveredAt: this.#now().toISOString(),
+            };
+            this.#store.write(deliveredState);
           }
         }
         await this.#api.answerCallback(
           callback.id,
-          firstDelivery
+          deliveryPending
             ? "Approved. Bander completed exactly this deal."
             : "Recovered the same Receipt. Nothing ran again.",
         );
@@ -555,17 +564,37 @@ export class TelegramService {
           );
           const conflictBinding = conflictState.proposals[conflictIndex];
           if (conflictBinding) {
-            const firstConflict = !conflictBinding.conflictDeliveredAt;
+            const conflictMessage =
+              conflictBinding.conflictMessage ?? error.message;
+            const deliveryPending = !conflictBinding.conflictDeliveredAt;
             conflictState.proposals[conflictIndex] = {
               ...conflictBinding,
               lifecycle: error.code === "draft_expired" ? "expired" : "conflict",
-              ...(firstConflict
-                ? { conflictDeliveredAt: this.#now().toISOString() }
-                : {}),
+              conflictMessage,
             };
             this.#store.write(conflictState);
-            if (firstConflict) {
-              await this.#api.sendMessage(binding.chatId, error.message);
+            if (deliveryPending) {
+              try {
+                await this.#api.sendMessage(binding.chatId, conflictMessage);
+                const deliveredState = this.#store.read();
+                const deliveredIndex = deliveredState.proposals.findIndex(
+                  (proposal) => proposal.callbackValue === callback.data,
+                );
+                const deliveredBinding = deliveredState.proposals[deliveredIndex];
+                if (deliveredBinding && !deliveredBinding.conflictDeliveredAt) {
+                  deliveredState.proposals[deliveredIndex] = {
+                    ...deliveredBinding,
+                    conflictDeliveredAt: this.#now().toISOString(),
+                  };
+                  this.#store.write(deliveredState);
+                }
+              } catch {
+                await this.#api.answerCallback(
+                  callback.id,
+                  "Bander could not deliver the human outcome. Tap again to retry safely.",
+                );
+                return;
+              }
             }
           }
           await this.#api.answerCallback(callback.id, error.message);

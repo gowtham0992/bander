@@ -16,6 +16,7 @@ This boundary is separated because it is expensive to fake convincingly later. T
 - Stale resource versions fail conditional writes with no mutation.
 - Bander records dispatch before every downstream operation and reconciles an idempotent operation record after an ambiguous response loss.
 - Permit expiry blocks a missing operation from being dispatched, but does not hide or misreport an operation that already committed.
+- Human Telegram outcomes are marked delivered only after Telegram confirms `sendMessage`. Delivery is at least once; an ambiguous crash after Telegram accepted a message can produce a duplicate truthful notification on retry.
 - The optional GPT-5.6 compiler can be unavailable without affecting deterministic Draft execution or tests.
 
 ## ADR-002: Standing authority is a hashed structural predicate
@@ -59,5 +60,7 @@ This boundary cannot be accepted from documentation or configuration review alon
 The empirical spike passed, and the accepted one-time implementation now lives in the Bander broker process as a Bander-owned Telegram service. Pairing begins with an expiring single-use token in a private Bander-bot chat. Telegram's private `request_chat` picker then returns the selected group to Bander through `chat_shared`. The token and destination selection never enter the shared group or OpenClaw.
 
 The service persists one installation and per-proposal bindings containing the installation, owner, group, Bander-authored message, opaque callback value, Draft, expiry, and lifecycle. Every exact legitimate callback and replay calls the authority engine's idempotent `approveAndExecute` method. Callback authorization has no test-ordering state. OpenClaw and Bander bot credentials are projected into separate process environments; only Bander holds downstream credentials.
+
+The first valid private pairing claim fixes the claimant identity for that attempt. The same claimant may finish private group selection; another holder of the still-unconsumed token cannot replace the owner. The token is consumed only after the selected group is bound.
 
 The local Streamable HTTP MCP endpoint remains deliberately unauthenticated in the hackathon reference build. It binds to `127.0.0.1`, accepts no agent-controlled owner identity, and is limited to 30 POST requests per source address per 60-second fixed window. This is a local demonstration boundary, not a deployable network authentication design.

@@ -527,3 +527,22 @@ OpenClaw imitation authority: 0
 ```
 
 The ignored owner-only evidence directory is `.bander/telegram-service-verification-conflict-1784090189301-f05e6dce/`. Standing Bands remain outside the Telegram service slice. `/feedback` remains deferred. `OPENAI_API_KEY` is not configured in the local environment, so the external GPT-5.6 Sol evidence call could not yet be captured.
+
+## Checkpoint 16 — Telegram delivery and pairing hardening
+
+**Status:** verified on July 14, 2026
+
+Three required regressions were observed red against the real service before implementation. During Receipt delivery, persisted state already contained `receiptDeliveredAt` when `sendMessage` began. During changed-world delivery, a simulated Telegram failure escaped while `conflictDeliveredAt` remained set. During pairing, a second valid token holder replaced the first claimant's Telegram user and private chat IDs before group selection.
+
+The service now persists execution or conflict outcome state without a delivered timestamp, attempts Telegram `sendMessage`, and records delivery only after Telegram returns success. A failed Receipt send keeps the same Receipt ID pending; owner retry re-enters `approveAndExecute`, reconciles the same one-time authority, executes nothing again, and retries the truthful Receipt. A failed conflict send stores the original changed-world explanation and keeps it pending; replay still calls `approveAndExecute`, then delivers that same original explanation rather than the later `draft_not_resumable` error. Confirmed delivery suppresses intentional repeats.
+
+This checkpoint explicitly accepts different guarantees at the two boundaries:
+
+- Downstream real-world execution remains exactly once.
+- Human Telegram notification is at least once.
+- A crash after Telegram accepted a message but before Bander persisted delivery can duplicate the same truthful notification.
+- A duplicate truthful Receipt is safer than silent execution.
+
+Pairing now binds the attempt to the first valid private claimant. A different user presenting the same still-active token is rejected and cannot replace claimant state. The original claimant can continue the private `request_chat` flow; expiry, successful consumption, and post-consumption replay rejection are unchanged.
+
+Restored focused evidence passed seven Telegram service tests. The full matrix passed 10 functional files with 65 tests, 20 attack tests, the demo verifier, both recovery verifiers, the real OpenClaw verifier including friendly unsupported input, the production build, and the moderate dependency audit with zero vulnerabilities. `OPENAI_API_KEY` remains unavailable and `/feedback` remains deferred.

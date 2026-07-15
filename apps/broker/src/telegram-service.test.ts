@@ -78,6 +78,8 @@ class FakeTelegramApi implements TelegramBotApi {
     replyMarkup?: Record<string, unknown>;
   }> = [];
   readonly callbackAnswers: Array<{ id: string; text: string }> = [];
+  beforeSend: ((text: string) => void) | undefined;
+  failNextMessageMatching: ((text: string) => boolean) | undefined;
   #nextMessageId = 40;
 
   async getMe() {
@@ -97,6 +99,11 @@ class FakeTelegramApi implements TelegramBotApi {
     text: string,
     replyMarkup?: Record<string, unknown>,
   ): Promise<TelegramMessage> {
+    this.beforeSend?.(text);
+    if (this.failNextMessageMatching?.(text)) {
+      this.failNextMessageMatching = undefined;
+      throw new Error("simulated Telegram send failure");
+    }
     this.messages.push({
       chatId,
       text,
@@ -206,6 +213,53 @@ describe("Bander Telegram service", () => {
     expect(current.store.read().installation?.ownerTelegramId).toBe("101");
   });
 
+  it("locks an active pairing attempt to its first valid private claimant", async () => {
+    const current = setup();
+    await current.service.createPairing();
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 1,
+        fromId: 101,
+        chatId: 101,
+        chatType: "private",
+        text: "/start pairing-token",
+      }),
+    );
+    const firstClaim = current.store.read().pairing!;
+
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 2,
+        fromId: 202,
+        chatId: 202,
+        chatType: "private",
+        text: "/start pairing-token",
+      }),
+    );
+
+    expect(current.store.read().pairing).toMatchObject({
+      ownerTelegramId: "101",
+      ownerPrivateChatId: "101",
+      chatRequestId: firstClaim.chatRequestId,
+    });
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 3,
+        fromId: 101,
+        chatId: 101,
+        chatType: "private",
+        chatShared: {
+          request_id: firstClaim.chatRequestId!,
+          chat_id: -500,
+        },
+      }),
+    );
+    expect(current.store.read().installation).toMatchObject({
+      ownerTelegramId: "101",
+      chatId: "-500",
+    });
+  });
+
   it("persists the exact Bander-authored approval surface and authorizes every callback independently", async () => {
     const current = setup();
     await pairOwner(current);
@@ -269,6 +323,115 @@ describe("Bander Telegram service", () => {
     await expect(current.service.deliverProposal(card)).rejects.toThrow(
       "Telegram installation is not paired",
     );
+  });
+
+  it("marks a truthful Receipt delivered only after Telegram confirms it", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    let pendingWhenDeliveryStarted = false;
+    current.api.beforeSend = (text) => {
+      if (text.startsWith("Done")) {
+        pendingWhenDeliveryStarted =
+          current.store.read().proposals[0]?.receiptDeliveredAt === undefined;
+      }
+    };
+    current.api.failNextMessageMatching = (text) => text.startsWith("Done");
+    const callback = {
+      update_id: 30,
+      callback_query: {
+        id: "owner-receipt-failure",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    } satisfies TelegramUpdate;
+
+    await current.service.handleUpdate(callback);
+    const pending = current.store.read().proposals[0]!;
+    expect(pendingWhenDeliveryStarted).toBe(true);
+    expect(pending).toMatchObject({
+      lifecycle: "executed",
+      receiptId: expect.stringMatching(/^receipt_/),
+    });
+    expect(pending.receiptDeliveredAt).toBeUndefined();
+    expect(current.adapter.executions).toBe(1);
+
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 31,
+      callback_query: { ...callback.callback_query, id: "owner-receipt-retry" },
+    });
+    const delivered = current.store.read().proposals[0]!;
+    expect(delivered.receiptId).toBe(pending.receiptId);
+    expect(delivered.receiptDeliveredAt).toBeDefined();
+    expect(current.adapter.executions).toBe(1);
+    expect(current.api.messages.filter((message) => message.text.startsWith("Done"))).toHaveLength(1);
+
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 32,
+      callback_query: { ...callback.callback_query, id: "owner-after-delivery" },
+    });
+    expect(current.adapter.executions).toBe(1);
+    expect(current.api.messages.filter((message) => message.text.startsWith("Done"))).toHaveLength(1);
+  });
+
+  it("retries the same human-only refusal when its Telegram send fails", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    current.adapter.conflict = true;
+    let pendingWhenDeliveryStarted = false;
+    current.api.beforeSend = (text) => {
+      if (text.includes("calendar changed")) {
+        pendingWhenDeliveryStarted =
+          current.store.read().proposals[0]?.conflictDeliveredAt === undefined;
+      }
+    };
+    current.api.failNextMessageMatching = (text) => text.includes("calendar changed");
+    const callback = {
+      update_id: 40,
+      callback_query: {
+        id: "owner-conflict-failure",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    } satisfies TelegramUpdate;
+
+    await expect(current.service.handleUpdate(callback)).resolves.toBeUndefined();
+    expect(pendingWhenDeliveryStarted).toBe(true);
+    expect(current.store.read().proposals[0]).toMatchObject({
+      lifecycle: "conflict",
+    });
+    expect(current.store.read().proposals[0]?.conflictDeliveredAt).toBeUndefined();
+    expect(current.engine.getAgentReceipt(card.draftId)).toEqual({
+      draftId: card.draftId,
+      status: "conflict",
+    });
+    expect(current.authorityStore.getOneTimeBandsForDraft(card.draftId)).toHaveLength(1);
+    expect(current.authorityStore.getPermitsForDraft(card.draftId)).toHaveLength(1);
+    expect(current.store.read().proposals[0]).not.toHaveProperty("receiptId");
+
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 41,
+      callback_query: { ...callback.callback_query, id: "owner-conflict-retry" },
+    });
+    expect(current.store.read().proposals[0]?.conflictDeliveredAt).toBeDefined();
+    expect(current.api.messages.filter((message) => message.text.includes("calendar changed"))).toHaveLength(1);
+    expect(current.api.messages.some((message) => message.text.startsWith("Done"))).toBe(false);
   });
 
   it("keeps a changed-world explanation human-only and creates no Receipt", async () => {
