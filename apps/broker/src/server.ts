@@ -47,7 +47,17 @@ const app = buildBrokerApp({
   ...(compiler ? { compiler } : {}),
   ...(compiler ? { agentCompiler: compiler } : {}),
   ...(telegramService
-    ? { deliverAgentProposal: (card) => telegramService.deliverProposal(card) }
+    ? {
+        deliverAgentProposal: (card) => telegramService.deliverProposal(card),
+        runAgentStandingAction: (fixture, requestId) =>
+          telegramService.runStandingAction(
+            fixture,
+            requestId,
+            "openclaw-reference",
+          ),
+        activateAgentStandingBand: (bandId) =>
+          telegramService.activateStandingBand(bandId),
+      }
     : {}),
   resetDemo: async () => {
     engine.resetDemo();

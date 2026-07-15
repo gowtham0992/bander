@@ -28,6 +28,7 @@ npm run verify:standing-recovery
 npm run verify:openclaw
 npm run verify:telegram-privacy
 npm run verify:telegram-conflict
+npm run verify:telegram-standing
 ```
 
 `npm run verify:recovery` opens a real local HTTP listener and proves the ambiguous-response path: the Calendar commits, the first approval response is lost, the same-hash approval is retried, and Bander returns one Receipt without minting new authority or repeating the mutation.
@@ -46,7 +47,7 @@ OpenClaw runs through the compatible Node runtime pinned inside this project and
 
 `npm run verify:openclaw` runs a real local OpenClaw agent turn against a deterministic OpenAI-compatible mock provider. The model receives exactly `bander__list_capabilities`, `bander__propose_action`, and `bander__get_receipt`; it passes the human request through MCP, creates a proposed Draft/Card, and performs no execution.
 
-## Telegram one-time journey
+## Telegram journeys
 
 Set separate `OPENCLAW_TELEGRAM_BOT_TOKEN` and `BANDER_TELEGRAM_BOT_TOKEN` values only in ignored local `.env`. On an unpaired installation, Bander writes an expiring private pairing link to `.bander/telegram-service/pairing-link.txt`. The owner opens that link in a private Bander-bot chat, then uses Telegram's private group picker. Neither the pairing token nor the selected destination enters the shared group or OpenClaw.
 
@@ -57,6 +58,10 @@ Authority execution and human Telegram delivery have different retry guarantees.
 `npm run verify:telegram-privacy` runs this real service with real Telegram and OpenClaw. It requires the owner and non-owner taps described in the terminal. The older `scripts/telegram-privacy-spike.ts` remains historical evidence; it is not the active verifier or production implementation.
 
 `npm run verify:telegram-conflict` changes the seeded Calendar after the real service posts its Card. The owner's approval produces one human-only refusal, no Bander mutation and no Receipt; replay stays closed, and the exported OpenClaw trajectory contains none of the refusal explanation.
+
+An approved standing Band can also handle the bounded Focus-block move without another approval. Bander posts a human-only outcome with the current rolling counter and a distinct owner-bound **Turn off** callback. The service persists one outcome per standing request ID before delivery; retry reconciles the same Draft, Permit and Receipt, while Telegram notification remains at least once. Revocation uses the authority engine's Band lock, is idempotent, and blocks future standing execution.
+
+`npm run verify:telegram-standing` runs that path through real OpenClaw and Telegram. It proves one Draft, one standing Band, one Permit, one downstream execution and one Receipt; rejects the wrong user, chat, Bander message and callback; observes the genuine owner revoke; and confirms the complete human outcome, Receipt and callback are absent from OpenClaw's model input and exported trajectory.
 
 ## Optional GPT-5.6 compiler
 
@@ -72,6 +77,6 @@ The reference MCP endpoint is intentionally local-only and currently has no appl
 
 ## Build status
 
-The current implementation verifies the isolated credential boundary, exact one-time authority, duration-preserving Calendar reschedules, idempotent response-loss recovery, changed-world refusal, attack suite, proposal flood control, the first narrow standing Band, the real OpenClaw Streamable HTTP proposal flow, effective session tool inventory, provenance-isolated agent text, the real Bander-owned Telegram one-time journey, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
+The current implementation verifies the isolated credential boundary, exact one-time authority, duration-preserving Calendar reschedules, idempotent response-loss recovery, changed-world refusal, attack suite, proposal flood control, the narrow standing Band, the real OpenClaw Streamable HTTP proposal flow, effective session tool inventory, provenance-isolated agent text, the real Bander-owned Telegram one-time and standing journeys, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
 
 For demo preparation, see [docs/recording-plan.md](./docs/recording-plan.md) and [docs/submission-checklist.md](./docs/submission-checklist.md).

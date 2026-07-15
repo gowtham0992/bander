@@ -4,7 +4,7 @@ import {
   AuthorityError,
   type DraftFixture,
 } from "@bander/core";
-import type { ApprovalCard } from "@bander/contracts";
+import type { AgentReceipt, ApprovalCard } from "@bander/contracts";
 import { CompilerError, type DraftCompiler } from "./compiler.js";
 import { registerMcpRoutes } from "./mcp.js";
 
@@ -14,6 +14,11 @@ interface BrokerAppOptions {
   compiler?: DraftCompiler;
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
+  runAgentStandingAction?: (
+    fixture: DraftFixture,
+    requestId?: string,
+  ) => Promise<AgentReceipt | undefined>;
+  activateAgentStandingBand?: (bandId: string) => Promise<void>;
   resetDemo?: () => Promise<void>;
   simulateCalendarChange?: () => Promise<void>;
   dropNextStandingRunResponseAfterCompletion?: () => boolean;
@@ -149,10 +154,12 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     },
     async (request, reply) => {
       try {
-        return await options.engine.approveStandingBand(
+        const standing = await options.engine.approveStandingBand(
           request.params.candidateId,
           request.body.predicateHash,
         );
+        await options.activateAgentStandingBand?.(standing.bandId);
+        return standing;
       } catch (error) {
         return sendError(error, reply);
       }

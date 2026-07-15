@@ -28,18 +28,23 @@ import {
 } from "./openclaw-telegram-config.js";
 import { createRuntimeEnvironments } from "./process-env.js";
 
-const canonicalRequest =
+const oneTimeRequest =
   "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.";
+const standingRequest = "Move my focus block to 10:30.";
+const standingRequestId = "openclaw-telegram-standing-0001";
 const conflictExplanation =
   "Your calendar changed after you approved this. I didn’t act.";
 const scenario =
-  process.env.BANDER_TELEGRAM_VERIFY_SCENARIO === "conflict"
-    ? "conflict"
+  process.env.BANDER_TELEGRAM_VERIFY_SCENARIO === "conflict" ||
+  process.env.BANDER_TELEGRAM_VERIFY_SCENARIO === "standing"
+    ? process.env.BANDER_TELEGRAM_VERIFY_SCENARIO
     : "success";
+const canonicalRequest = scenario === "standing" ? standingRequest : oneTimeRequest;
 
 class CountingAuthorityStore extends AuthorityStore {
   draftWrites = 0;
   oneTimeBandWrites = 0;
+  standingBandWrites = 0;
   permitWrites = 0;
   receiptWrites = 0;
 
@@ -50,6 +55,7 @@ class CountingAuthorityStore extends AuthorityStore {
 
   override saveBand(band: Band): void {
     if (band.mode === "one_time") this.oneTimeBandWrites += 1;
+    if (band.mode === "standing") this.standingBandWrites += 1;
     super.saveBand(band);
   }
 
@@ -273,17 +279,19 @@ const mockUrl = await mockServices.listen({ host: "127.0.0.1", port: 0 });
 const adapter = new CountingMockServiceClient({ baseUrl: mockUrl, token: serviceToken });
 const authorityStore = new CountingAuthorityStore();
 const engine = new AuthorityEngine({ store: authorityStore, adapter });
+const fixtures = loadDraftFixtures();
 const telegramApi = new RecordingTelegramApi(banderToken);
 const telegramStore = new FileTelegramServiceStore(path.join(runRoot, "telegram-state.json"));
 const telegramService = new TelegramService({ api: telegramApi, engine, store: telegramStore });
 const reusedInstallation =
-  scenario === "conflict" ? loadAuthenticatedInstallation() : undefined;
+  scenario === "success" ? undefined : loadAuthenticatedInstallation();
 let pairingPath: string | undefined;
 if (reusedInstallation) {
   telegramStore.write({
     version: 1,
     installation: reusedInstallation,
     proposals: [],
+    standingOutcomes: [],
   });
 } else {
   const pairing = await telegramService.createPairing();
@@ -317,13 +325,42 @@ try {
   assert.equal(installation.chatId, prior.chatId, "Owner selected a different group");
   assert.notEqual(installation.ownerTelegramId, prior.nonOwnerId);
 
+  let standingBandId: string | undefined;
+  if (scenario === "standing") {
+    const candidate = engine.createStandingBandCandidate();
+    const standing = await engine.approveStandingBand(
+      candidate.candidateId,
+      candidate.predicateHash,
+    );
+    standingBandId = standing.bandId;
+    const band = authorityStore.getBand(standingBandId);
+    assert.ok(band && band.mode === "standing");
+    authorityStore.updateBand({
+      ...band,
+      actionTimestamps: [new Date(Date.now() - 60 * 60_000).toISOString()],
+    });
+    await telegramService.activateStandingBand(standingBandId);
+  }
+
   broker = buildBrokerApp({
     engine,
-    fixtures: loadDraftFixtures(),
+    fixtures,
     deliverAgentProposal: (card) => telegramService.deliverProposal(card),
+    runAgentStandingAction: (fixture, requestId) =>
+      telegramService.runStandingAction(
+        fixture,
+        requestId,
+        "openclaw-reference",
+      ),
+    activateAgentStandingBand: (bandId) =>
+      telegramService.activateStandingBand(bandId),
   });
   const brokerUrl = await broker.listen({ host: "127.0.0.1", port: 0 });
-  provider = buildOpenClawMockProvider();
+  provider = buildOpenClawMockProvider(
+    scenario === "standing"
+      ? { canonicalRequest: standingRequest, standingRequestId }
+      : {},
+  );
   const providerUrl = await provider.app.listen({ host: "127.0.0.1", port: 0 });
 
   const workspace = path.join(runRoot, "workspace");
@@ -391,6 +428,239 @@ try {
   assert.equal(gateway.exitCode, null);
   console.log("PASS OpenClaw: pinned policy and isolated environment validated");
 
+  if (scenario === "standing") {
+    assert.ok(standingBandId);
+    const standingFixture = fixtures.get("move-my-focus-block");
+    assert.ok(standingFixture);
+    await telegramApi.sendMessage(
+      installation.chatId,
+      [
+        "Real Bander standing service ready.",
+        "Owner: send this natural request:",
+        standingRequest,
+      ].join("\n"),
+    );
+    console.log("WAITING owner natural standing request");
+    await waitFor(
+      "OpenClaw standing execution and Bander outcome",
+      () =>
+        telegramStore.read().standingOutcomes.length === 1 &&
+        Boolean(provider!.evidence.toolResult),
+      5 * 60_000,
+    );
+    const outcome = telegramStore.read().standingOutcomes[0]!;
+    const receipt = engine.getHumanReceipt(outcome.receiptId);
+    const agentStatus = JSON.parse(provider.evidence.toolResult!) as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(Object.keys(agentStatus).sort(), ["draftId", "status"]);
+    assert.deepEqual(agentStatus, {
+      draftId: outcome.draftId,
+      status: "executed",
+    });
+    assert.equal(outcome.lifecycle, "delivered");
+    assert.ok(outcome.messageId);
+    const outcomeMessages = telegramApi.messages.filter((message) =>
+      message.text.startsWith("Bander handled this"),
+    );
+    assert.equal(outcomeMessages.length, 1);
+    const outcomeText = outcomeMessages[0]!.text;
+    assert.match(outcomeText, /Moved “Focus block” within your approved routine/);
+    assert.match(outcomeText, /No one was messaged/);
+    assert.match(outcomeText, /2 of 3 actions used today/);
+    assert.equal(authorityStore.draftWrites, 1);
+    assert.equal(authorityStore.standingBandWrites, 1);
+    assert.equal(authorityStore.permitWrites, 1);
+    assert.equal(adapter.executionCalls, 1);
+    assert.equal(authorityStore.receiptWrites, 1);
+    const completedBand = authorityStore.getBand(standingBandId);
+    assert.ok(completedBand && completedBand.mode === "standing");
+    assert.equal(completedBand.actionTimestamps.length, 2);
+    console.log(
+      "PASS standing execution: minimal MCP status, one effect, one Receipt, counter 2 of 3",
+    );
+
+    const deniedCallbacks = [
+      {
+        id: "synthetic:standing-non-owner",
+        fromId: Number(prior.nonOwnerId),
+        chatId: Number(outcome.chatId),
+        messageId: outcome.messageId,
+        data: outcome.callbackValue,
+      },
+      {
+        id: "synthetic:standing-wrong-chat",
+        fromId: Number(installation.ownerTelegramId),
+        chatId: Number(outcome.chatId) - 1,
+        messageId: outcome.messageId,
+        data: outcome.callbackValue,
+      },
+      {
+        id: "synthetic:standing-wrong-message",
+        fromId: Number(installation.ownerTelegramId),
+        chatId: Number(outcome.chatId),
+        messageId: outcome.messageId + 1,
+        data: outcome.callbackValue,
+      },
+      {
+        id: "synthetic:standing-wrong-callback",
+        fromId: Number(installation.ownerTelegramId),
+        chatId: Number(outcome.chatId),
+        messageId: outcome.messageId,
+        data: "bander-off:wrong-value",
+      },
+    ];
+    for (const denied of deniedCallbacks) {
+      await telegramService.handleUpdate({
+        update_id: -1,
+        callback_query: {
+          id: denied.id,
+          from: { id: denied.fromId, is_bot: false },
+          data: denied.data,
+          message: {
+            message_id: denied.messageId,
+            chat: { id: denied.chatId, type: "supergroup" },
+          },
+        },
+      });
+    }
+    assert.equal(authorityStore.getBand(standingBandId)?.status, "active");
+    assert.equal(adapter.executionCalls, 1);
+    console.log("PASS standing surface rejection: wrong user, chat, message and callback denied");
+
+    console.log("WAITING owner tap on the genuine Bander Turn off button");
+    await waitFor(
+      "owner standing revoke",
+      () =>
+        telegramApi.callbackAnswers.some((answer) =>
+          answer.text.includes("Standing Band turned off"),
+        ),
+      5 * 60_000,
+    );
+    const revokedAt = telegramStore.read().standingOutcomes[0]?.revokedAt;
+    assert.ok(revokedAt);
+    await telegramService.handleUpdate({
+      update_id: -1,
+      callback_query: {
+        id: "synthetic:standing-owner-replay",
+        from: { id: Number(installation.ownerTelegramId), is_bot: false },
+        data: outcome.callbackValue,
+        message: {
+          message_id: outcome.messageId,
+          chat: { id: Number(outcome.chatId), type: "supergroup" },
+        },
+      },
+    });
+    assert.equal(telegramStore.read().standingOutcomes[0]?.revokedAt, revokedAt);
+    assert.equal(authorityStore.getBand(standingBandId)?.status, "revoked");
+    await assert.rejects(
+      telegramService.runStandingAction(
+        standingFixture,
+        "openclaw-telegram-standing-after-revoke-0002",
+        "openclaw-reference",
+      ),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "standing_band_inactive",
+    );
+    assert.equal(adapter.executionCalls, 1);
+    assert.equal(authorityStore.receiptWrites, 1);
+    console.log("PASS standing revoke: idempotent and future execution blocked");
+
+    const modelInputs = provider.evidence.modelInputTexts.join("\n");
+    for (const forbidden of [
+      outcome.callbackValue,
+      receipt.id,
+      receipt.summary,
+      receipt.detail,
+      outcomeText,
+      "Bander handled this",
+      "2 of 3 actions used today",
+    ]) {
+      assert.equal(modelInputs.includes(forbidden), false);
+    }
+    assert.ok(provider.evidence.toolInventories.every(sameTools));
+
+    await stopChild(gateway);
+    gateway = undefined;
+    gatewayLog.end();
+    const sessions = JSON.parse(
+      await runCommand(node, [openclaw, "sessions", "--json"], openclawEnv),
+    ) as { sessions?: Array<{ key?: string }> };
+    const sessionKey = `agent:main:telegram:group:${installation.chatId}`;
+    assert.ok(sessions.sessions?.some((session) => session.key === sessionKey));
+    const exportName = `privacy-standing-${runId}`;
+    await runCommand(
+      node,
+      [
+        openclaw,
+        "sessions",
+        "export-trajectory",
+        "--session-key",
+        sessionKey,
+        "--workspace",
+        workspace,
+        "--output",
+        exportName,
+        "--json",
+      ],
+      openclawEnv,
+    );
+    const bundlePath = path.join(
+      workspace,
+      ".openclaw",
+      "trajectory-exports",
+      exportName,
+    );
+    const bundleText = readBundleText(bundlePath);
+    for (const forbidden of [
+      outcome.callbackValue,
+      receipt.id,
+      receipt.summary,
+      receipt.detail,
+      outcomeText,
+      "Bander handled this",
+      "2 of 3 actions used today",
+    ]) {
+      assert.equal(bundleText.includes(forbidden), false);
+    }
+    assert.equal(bundleText.includes("bander__propose_action"), true);
+
+    const evidence = {
+      status: "passed",
+      scenario,
+      service: "real Bander Telegram service",
+      effectiveTools: BANDER_OPENCLAW_TOOLS,
+      mcpResultFields: ["draftId", "status"],
+      humanOutcome: outcomeText,
+      rejected: ["non-owner", "wrong chat", "wrong message", "wrong callback"],
+      authority: {
+        drafts: authorityStore.draftWrites,
+        standingBands: authorityStore.standingBandWrites,
+        permits: authorityStore.permitWrites,
+        downstreamDispatches: adapter.executionCalls,
+        receipts: authorityStore.receiptWrites,
+        actionsUsed: completedBand.actionTimestamps.length,
+        maxActions: completedBand.predicate.limits.maxActions,
+        revoked: authorityStore.getBand(standingBandId)?.status === "revoked",
+      },
+      privacy: {
+        outcomeAbsentFromModelAndTrajectory: true,
+        genuineCallbackAbsentFromOpenClaw: true,
+        receiptAbsentFromModelAndTrajectory: true,
+        banderTokenAbsentFromOpenClawEnvironment: true,
+      },
+      evidenceDirectory: path.relative(process.cwd(), runRoot),
+    };
+    fs.writeFileSync(
+      path.join(runRoot, "result.json"),
+      `${JSON.stringify(evidence, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    console.log(JSON.stringify(evidence, null, 2));
+  } else {
   await telegramApi.sendMessage(
     installation.chatId,
     ["Real Bander service ready.", "Owner: send this natural request:", canonicalRequest].join("\n"),
@@ -617,6 +887,7 @@ try {
     mode: 0o600,
   });
   console.log(JSON.stringify(evidence, null, 2));
+  }
 } finally {
   await stopChild(gateway);
   gatewayLog?.end();

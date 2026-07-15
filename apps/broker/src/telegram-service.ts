@@ -1,8 +1,9 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { ApprovalCard, HumanReceipt } from "@bander/contracts";
+import type { AgentReceipt, ApprovalCard, HumanReceipt } from "@bander/contracts";
 import { AuthorityEngine, AuthorityError, KeyedLock } from "@bander/core";
+import type { DraftFixture, StandingRunResult } from "@bander/core";
 
 export interface TelegramUser {
   id: number;
@@ -157,12 +158,38 @@ export interface TelegramProposalBinding {
   conflictDeliveredAt?: string;
 }
 
+export interface TelegramStandingBandBinding {
+  installationId: string;
+  ownerTelegramId: string;
+  chatId: string;
+  bandId: string;
+  activatedAt: string;
+}
+
+export interface TelegramStandingOutcomeBinding {
+  installationId: string;
+  ownerTelegramId: string;
+  chatId: string;
+  bandId: string;
+  requestId: string;
+  draftId: string;
+  receiptId: string;
+  callbackValue: string;
+  lifecycle: "pending_delivery" | "delivered" | "revoked";
+  createdAt: string;
+  messageId?: number;
+  deliveredAt?: string;
+  revokedAt?: string;
+}
+
 export interface TelegramServiceState {
   version: 1;
   nextUpdateId?: number;
   installation?: TelegramInstallation;
   pairing?: TelegramPairingChallenge;
   proposals: TelegramProposalBinding[];
+  standingBand?: TelegramStandingBandBinding;
+  standingOutcomes: TelegramStandingOutcomeBinding[];
 }
 
 export interface TelegramServiceStore {
@@ -171,7 +198,7 @@ export interface TelegramServiceStore {
 }
 
 function emptyState(): TelegramServiceState {
-  return { version: 1, proposals: [] };
+  return { version: 1, proposals: [], standingOutcomes: [] };
 }
 
 function copy<T>(value: T): T {
@@ -203,7 +230,7 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
     if (state.version !== 1 || !Array.isArray(state.proposals)) {
       throw new Error("Unsupported Telegram service state");
     }
-    return copy(state);
+    return copy({ ...state, standingOutcomes: state.standingOutcomes ?? [] });
   }
 
   write(state: TelegramServiceState): void {
@@ -285,6 +312,19 @@ function receiptText(receipt: HumanReceipt): string {
   ].join("\n");
 }
 
+function standingOutcomeText(
+  receipt: HumanReceipt,
+  actionsUsed: number,
+  maxActions: number,
+): string {
+  return [
+    "Bander handled this",
+    `Moved “${receipt.calendar.title}” within your approved routine`,
+    "No one was messaged",
+    `${actionsUsed} of ${maxActions} actions used today`,
+  ].join("\n");
+}
+
 export class TelegramService {
   readonly #api: TelegramBotApi;
   readonly #engine: AuthorityEngine;
@@ -293,6 +333,7 @@ export class TelegramService {
   readonly #randomValue: () => string;
   readonly #stateLock = new KeyedLock();
   readonly #callbackLock = new KeyedLock();
+  readonly #standingRequestLock = new KeyedLock();
   #running = false;
   #loop: Promise<void> | undefined;
 
@@ -361,6 +402,185 @@ export class TelegramService {
       });
       this.#store.write(state);
     });
+  }
+
+  async activateStandingBand(bandId: string): Promise<void> {
+    await this.#stateLock.run("telegram-state", async () => {
+      const state = this.#store.read();
+      const installation = state.installation;
+      if (!installation) throw new Error("Telegram installation is not paired");
+      const summary = this.#engine.getStandingBandSummary(bandId);
+      if (summary.status !== "active") {
+        throw new AuthorityError(
+          "standing_band_inactive",
+          "This standing Band is not active",
+          409,
+        );
+      }
+      if (state.standingBand?.bandId === bandId) return;
+      if (state.standingBand) {
+        const existing = this.#engine.getStandingBandSummary(
+          state.standingBand.bandId,
+        );
+        if (existing.status === "active") {
+          throw new AuthorityError(
+            "standing_band_already_active",
+            "This installation already has an active standing Band",
+            409,
+          );
+        }
+      }
+      state.standingBand = {
+        installationId: installation.id,
+        ownerTelegramId: installation.ownerTelegramId,
+        chatId: installation.chatId,
+        bandId,
+        activatedAt: this.#now().toISOString(),
+      };
+      this.#store.write(state);
+    });
+  }
+
+  async runStandingAction(
+    fixture: DraftFixture,
+    requestId: string | undefined,
+    agentId = "openclaw-reference",
+  ): Promise<AgentReceipt | undefined> {
+    const configured = this.#store.read().standingBand;
+    if (!configured) return undefined;
+    if (!requestId) {
+      throw new AuthorityError(
+        "invalid_standing_request_id",
+        "A valid client request ID is required",
+        400,
+      );
+    }
+    return this.#standingRequestLock.run(
+      `${configured.bandId}:${requestId}`,
+      async () => {
+        let result: StandingRunResult;
+        try {
+          result = await this.#engine.runStandingBand(
+            configured.bandId,
+            fixture,
+            requestId,
+            agentId,
+          );
+        } catch (error) {
+          if (error instanceof AuthorityError) {
+            const minimalStatus = this.#engine.getStandingAgentReceipt(
+              configured.bandId,
+              requestId,
+            );
+            if (minimalStatus?.status === "conflict") return minimalStatus;
+          }
+          throw error;
+        }
+        if (result.status === "review_required") {
+          await this.deliverProposal(result.card);
+          return this.#engine.getAgentReceipt(result.card.draftId);
+        }
+
+        const summary = this.#engine.getStandingBandSummary(configured.bandId);
+        let outcome = await this.#stateLock.run("telegram-state", async () => {
+          const state = this.#store.read();
+          const installation = state.installation;
+          const active = state.standingBand;
+          if (
+            !installation ||
+            !active ||
+            active.bandId !== configured.bandId ||
+            active.installationId !== installation.id
+          ) {
+            throw new AuthorityError(
+              "standing_installation_changed",
+              "The standing Telegram installation changed",
+              409,
+            );
+          }
+          const existing = state.standingOutcomes.find(
+            (candidate) =>
+              candidate.bandId === configured.bandId &&
+              candidate.requestId === requestId,
+          );
+          if (existing) {
+            if (
+              existing.draftId !== result.receipt.draftId ||
+              existing.receiptId !== result.receipt.id
+            ) {
+              throw new AuthorityError(
+                "invalid_standing_outcome_state",
+                "The stored standing Telegram outcome is inconsistent",
+                409,
+              );
+            }
+            return existing;
+          }
+          const callbackValue = `bander-off:${this.#randomValue()}`;
+          if (Buffer.byteLength(callbackValue, "utf8") > 64) {
+            throw new Error("Telegram callback value exceeds 64 bytes");
+          }
+          const created: TelegramStandingOutcomeBinding = {
+            installationId: installation.id,
+            ownerTelegramId: installation.ownerTelegramId,
+            chatId: installation.chatId,
+            bandId: configured.bandId,
+            requestId,
+            draftId: result.receipt.draftId,
+            receiptId: result.receipt.id,
+            callbackValue,
+            lifecycle: "pending_delivery",
+            createdAt: this.#now().toISOString(),
+          };
+          state.standingOutcomes.push(created);
+          this.#store.write(state);
+          return created;
+        });
+
+        if (!outcome.deliveredAt) {
+          const message = await this.#api.sendMessage(
+            outcome.chatId,
+            standingOutcomeText(
+              result.receipt,
+              summary.actionsUsed,
+              summary.maxActions,
+            ),
+            {
+              inline_keyboard: [
+                [{ text: "Turn off", callback_data: outcome.callbackValue }],
+              ],
+            },
+          );
+          outcome = await this.#stateLock.run("telegram-state", async () => {
+            const state = this.#store.read();
+            const index = state.standingOutcomes.findIndex(
+              (candidate) =>
+                candidate.bandId === configured.bandId &&
+                candidate.requestId === requestId,
+            );
+            const current = state.standingOutcomes[index];
+            if (!current) {
+              throw new AuthorityError(
+                "invalid_standing_outcome_state",
+                "The stored standing Telegram outcome is missing",
+                409,
+              );
+            }
+            if (!current.deliveredAt) {
+              state.standingOutcomes[index] = {
+                ...current,
+                lifecycle: "delivered",
+                messageId: message.message_id,
+                deliveredAt: this.#now().toISOString(),
+              };
+              this.#store.write(state);
+            }
+            return state.standingOutcomes[index]!;
+          });
+        }
+        return this.#engine.getAgentReceipt(outcome.draftId);
+      },
+    );
   }
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -486,6 +706,13 @@ export class TelegramService {
     const candidate = snapshot.proposals.find(
       (proposal) => proposal.callbackValue === callback.data,
     );
+    const standingCandidate = snapshot.standingOutcomes.find(
+      (outcome) => outcome.callbackValue === callback.data,
+    );
+    if (standingCandidate) {
+      await this.#handleStandingCallback(callback, standingCandidate);
+      return;
+    }
     if (!candidate) {
       await this.#api.answerCallback(callback.id, "Denied. This is not a Bander approval surface.");
       return;
@@ -605,6 +832,56 @@ export class TelegramService {
           "Bander could not confirm the outcome. Tap again to recover safely.",
         );
       }
+    });
+  }
+
+  async #handleStandingCallback(
+    callback: TelegramCallbackQuery,
+    candidate: TelegramStandingOutcomeBinding,
+  ): Promise<void> {
+    await this.#callbackLock.run(`standing:${candidate.bandId}`, async () => {
+      const state = this.#store.read();
+      const index = state.standingOutcomes.findIndex(
+        (outcome) => outcome.callbackValue === callback.data,
+      );
+      const binding = state.standingOutcomes[index];
+      const installation = state.installation;
+      const exactSurface =
+        binding &&
+        installation &&
+        binding.messageId !== undefined &&
+        installation.id === binding.installationId &&
+        String(callback.from.id) === binding.ownerTelegramId &&
+        String(callback.message!.chat.id) === binding.chatId &&
+        callback.message!.message_id === binding.messageId;
+      if (!binding || !exactSurface) {
+        await this.#api.answerCallback(
+          callback.id,
+          "Denied. This control is bound to its owner and Bander message.",
+        );
+        return;
+      }
+      const alreadyRevoked = binding.lifecycle === "revoked";
+      await this.#engine.revokeBand(binding.bandId);
+      const current = this.#store.read();
+      const currentIndex = current.standingOutcomes.findIndex(
+        (outcome) => outcome.callbackValue === callback.data,
+      );
+      const currentBinding = current.standingOutcomes[currentIndex];
+      if (currentBinding && currentBinding.lifecycle !== "revoked") {
+        current.standingOutcomes[currentIndex] = {
+          ...currentBinding,
+          lifecycle: "revoked",
+          revokedAt: this.#now().toISOString(),
+        };
+        this.#store.write(current);
+      }
+      await this.#api.answerCallback(
+        callback.id,
+        alreadyRevoked
+          ? "This standing Band is already off."
+          : "Standing Band turned off. Future actions are blocked.",
+      );
     });
   }
 

@@ -1,7 +1,12 @@
 import Fastify, { type FastifyInstance } from "fastify";
 
-const canonicalRequest =
+const defaultCanonicalRequest =
   "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.";
+
+interface MockProviderOptions {
+  canonicalRequest?: string;
+  standingRequestId?: string;
+}
 
 interface ChatMessage {
   role?: string;
@@ -44,10 +49,11 @@ function normalizeRequestText(value: string): string {
     .toLowerCase();
 }
 
-export function buildOpenClawMockProvider(): {
+export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
   app: FastifyInstance;
   evidence: MockProviderEvidence;
 } {
+  const canonicalRequest = options.canonicalRequest ?? defaultCanonicalRequest;
   const app = Fastify({ logger: false });
   const evidence: MockProviderEvidence = {
     calls: 0,
@@ -108,7 +114,12 @@ export function buildOpenClawMockProvider(): {
               type: "function",
               function: {
                 name: "bander__propose_action",
-                arguments: JSON.stringify({ request: canonicalRequest }),
+                arguments: JSON.stringify({
+                  request: canonicalRequest,
+                  ...(options.standingRequestId
+                    ? { requestId: options.standingRequestId }
+                    : {}),
+                }),
               },
             },
           ],

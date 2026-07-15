@@ -64,3 +64,13 @@ The service persists one installation and per-proposal bindings containing the i
 The first valid private pairing claim fixes the claimant identity for that attempt. The same claimant may finish private group selection; another holder of the still-unconsumed token cannot replace the owner. The token is consumed only after the selected group is bound.
 
 The local Streamable HTTP MCP endpoint remains deliberately unauthenticated in the hackathon reference build. It binds to `127.0.0.1`, accepts no agent-controlled owner identity, and is limited to 30 POST requests per source address per 60-second fixed window. This is a local demonstration boundary, not a deployable network authentication design.
+
+## ADR-007: Standing Telegram outcomes reuse engine authority
+
+**Status:** accepted after real-service verification, July 14, 2026
+
+The Telegram service stores one active standing-Band binding for the single-owner installation and one outcome binding per Band and client request ID. The request ID and normalized request digest remain enforced by the authority engine. Telegram does not create a Draft, Permit, Receipt or counter entry itself.
+
+An eligible request enters `runStandingBand`, which serializes execution under the Band lock and returns the existing Receipt on replay. Bander persists the human outcome before attempting Telegram delivery and records delivery only after `sendMessage` succeeds. Therefore real-world execution is exactly once and the Telegram outcome is at least once. A crash after Telegram accepted the message but before the delivered write may produce a duplicate truthful outcome on recovery.
+
+The outcome includes the rolling action count and an opaque **Turn off** callback bound to the installation, owner, chat and Bander-authored message. Revocation calls the public idempotent `revokeBand` method directly; it does not call it while holding the engine Band lock. Execution and revocation therefore acquire that lock exactly once and are serialized by the engine. OpenClaw receives only Draft ID and lifecycle status, including the minimal `conflict` status when standing execution encounters a changed-world precondition.

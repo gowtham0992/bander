@@ -25,7 +25,8 @@
     "verify:standing-recovery": "tsx scripts/verify-standing-recovery.ts",
     "verify:openclaw": "npm run build && tsx scripts/verify-openclaw.ts",
     "verify:telegram-privacy": "tsx scripts/verify-telegram-service.ts",
-    "verify:telegram-conflict": "BANDER_TELEGRAM_VERIFY_SCENARIO=conflict tsx scripts/verify-telegram-service.ts"
+    "verify:telegram-conflict": "BANDER_TELEGRAM_VERIFY_SCENARIO=conflict tsx scripts/verify-telegram-service.ts",
+    "verify:telegram-standing": "BANDER_TELEGRAM_VERIFY_SCENARIO=standing tsx scripts/verify-telegram-service.ts"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

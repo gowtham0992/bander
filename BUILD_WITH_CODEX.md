@@ -546,3 +546,42 @@ This checkpoint explicitly accepts different guarantees at the two boundaries:
 Pairing now binds the attempt to the first valid private claimant. A different user presenting the same still-active token is rejected and cannot replace claimant state. The original claimant can continue the private `request_chat` flow; expiry, successful consumption, and post-consumption replay rejection are unchanged.
 
 Restored focused evidence passed seven Telegram service tests. The full matrix passed 10 functional files with 65 tests, 20 attack tests, the demo verifier, both recovery verifiers, the real OpenClaw verifier including friendly unsupported input, the production build, and the moderate dependency audit with zero vulnerabilities. `OPENAI_API_KEY` remains unavailable and `/feedback` remains deferred.
+
+## Checkpoint 17 — real standing Telegram autonomy
+
+**Status:** verified end to end on July 14, 2026; live GPT-5.6 Sol evidence remains pending
+
+The production Telegram service now reuses the existing deterministic standing predicate and executor. One active standing Band is bound to the authenticated single-owner installation. Every autonomous request requires the client-generated request ID already enforced by the engine; the engine binds it to the Band and normalized request digest, persists the Draft and Permit before dispatch, reconciles committed execution, and increments the rolling counter exactly once. Telegram stores one outcome mapping per Band and request ID and never creates authority itself.
+
+The required service regressions were observed red before implementation:
+
+```text
+$ npx vitest run apps/broker/src/telegram-service.test.ts
+Test Files  1 failed (1)
+Tests       3 failed | 7 passed (10)
+TypeError: service.activateStandingBand is not a function
+```
+
+The restored tests prove retry-safe outcome delivery, one Draft/Permit/Receipt/counter entry, exact owner/chat/message/callback revocation, idempotent replay, future-action denial, stable `review_required` Card delivery, and rejection of a missing request ID. A final privacy regression also pins standing conflicts to the minimal agent result `{draftId, status: "conflict"}` so a human explanation cannot cross MCP.
+
+Autonomous delivery follows the same boundary tradeoff as one-time delivery. Bander executes or reconciles through the authority engine, persists the pending outcome and opaque revoke callback, sends Telegram, then records the Bander-authored message and delivery timestamp. Downstream execution remains exactly once. Telegram notification remains at least once, so an accepted-send crash may duplicate the same truthful outcome on retry. Confirmed delivery is not intentionally repeated.
+
+The distinct **Turn off** callback is bound to the installation, owner Telegram ID, group, Bander-authored message and opaque callback value. Every callback is authorized independently. It invokes the public idempotent `revokeBand` method and does not reacquire an already-held Band lock. Standing execution and revocation are serialized once by the engine's existing Band lock; revocation prevents future execution.
+
+Observed live real-service evidence:
+
+```text
+$ npm run verify:telegram-standing
+PASS standing execution: minimal MCP status, one effect, one Receipt, counter 2 of 3
+PASS standing surface rejection: wrong user, chat, message and callback denied
+PASS standing revoke: idempotent and future execution blocked
+
+authority: 1 Draft · 1 standing Band · 1 Permit · 1 downstream dispatch · 1 Receipt
+human outcome: Bander handled this · Focus block moved · no message · 2 of 3
+privacy: outcome, genuine callback and Receipt absent from model input and trajectory
+OpenClaw: exactly three Bander tools; Bander token absent from its environment
+```
+
+The final matrix passed 71 functional tests, 20 attack tests, the six-outcome demo verifier, both real-process recovery verifiers, the real OpenClaw verifier with friendly unsupported input, the production build, the moderate dependency audit with zero vulnerabilities, and the tracked-secret scan. The live evidence is stored under ignored owner-only `.bander/telegram-service-verification-standing-1784092942010-fd901f48/`.
+
+`OPENAI_API_KEY` remains unavailable, so the live GPT-5.6 Sol selection and off-script natural-request evidence are still external blockers. `/feedback` remains intentionally deferred.

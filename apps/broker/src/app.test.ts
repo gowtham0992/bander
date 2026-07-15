@@ -256,4 +256,51 @@ describe("broker approval boundary", () => {
       await server.close();
     }
   });
+
+  it("passes a client request ID into standing execution and returns only minimal status", async () => {
+    const setup = createApp();
+    let receivedRequestId: string | undefined;
+    let delivered = false;
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: setup.fixtures,
+      deliverAgentProposal: async () => {
+        delivered = true;
+      },
+      runAgentStandingAction: async (_fixture, requestId) => {
+        receivedRequestId = requestId;
+        return { draftId: "draft_standing_mcp_0001", status: "executed" };
+      },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-standing-test", version: "1.0.0" });
+
+    try {
+      await server.connect(
+        serverTransport as Parameters<typeof server.connect>[0],
+      );
+      await client.connect(
+        clientTransport as Parameters<Client["connect"]>[0],
+      );
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: {
+          request: fixture.claimedUserRequest,
+          requestId: "openclaw-standing-request-0001",
+        },
+      });
+      const first = (result.content as Array<{ type: string; text?: string }>)[0];
+      expect(JSON.parse(first?.text ?? "{}")).toEqual({
+        draftId: "draft_standing_mcp_0001",
+        status: "executed",
+      });
+      expect(receivedRequestId).toBe("openclaw-standing-request-0001");
+      expect(delivered).toBe(false);
+      expect(first?.text).not.toContain("Focus block");
+      expect(first?.text).not.toContain("Receipt");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
 });

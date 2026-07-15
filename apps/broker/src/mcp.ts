@@ -7,7 +7,7 @@ import {
   type AuthorityEngine,
   type DraftFixture,
 } from "@bander/core";
-import type { ApprovalCard } from "@bander/contracts";
+import type { AgentReceipt, ApprovalCard } from "@bander/contracts";
 import {
   CompilerError,
   createDeterministicDraftCompiler,
@@ -19,6 +19,10 @@ interface McpRoutesOptions {
   fixtures: Map<string, DraftFixture>;
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
+  runAgentStandingAction?: (
+    fixture: DraftFixture,
+    requestId?: string,
+  ) => Promise<AgentReceipt | undefined>;
 }
 
 const MCP_RATE_LIMIT_MAX_REQUESTS = 30;
@@ -61,13 +65,14 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
             capabilities: [
               "Prepare a bounded Calendar reschedule for human review",
               "Prepare one bounded Messages send as part of the same reviewed deal",
+              "Run an eligible Calendar reschedule under a previously approved standing Band",
               "Read only the minimal status of a previously proposed Draft",
             ],
             supportedProposalRequests: [...options.fixtures.values()].map(
               (fixture) => fixture.claimedUserRequest,
             ),
             executionBoundary:
-              "OpenClaw can propose actions but cannot approve or execute them.",
+              "OpenClaw cannot approve authority. Eligible execution can occur only inside a standing Band the person previously approved.",
           }),
         },
       ],
@@ -79,18 +84,34 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
     {
       title: "Propose an action through Bander",
       description:
-        "Pass the person's natural request verbatim. Bander may create a review Card only when it matches a bounded local candidate. This never approves or executes the action.",
+        "Pass the person's natural request verbatim. Bander either creates a human review Card or, when the request fits an existing standing Band, executes only within that pre-approved authority. Reuse the same requestId when recovering an ambiguous standing result.",
       inputSchema: {
         request: z
           .string()
           .min(1)
           .max(1000)
           .describe("The person's natural-language request, passed verbatim"),
+        requestId: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{16,100}$/)
+          .optional()
+          .describe(
+            "A client-generated idempotency ID, required whenever a standing Band may execute",
+          ),
       },
     },
-    async ({ request }) => {
+    async ({ request, requestId }) => {
       try {
         const fixture = await compiler.compile(request);
+        const standingStatus = await options.runAgentStandingAction?.(
+          fixture,
+          requestId,
+        );
+        if (standingStatus) {
+          return {
+            content: [{ type: "text", text: JSON.stringify(standingStatus) }],
+          };
+        }
         const card = await options.engine.proposeFixture(
           fixture,
           "openclaw-reference",

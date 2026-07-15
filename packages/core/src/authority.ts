@@ -84,6 +84,14 @@ export type StandingRunResult =
   | { status: "executed"; receipt: HumanReceipt }
   | { status: "review_required"; card: ApprovalCard };
 
+export interface StandingBandSummary {
+  bandId: string;
+  status: "active" | "revoked" | "expired";
+  actionsUsed: number;
+  maxActions: number;
+  rollingHours: number;
+}
+
 export function digestStandingRequest(fixture: DraftFixture): string {
   return hashCanonical({
     version: 1,
@@ -408,6 +416,39 @@ export class AuthorityEngine {
       this.#store.saveStandingRequest(standingRequest);
       return this.#resumeStandingRequest(standingRequest, currentBand, agentId);
     });
+  }
+
+  getStandingBandSummary(bandId: string): StandingBandSummary {
+    const band = this.#store.getBand(bandId);
+    if (!band || band.mode !== "standing") {
+      throw new AuthorityError("standing_band_not_found", "Standing Band not found", 404);
+    }
+    const now = this.#now();
+    const cutoff =
+      now.getTime() - band.predicate.limits.rollingHours * 60 * 60_000;
+    const actionsUsed = band.actionTimestamps.filter(
+      (timestamp) => new Date(timestamp).getTime() > cutoff,
+    ).length;
+    return {
+      bandId: band.id,
+      status:
+        band.status === "revoked"
+          ? "revoked"
+          : new Date(band.expiresAt).getTime() <= now.getTime()
+            ? "expired"
+            : "active",
+      actionsUsed,
+      maxActions: band.predicate.limits.maxActions,
+      rollingHours: band.predicate.limits.rollingHours,
+    };
+  }
+
+  getStandingAgentReceipt(
+    bandId: string,
+    requestId: string,
+  ): AgentReceipt | undefined {
+    const request = this.#store.getStandingRequest(bandId, requestId);
+    return request ? this.getAgentReceipt(request.draftId) : undefined;
   }
 
   async #resumeStandingRequest(
