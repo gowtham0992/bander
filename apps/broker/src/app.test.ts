@@ -10,6 +10,7 @@ import {
   type ExecutionAdapter,
 } from "@bander/core";
 import { buildBrokerApp } from "./app.js";
+import { CompilerError } from "./compiler.js";
 import { createBanderMcpServer } from "./mcp.js";
 
 const fixture: DraftFixture = {
@@ -250,6 +251,82 @@ describe("broker approval boundary", () => {
         draftId: JSON.parse(first.text).draftId,
         draftHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
+      expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("decline_details_do_not_enter_agent_trajectory", async () => {
+    const setup = createApp();
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: setup.fixtures,
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-decline-test", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const proposal = await client.callTool({
+        name: "propose_action",
+        arguments: { request: fixture.claimedUserRequest },
+      });
+      const proposalText = (
+        proposal.content as Array<{ type: string; text?: string }>
+      )[0]?.text;
+      const draftId = JSON.parse(proposalText ?? "{}").draftId as string;
+      setup.engine.decline(draftId);
+
+      const status = await client.callTool({
+        name: "get_receipt",
+        arguments: { draftId },
+      });
+      const statusText = (
+        status.content as Array<{ type: string; text?: string }>
+      )[0]?.text ?? "";
+
+      expect(JSON.parse(statusText)).toEqual({ draftId, status: "declined" });
+      expect(statusText).not.toContain("Nothing changed");
+      expect(statusText).not.toContain("OpenClaw again");
+      expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns a minimal non-error status for unsupported wording", async () => {
+    const setup = createApp();
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: setup.fixtures,
+      agentCompiler: {
+        compile: async () => {
+          throw new CompilerError(
+            "clarification_required",
+            "model-authored detail that must stay internal",
+          );
+        },
+      },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-unsupported-test", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: { request: "Please do something unsupported" },
+      });
+      const text = (result.content as Array<{ type: string; text?: string }>)[0]?.text ?? "";
+
+      expect(result.isError).not.toBe(true);
+      expect(JSON.parse(text)).toEqual({ status: "unsupported" });
+      expect(text).not.toContain("model-authored detail");
       expect(setup.adapter.executions).toBe(0);
     } finally {
       await client.close();

@@ -37,7 +37,7 @@ export function applyPinnedTelegramPolicy(
       historyLimit: 0,
       configWrites: false,
       streaming: { mode: "off" },
-      errorPolicy: "silent",
+      errorPolicy: "always",
       capabilities: { inlineButtons: "group" },
     },
   };
@@ -70,6 +70,7 @@ export function assertPinnedTelegramPolicy(
       JSON.stringify([input.ownerTelegramId]) ||
     telegram?.contextVisibility !== "allowlist" ||
     telegram?.historyLimit !== 0 ||
+    telegram?.errorPolicy !== "always" ||
     telegram?.configWrites !== false
   ) {
     throw new Error("OpenClaw Telegram policy is not the pinned Bander policy");

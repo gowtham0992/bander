@@ -634,3 +634,44 @@ evidence: .bander/telegram-service-verification-standing-1784095475951-b4effef0/
 The final matrix passed 75 functional tests, 20 attack tests, the six-outcome demo verifier, both real-process recovery verifiers, the real OpenClaw verifier with exactly three effective Bander tools and friendly unsupported input, the production build, and the moderate dependency audit with zero vulnerabilities. The tracked-file scan found no OpenAI- or Telegram-token-shaped secrets. The live standing verifier also re-ran the Telegram privacy assertions against the exact-effect and post-revoke Card paths.
 
 The live GPT-5.6 Sol selection and genuinely off-script request remain the next external evidence requirement. `/feedback` remains intentionally deferred.
+
+## Checkpoint 19 — consumer Telegram voice and safe decline
+
+**Status:** verified end to end on July 15, 2026
+
+The one-time Telegram surface now offers **Do exactly this** and **Not now** side by side. The two opaque callback values are stored on the same proposal record and independently bound to the authenticated installation, owner Telegram ID, group, Bander-authored message and action ID. The decline callback calls the authority engine’s deterministic decline path, which is now idempotent for an already-declined action. It creates no one-time authority, Permit, downstream dispatch or success outcome, and later approval remains terminally closed.
+
+The principal decline and consumer-copy regressions were observed red before implementation:
+
+```text
+$ npx vitest run apps/broker/src/telegram-service.test.ts packages/core/src/authority.test.ts scripts/openclaw-mock-provider.test.ts scripts/openclaw-config.test.ts
+Test Files  4 failed (4)
+Tests       9 failed | 42 passed (51)
+Failures: no decline callback; approval executed after attempted decline; decline replay rejected; old Card/ISO/engine copy; forgeable multiline hearsay; silent OpenClaw error policy; old unsupported response
+```
+
+The live verifier then exposed two harness assumptions red before correction. The deterministic provider treated a missing final period as unsupported even though the real compiler accepts it; a focused regression failed and normalization was aligned. A second dinner proposal correctly failed its stale Calendar precondition after the first dinner execution, so the decline proof was moved to the untouched supported Focus action rather than weakening precondition enforcement.
+
+Parent-facing Telegram copy now names OpenClaw as the hearsay source and never implies Bander read the ambient conversation. Review messages start with “Nothing has happened yet,” use local interval labels and relative closing time, and describe only effects through Bander. Success, conflict, expiry, decline and standing opt-out messages each state whether anything happened and give a safe next step. Raw action IDs, timestamps and engine terminology are absent.
+
+Agent-supplied request text remains in a clearly labelled plain-text quotation. Telegram parse mode is not enabled. The display renderer normalizes the field and removes newlines, control characters, bidirectional formatting controls and paragraph separators, preventing agent text from creating a second Bander-authored visual section. The versioned deterministic effects remain unchanged.
+
+OpenClaw now acknowledges a proposed action with “I’m checking with Bander. Nothing has happened yet.” Executed standing results use distinct wording and never make that false non-action claim. Unsupported input receives the requested friendly clarification. The pinned current OpenClaw Telegram `errorPolicy` is `always`; Context7 and the installed OpenClaw documentation confirm that this sends channel errors instead of silently suppressing them. Compiler refusal crosses MCP only as `{status:"unsupported"}` without model-authored detail. Exactly three MCP tools remain configured.
+
+The implementation explicitly does not make Bander read ambient Telegram messages. It does not add an MCP tool, enable HTML/Markdown rendering, or trust model-authored effects or authority.
+
+Live evidence passed:
+
+```text
+success/privacy: .bander/telegram-service-verification-success-1784099152812-1e4f9c80/
+  2 actions prepared · 1 approved · 1 declined · 1 authority · 1 execution · 1 success outcome
+  decline human copy and both genuine callback values absent from model input and exported trajectory
+
+changed world: .bander/telegram-service-verification-conflict-1784099499056-8c6bc5c9/
+  1 stopped explanation · 0 mutations · 0 success outcomes · explanation absent from trajectory
+
+standing regression: .bander/telegram-service-verification-standing-1784099838713-1803a003/
+  exact local interval preserved · consumer opt-out copy delivered · next request returned to one-time review
+```
+
+The final Slice 1 matrix passed 87 functional tests, 20 attack tests, the six-outcome demo verifier, both recovery verifiers, the real OpenClaw verifier, all three real Telegram service scenarios, production build, dependency audit and tracked-secret scan. `transcription_day2.md` remains untouched. Live GPT-5.6 Sol evidence and `/feedback` remain deferred.

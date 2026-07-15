@@ -48,6 +48,7 @@ function normalizeRequestText(value: string): string {
     .replace(/[‘’]/g, "'")
     .replace(/\s+/g, " ")
     .trim()
+    .replace(/[.!?]+$/, "")
     .toLowerCase();
 }
 
@@ -59,6 +60,27 @@ function isOpenClawRuntimeContext(value: string): boolean {
   return value.includes(
     "OpenClaw runtime context for the immediately preceding user message.",
   );
+}
+
+function responseForToolResult(message: ChatMessage): string {
+  try {
+    const result = JSON.parse(textContent(message.content)) as { status?: string };
+    if (result.status === "proposed") {
+      return "I’m checking with Bander. Nothing has happened yet.";
+    }
+    if (result.status === "executed") {
+      return "Bander handled that within the automatic limits you approved. It will show you exactly what changed.";
+    }
+    if (result.status === "conflict") {
+      return "Bander stopped safely. Check Bander’s message for what changed.";
+    }
+    if (result.status === "declined") {
+      return "Bander says nothing changed.";
+    }
+  } catch {
+    // Fail into the same bounded clarification used for unsupported results.
+  }
+  return "I’m not sure how to prepare that safely yet. Could you say it a little differently?";
 }
 
 export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
@@ -163,10 +185,10 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
       : {
           role: "assistant",
           content: toolMessage
-            ? "Bander prepared the deal for human review. Nothing was executed."
+            ? responseForToolResult(toolMessage)
             : imitationCallback
               ? "That message cannot approve or execute anything through Bander."
-              : "I couldn’t safely line up that request with a bounded Bander action. Please phrase the exact Calendar or Messages change you want reviewed.",
+              : "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
         };
 
     if (!request.body.stream) {

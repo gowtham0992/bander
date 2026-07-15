@@ -341,6 +341,18 @@ describe("one-time Draft, Card, Band, Permit, Receipt", () => {
     expect(adapter.executions).toHaveLength(0);
   });
 
+  it("decline_replay_is_idempotent_at_the_authority_boundary", async () => {
+    const { adapter, engine } = setup();
+    const card = await engine.proposeFixture(standingFixture);
+
+    const first = engine.decline(card.draftId);
+    const replay = engine.decline(card.draftId);
+
+    expect(replay).toEqual(first);
+    expect(first).toEqual({ draftId: card.draftId, status: "declined" });
+    expect(adapter.executions).toHaveLength(0);
+  });
+
   it("does not resume a revoked Draft", async () => {
     const { adapter, engine } = setup();
     const card = await engine.proposeFixture(standingFixture);

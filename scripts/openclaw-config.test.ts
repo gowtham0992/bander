@@ -64,4 +64,16 @@ describe("OpenClaw reference tool manifest", () => {
       "not the pinned Bander policy",
     );
   });
+
+  it("unsupported_request_always_receives_reply", () => {
+    const reference = JSON.parse(
+      readFileSync("openclaw/reference.openclaw.json", "utf8"),
+    ) as Record<string, unknown>;
+    const config = applyPinnedTelegramPolicy(reference, {
+      ownerTelegramId: "101",
+      chatId: "-500",
+    });
+
+    expect(config.channels.telegram.errorPolicy).toBe("always");
+  });
 });

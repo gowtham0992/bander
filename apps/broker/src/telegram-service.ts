@@ -153,12 +153,14 @@ export interface TelegramProposalBinding {
   chatId: string;
   messageId: number;
   callbackValue: string;
+  declineCallbackValue: string;
   draftId: string;
   draftHash: string;
   expiresAt: string;
-  lifecycle: "pending" | "executed" | "conflict" | "expired";
+  lifecycle: "pending" | "executed" | "declined" | "conflict" | "expired";
   receiptId?: string;
   receiptDeliveredAt?: string;
+  declineDeliveredAt?: string;
   conflictMessage?: string;
   conflictDeliveredAt?: string;
 }
@@ -282,40 +284,94 @@ function startToken(text: string | undefined): string | undefined {
   return match?.[1];
 }
 
-function cardText(card: ApprovalCard): string {
-  const effects = card.effectPreviews.map((effect) => {
+function cardText(card: ApprovalCard, now: Date): string {
+  const effects = card.effectPreviews.flatMap((effect) => {
     if (effect.kind === "calendar.reschedule_event") {
-      return `• Calendar: ${effect.eventTitle}\n  ${effect.previousInterval} → ${effect.resultingInterval}`;
+      return [
+        `• Move “${safeDisplayText(effect.eventTitle)}”`,
+        `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
+      ];
     }
-    return `• Message to ${effect.recipientDisplayName}: “${effect.body}”`;
+    return [
+      `• Send ${firstName(effect.recipientDisplayName)}:`,
+      `“${safeDisplayText(effect.body)}”`,
+    ];
   });
+  const minutes = Math.max(
+    1,
+    Math.ceil((new Date(card.expiresAt).getTime() - now.getTime()) / 60_000),
+  );
   return [
-    card.title,
+    "Nothing has happened yet. Is this right?",
     "",
-    card.provenanceLabel,
-    `“${card.claimedUserRequest}”`,
+    "OpenClaw says you asked:",
+    `“${safeDisplayText(card.claimedUserRequest)}”`,
     "",
-    "This approval allows:",
+    "Through Bander, this will:",
     ...effects,
     "",
-    card.notAllowed,
-    card.boundary,
-    `Expires: ${card.expiresAt}`,
+    "Not included:",
+    "• Any other events, messages or payments",
+    "",
+    `Closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
   ].join("\n");
 }
 
 function receiptText(receipt: HumanReceipt): string {
   return [
-    receipt.title,
-    receipt.summary,
-    receipt.detail,
-    `Calendar: ${receipt.calendar.title}`,
-    `${receipt.calendar.previous.startTime}–${receipt.calendar.previous.endTime}`,
-    `→ ${receipt.calendar.completed.startTime}–${receipt.calendar.completed.endTime}`,
+    "Done ✓",
+    `“${safeDisplayText(receipt.calendar.title)}”`,
+    `${formatCalendarIntervalWithContext(
+      receipt.calendar.previous.startTime,
+      receipt.calendar.previous.endTime,
+      receipt.calendar.timeZone,
+    )} → ${formatCalendarIntervalWithContext(
+      receipt.calendar.completed.startTime,
+      receipt.calendar.completed.endTime,
+      receipt.calendar.timeZone,
+    )}`,
     ...(receipt.message
-      ? [`Message to ${receipt.message.recipientDisplayName}: “${receipt.message.body}”`]
-      : []),
-    `Receipt: ${receipt.id}`,
+      ? [
+          `Sent ${firstName(receipt.message.recipientDisplayName)}:`,
+          `“${safeDisplayText(receipt.message.body)}”`,
+        ]
+      : ["No messages were sent."]),
+    "Nothing else changed through Bander.",
+  ].join("\n");
+}
+
+function safeDisplayText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function firstName(value: string): string {
+  return safeDisplayText(value).split(" ")[0] ?? "them";
+}
+
+function refusalText(code: string, card: ApprovalCard): string {
+  if (code === "draft_expired") {
+    return "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again.";
+  }
+  if (code !== "conflict") {
+    return [
+      "Stopped — nothing changed through Bander",
+      "I couldn’t safely complete that request.",
+      "Ask OpenClaw to prepare it again.",
+    ].join("\n");
+  }
+  const includesMessage = card.effectPreviews.some(
+    (effect) => effect.kind === "messages.send",
+  );
+  return [
+    "Stopped — your calendar changed",
+    includesMessage
+      ? "I didn’t move the event or send the message."
+      : "I didn’t move the event.",
+    "Ask OpenClaw to check again.",
   ].join("\n");
 }
 
@@ -325,7 +381,7 @@ function standingOutcomeText(
   maxActions: number,
 ): string {
   return [
-    "Bander handled this",
+    "Handled automatically ✓",
     "",
     `“${receipt.calendar.title}”`,
     `${formatCalendarIntervalWithContext(
@@ -338,8 +394,8 @@ function standingOutcomeText(
       receipt.calendar.timeZone,
     )}`,
     "",
-    "No one was messaged",
-    `${actionsUsed} of ${maxActions} actions used today`,
+    "No one was messaged.",
+    `${actionsUsed} of ${maxActions} automatic moves used today.`,
   ].join("\n");
 }
 
@@ -395,15 +451,22 @@ export class TelegramService {
       if (!installation) throw new Error("Telegram installation is not paired");
       if (state.proposals.some((proposal) => proposal.draftId === card.draftId)) return;
       const callbackValue = `bander:${this.#randomValue()}`;
-      if (Buffer.byteLength(callbackValue, "utf8") > 64) {
+      const declineCallbackValue = `bander-no:${this.#randomValue()}`;
+      if (
+        Buffer.byteLength(callbackValue, "utf8") > 64 ||
+        Buffer.byteLength(declineCallbackValue, "utf8") > 64
+      ) {
         throw new Error("Telegram callback value exceeds 64 bytes");
       }
       const message = await this.#api.sendMessage(
         installation.chatId,
-        cardText(card),
+        cardText(card, this.#now()),
         {
           inline_keyboard: [
-            [{ text: "Approve this one-time deal", callback_data: callbackValue }],
+            [
+              { text: "Do exactly this", callback_data: callbackValue },
+              { text: "Not now", callback_data: declineCallbackValue },
+            ],
           ],
         },
       );
@@ -413,6 +476,7 @@ export class TelegramService {
         chatId: installation.chatId,
         messageId: message.message_id,
         callbackValue,
+        declineCallbackValue,
         draftId: card.draftId,
         draftHash: card.draftHash,
         expiresAt: card.expiresAt,
@@ -590,7 +654,7 @@ export class TelegramService {
             ),
             {
               inline_keyboard: [
-                [{ text: "Turn off", callback_data: outcome.callbackValue }],
+                [{ text: "Turn off automatic", callback_data: outcome.callbackValue }],
               ],
             },
           );
@@ -708,12 +772,12 @@ export class TelegramService {
     this.#store.write(state);
     await this.#api.sendMessage(
       String(message.chat.id),
-      "Owner authenticated. Choose the one Telegram group Bander may use.",
+      "You’re connected. Choose the Telegram group where you use OpenClaw.",
       {
         keyboard: [
           [
             {
-              text: "Choose Bander group",
+              text: "Choose your OpenClaw group",
               request_chat: {
                 request_id: requestId,
                 chat_is_channel: false,
@@ -724,7 +788,7 @@ export class TelegramService {
         ],
         resize_keyboard: true,
         one_time_keyboard: true,
-        input_field_placeholder: "Choose the private Bander group",
+        input_field_placeholder: "Choose your OpenClaw group",
       },
     );
   }
@@ -762,19 +826,24 @@ export class TelegramService {
     this.#store.write(state);
     await this.#api.sendMessage(
       String(message.chat.id),
-      "Bander is paired. Only you can approve Bander Cards in the selected group.",
+      [
+        "Bander is ready. Only you can approve what I’m allowed to do.",
+        "I only act here, and only within limits you approve.",
+      ].join("\n"),
       { remove_keyboard: true },
     );
   }
 
   async #handleCallback(callback: TelegramCallbackQuery): Promise<void> {
     if (!callback.message || !callback.data) {
-      await this.#api.answerCallback(callback.id, "Denied. This is not a Bander approval surface.");
+      await this.#api.answerCallback(callback.id, "That control isn’t valid here.");
       return;
     }
     const snapshot = this.#store.read();
     const candidate = snapshot.proposals.find(
-      (proposal) => proposal.callbackValue === callback.data,
+      (proposal) =>
+        proposal.callbackValue === callback.data ||
+        proposal.declineCallbackValue === callback.data,
     );
     const standingCandidate = snapshot.standingOutcomes.find(
       (outcome) => outcome.callbackValue === callback.data,
@@ -784,15 +853,18 @@ export class TelegramService {
       return;
     }
     if (!candidate) {
-      await this.#api.answerCallback(callback.id, "Denied. This is not a Bander approval surface.");
+      await this.#api.answerCallback(callback.id, "That control isn’t valid here.");
       return;
     }
     await this.#callbackLock.run(`callback:${candidate.draftId}`, async () => {
       const state = this.#store.read();
       const index = state.proposals.findIndex(
-        (proposal) => proposal.callbackValue === callback.data,
+        (proposal) =>
+          proposal.callbackValue === callback.data ||
+          proposal.declineCallbackValue === callback.data,
       );
       const binding = state.proposals[index];
+      const isDecline = binding?.declineCallbackValue === callback.data;
       const installation = state.installation;
       const exactSurface =
         binding &&
@@ -802,7 +874,10 @@ export class TelegramService {
         String(callback.message!.chat.id) === binding.chatId &&
         callback.message!.message_id === binding.messageId;
       if (!binding || !exactSurface) {
-        await this.#api.answerCallback(callback.id, "Denied. This approval is bound to its owner and Bander Card.");
+        await this.#api.answerCallback(
+          callback.id,
+          "Only the connected person can use this button on Bander’s message.",
+        );
         return;
       }
       if (
@@ -811,7 +886,88 @@ export class TelegramService {
       ) {
         state.proposals[index] = { ...binding, lifecycle: "expired" };
         this.#store.write(state);
-        await this.#api.answerCallback(callback.id, "This Bander Card expired. Nothing was executed.");
+        const text = refusalText("draft_expired", this.#engine.getCard(binding.draftId));
+        try {
+          await this.#api.sendMessage(binding.chatId, text);
+          const delivered = this.#store.read();
+          const deliveredIndex = delivered.proposals.findIndex(
+            (proposal) => proposal.draftId === binding.draftId,
+          );
+          delivered.proposals[deliveredIndex] = {
+            ...delivered.proposals[deliveredIndex]!,
+            conflictMessage: text,
+            conflictDeliveredAt: this.#now().toISOString(),
+          };
+          this.#store.write(delivered);
+        } catch {
+          await this.#api.answerCallback(
+            callback.id,
+            "I couldn’t send the update. Tap again to check safely.",
+          );
+          return;
+        }
+        await this.#api.answerCallback(callback.id, "That request expired. Nothing happened.");
+        return;
+      }
+      if (binding.lifecycle === "declined") {
+        if (isDecline) {
+          this.#engine.decline(binding.draftId);
+          if (!binding.declineDeliveredAt) {
+            await this.#api.sendMessage(
+              binding.chatId,
+              "Nothing changed.\nAsk OpenClaw again if you want something different.",
+            );
+            const delivered = this.#store.read();
+            const deliveredIndex = delivered.proposals.findIndex(
+              (proposal) => proposal.draftId === binding.draftId,
+            );
+            delivered.proposals[deliveredIndex] = {
+              ...delivered.proposals[deliveredIndex]!,
+              declineDeliveredAt: this.#now().toISOString(),
+            };
+            this.#store.write(delivered);
+          }
+          await this.#api.answerCallback(callback.id, "Nothing changed.");
+        } else {
+          await this.#api.answerCallback(
+            callback.id,
+            "You already chose Not now. Nothing happened.",
+          );
+        }
+        return;
+      }
+      if (isDecline) {
+        if (binding.lifecycle !== "pending") {
+          await this.#api.answerCallback(callback.id, "This request has already finished.");
+          return;
+        }
+        const result = this.#engine.decline(binding.draftId);
+        const declined = this.#store.read();
+        const declinedIndex = declined.proposals.findIndex(
+          (proposal) => proposal.draftId === binding.draftId,
+        );
+        declined.proposals[declinedIndex] = {
+          ...declined.proposals[declinedIndex]!,
+          lifecycle: "declined",
+        };
+        this.#store.write(declined);
+        await this.#api.sendMessage(
+          binding.chatId,
+          "Nothing changed.\nAsk OpenClaw again if you want something different.",
+        );
+        const delivered = this.#store.read();
+        const deliveredIndex = delivered.proposals.findIndex(
+          (proposal) => proposal.draftId === binding.draftId,
+        );
+        delivered.proposals[deliveredIndex] = {
+          ...delivered.proposals[deliveredIndex]!,
+          declineDeliveredAt: this.#now().toISOString(),
+        };
+        this.#store.write(delivered);
+        await this.#api.answerCallback(
+          callback.id,
+          result.status === "declined" ? "Nothing changed." : "Stopped.",
+        );
         return;
       }
       try {
@@ -850,8 +1006,8 @@ export class TelegramService {
         await this.#api.answerCallback(
           callback.id,
           deliveryPending
-            ? "Approved. Bander completed exactly this deal."
-            : "Recovered the same Receipt. Nothing ran again.",
+            ? "Done exactly as shown."
+            : "Already done. Nothing ran again.",
         );
       } catch (error) {
         if (error instanceof AuthorityError) {
@@ -861,8 +1017,10 @@ export class TelegramService {
           );
           const conflictBinding = conflictState.proposals[conflictIndex];
           if (conflictBinding) {
-            const conflictMessage =
-              conflictBinding.conflictMessage ?? error.message;
+            const conflictMessage = conflictBinding.conflictMessage ?? refusalText(
+              error.code,
+              this.#engine.getCard(binding.draftId),
+            );
             const deliveryPending = !conflictBinding.conflictDeliveredAt;
             conflictState.proposals[conflictIndex] = {
               ...conflictBinding,
@@ -894,7 +1052,12 @@ export class TelegramService {
               }
             }
           }
-          await this.#api.answerCallback(callback.id, error.message);
+          await this.#api.answerCallback(
+            callback.id,
+            error.code === "draft_expired"
+              ? "That request expired. Nothing happened."
+              : "Stopped safely. Nothing changed through Bander.",
+          );
           return;
         }
         await this.#api.answerCallback(
@@ -927,7 +1090,7 @@ export class TelegramService {
       if (!binding || !exactSurface) {
         await this.#api.answerCallback(
           callback.id,
-          "Denied. This control is bound to its owner and Bander message.",
+          "Only the connected person can use this button on Bander’s message.",
         );
         return;
       }
@@ -959,8 +1122,8 @@ export class TelegramService {
         await this.#api.sendMessage(
           binding.chatId,
           [
-            "Back in control",
-            "Future matching requests will come back as one-time deals.",
+            "Automatic handling is off.",
+            "I’ll check with you each time now.",
           ].join("\n"),
         );
         const delivered = this.#store.read();
@@ -979,8 +1142,8 @@ export class TelegramService {
       await this.#api.answerCallback(
         callback.id,
         alreadyRevoked
-          ? "This standing Band is already off."
-          : "Standing Band turned off. Future actions are blocked.",
+          ? "Automatic handling is already off."
+          : "Automatic handling is off.",
       );
     });
   }

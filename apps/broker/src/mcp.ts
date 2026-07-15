@@ -124,8 +124,12 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
       } catch (error) {
         if (error instanceof CompilerError) {
           return {
-            isError: true,
-            content: [{ type: "text", text: `${error.code}: ${error.message}` }],
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ status: "unsupported" }),
+              },
+            ],
           };
         }
         return asToolError(error);

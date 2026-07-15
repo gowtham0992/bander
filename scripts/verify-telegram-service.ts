@@ -33,7 +33,9 @@ const oneTimeRequest =
 const standingRequest = "Move my focus block to 10:30.";
 const standingRequestId = "openclaw-telegram-standing-0001";
 const conflictExplanation =
-  "Your calendar changed after you approved this. I didn’t act.";
+  "Stopped — your calendar changed\nI didn’t move the event or send the message.\nAsk OpenClaw to check again.";
+const declineExplanation =
+  "Nothing changed.\nAsk OpenClaw again if you want something different.";
 const scenario =
   process.env.BANDER_TELEGRAM_VERIFY_SCENARIO === "conflict" ||
   process.env.BANDER_TELEGRAM_VERIFY_SCENARIO === "standing"
@@ -284,7 +286,9 @@ const telegramApi = new RecordingTelegramApi(banderToken);
 const telegramStore = new FileTelegramServiceStore(path.join(runRoot, "telegram-state.json"));
 const telegramService = new TelegramService({ api: telegramApi, engine, store: telegramStore });
 const reusedInstallation =
-  scenario === "success" ? undefined : loadAuthenticatedInstallation();
+  process.env.BANDER_TELEGRAM_FORCE_FRESH_PAIRING === "1"
+    ? undefined
+    : loadAuthenticatedInstallation();
 let pairingPath: string | undefined;
 if (reusedInstallation) {
   telegramStore.write({
@@ -364,7 +368,15 @@ try {
             { request: standingRequest, requestId: standingRequestId },
           ],
         }
-      : {},
+      : scenario === "success"
+        ? {
+            canonicalRequest: oneTimeRequest,
+            supportedRequests: [
+              { request: oneTimeRequest },
+              { request: standingRequest },
+            ],
+          }
+        : {},
   );
   const providerUrl = await provider.app.listen({ host: "127.0.0.1", port: 0 });
 
@@ -467,7 +479,7 @@ try {
     assert.equal(outcome.lifecycle, "delivered");
     assert.ok(outcome.messageId);
     const outcomeMessages = telegramApi.messages.filter((message) =>
-      message.text.startsWith("Bander handled this"),
+      message.text.startsWith("Handled automatically ✓"),
     );
     assert.equal(outcomeMessages.length, 1);
     const outcomeText = outcomeMessages[0]!.text;
@@ -477,7 +489,7 @@ try {
       /Wed, Jul 15, 10:00–11:00 AM MDT → Wed, Jul 15, 10:30–11:30 AM MDT/,
     );
     assert.match(outcomeText, /No one was messaged/);
-    assert.match(outcomeText, /2 of 3 actions used today/);
+    assert.match(outcomeText, /2 of 3 automatic moves used today\./);
     assert.equal(authorityStore.draftWrites, 1);
     assert.equal(authorityStore.standingBandWrites, 1);
     assert.equal(authorityStore.permitWrites, 1);
@@ -543,7 +555,7 @@ try {
       "owner standing revoke",
       () =>
         telegramApi.callbackAnswers.some((answer) =>
-          answer.text.includes("Standing Band turned off"),
+          answer.text.includes("Automatic handling is off"),
         ),
       5 * 60_000,
     );
@@ -566,13 +578,13 @@ try {
     assert.equal(telegramStore.read().standingBand, undefined);
     assert.equal(
       telegramApi.messages.filter((message) =>
-        message.text.startsWith("Back in control"),
+        message.text.startsWith("Automatic handling is off."),
       ).length,
       1,
     );
     assert.equal(adapter.executionCalls, 1);
     assert.equal(authorityStore.receiptWrites, 1);
-    console.log("PASS standing revoke: idempotent, detached, and Back in control delivered");
+    console.log("PASS standing revoke: idempotent, detached, and consumer opt-out delivered");
 
     await telegramApi.sendMessage(
       installation.chatId,
@@ -612,8 +624,8 @@ try {
       receipt.summary,
       receipt.detail,
       outcomeText,
-      "Bander handled this",
-      "2 of 3 actions used today",
+      "Handled automatically ✓",
+      "2 of 3 automatic moves used today.",
       oneTimeBinding.callbackValue,
       oneTimeCard.title,
       oneTimeCard.draftHash,
@@ -661,8 +673,8 @@ try {
       receipt.summary,
       receipt.detail,
       outcomeText,
-      "Bander handled this",
-      "2 of 3 actions used today",
+      "Handled automatically ✓",
+      "2 of 3 automatic moves used today.",
       oneTimeBinding.callbackValue,
       oneTimeCard.title,
       oneTimeCard.draftHash,
@@ -736,16 +748,18 @@ try {
     executions: adapter.executionCalls,
   };
   const syntheticCallbacks = [
-    { id: "synthetic:wrong-chat", chatId: Number(binding.chatId) - 1, messageId: binding.messageId, data: binding.callbackValue },
-    { id: "synthetic:wrong-message", chatId: Number(binding.chatId), messageId: binding.messageId + 1, data: binding.callbackValue },
-    { id: "synthetic:wrong-value", chatId: Number(binding.chatId), messageId: binding.messageId, data: "bander:wrong-value" },
+    { id: "synthetic:non-owner-approve", fromId: Number(prior.nonOwnerId), chatId: Number(binding.chatId), messageId: binding.messageId, data: binding.callbackValue },
+    { id: "synthetic:non-owner-decline", fromId: Number(prior.nonOwnerId), chatId: Number(binding.chatId), messageId: binding.messageId, data: binding.declineCallbackValue },
+    { id: "synthetic:wrong-chat", fromId: Number(installation.ownerTelegramId), chatId: Number(binding.chatId) - 1, messageId: binding.messageId, data: binding.callbackValue },
+    { id: "synthetic:wrong-message", fromId: Number(installation.ownerTelegramId), chatId: Number(binding.chatId), messageId: binding.messageId + 1, data: binding.callbackValue },
+    { id: "synthetic:wrong-value", fromId: Number(installation.ownerTelegramId), chatId: Number(binding.chatId), messageId: binding.messageId, data: "bander:wrong-value" },
   ];
   for (const candidate of syntheticCallbacks) {
     const update: TelegramUpdate = {
       update_id: -1,
       callback_query: {
         id: candidate.id,
-        from: { id: Number(installation.ownerTelegramId), is_bot: false },
+        from: { id: candidate.fromId, is_bot: false },
         data: candidate.data,
         message: {
           message_id: candidate.messageId,
@@ -763,25 +777,27 @@ try {
     },
     beforeSynthetic,
   );
-  console.log("PASS surface rejection: wrong chat, message and callback created no authority");
+  console.log("PASS surface rejection: non-owner, wrong chat, message and callback created no authority");
 
   let receipt: HumanReceipt | undefined;
+  let declinedBinding: (typeof binding) | undefined;
   if (scenario === "success") {
-    console.log("WAITING non-owner tap, then two owner taps on the genuine Bander Card");
-    await waitFor(
-      "non-owner rejection",
-      () =>
-        telegramApi.callbackAnswers.some((answer) =>
-          answer.text.includes("bound to its owner"),
-        ),
-      5 * 60_000,
+    console.log("WAITING two owner taps on the genuine Bander Card");
+    const nonOwnerAnswers = telegramApi.callbackAnswers.filter((answer) =>
+      answer.id.startsWith("synthetic:non-owner"),
+    );
+    assert.equal(nonOwnerAnswers.length, 2);
+    assert.ok(
+      nonOwnerAnswers.every((answer) =>
+        answer.text.includes("Only the connected person"),
+      ),
     );
     assert.equal(adapter.executionCalls, 0);
     await waitFor(
       "owner execution and replay",
       () =>
-        telegramApi.callbackAnswers.some((answer) => answer.text.includes("completed exactly")) &&
-        telegramApi.callbackAnswers.some((answer) => answer.text.includes("Nothing ran again")),
+        telegramApi.callbackAnswers.some((answer) => answer.text.includes("Done exactly as shown")) &&
+        telegramApi.callbackAnswers.some((answer) => answer.text.includes("Already done")),
       8 * 60_000,
     );
     const completedBinding = telegramStore.read().proposals[0]!;
@@ -793,21 +809,64 @@ try {
     assert.ok(completedBinding.receiptId);
     receipt = engine.getHumanReceipt(completedBinding.receiptId);
     assert.equal(
-      telegramApi.messages.filter((message) => message.text.includes(`Receipt: ${receipt!.id}`)).length,
+      telegramApi.messages.filter((message) => message.text.startsWith("Done ✓")).length,
       1,
     );
-    console.log("PASS approval: non-owner denied; owner replay returned one Receipt and execution");
+    assert.equal(
+      telegramApi.messages.some((message) => message.text.includes(receipt!.id)),
+      false,
+    );
+    console.log("PASS approval: non-owner denied; owner replay returned one private outcome and execution");
+
+    await telegramApi.sendMessage(
+      installation.chatId,
+      [
+        "Owner: send this different request, then tap Not now on Bander’s message:",
+        standingRequest,
+      ].join("\n"),
+    );
+    console.log("WAITING owner to request again and tap Not now");
+    await waitFor(
+      "second one-time proposal",
+      () => telegramStore.read().proposals.length === 2,
+      5 * 60_000,
+    );
+    declinedBinding = telegramStore.read().proposals[1]!;
+    await waitFor(
+      "owner decline",
+      () => telegramStore.read().proposals[1]?.lifecycle === "declined",
+      5 * 60_000,
+    );
+    await telegramService.handleUpdate({
+      update_id: -1,
+      callback_query: {
+        id: "synthetic:decline-replay",
+        from: { id: Number(installation.ownerTelegramId), is_bot: false },
+        data: declinedBinding.declineCallbackValue,
+        message: {
+          message_id: declinedBinding.messageId,
+          chat: { id: Number(declinedBinding.chatId), type: "supergroup" },
+        },
+      },
+    });
+    assert.equal(engine.getAgentReceipt(declinedBinding.draftId).status, "declined");
+    assert.equal(authorityStore.oneTimeBandWrites, 1);
+    assert.equal(authorityStore.permitWrites, 1);
+    assert.equal(adapter.executionCalls, 1);
+    assert.equal(authorityStore.receiptWrites, 1);
+    assert.equal(
+      telegramApi.messages.filter((message) => message.text === declineExplanation).length,
+      1,
+    );
+    console.log("PASS decline: one human outcome, idempotent replay, no new authority or execution");
   } else {
     console.log("WAITING two owner taps on the changed-world Bander Card");
     await waitFor(
       "human changed-world refusal and replay",
       () =>
-        telegramApi.callbackAnswers.some((answer) =>
-          answer.text.includes("calendar changed"),
-        ) &&
-        telegramApi.callbackAnswers.some((answer) =>
-          answer.text.includes("cannot resume execution"),
-        ),
+        telegramApi.callbackAnswers.filter((answer) =>
+          answer.text.includes("Stopped safely"),
+        ).length >= 2,
       8 * 60_000,
     );
     const conflictedBinding = telegramStore.read().proposals[0]!;
@@ -851,10 +910,14 @@ try {
 
   const modelInputs = provider.evidence.modelInputTexts.join("\n");
   const humanOnlyDetails = receipt
-    ? [receipt.id, receipt.summary, receipt.detail]
+    ? [receipt.id, receipt.summary, receipt.detail, declineExplanation]
     : [conflictExplanation];
   for (const forbidden of [
     binding.callbackValue,
+    binding.declineCallbackValue,
+    ...(declinedBinding
+      ? [declinedBinding.callbackValue, declinedBinding.declineCallbackValue]
+      : []),
     card.title,
     card.draftHash,
     ...card.allows,
@@ -892,6 +955,10 @@ try {
   const bundleText = readBundleText(bundlePath);
   for (const forbidden of [
     binding.callbackValue,
+    binding.declineCallbackValue,
+    ...(declinedBinding
+      ? [declinedBinding.callbackValue, declinedBinding.declineCallbackValue]
+      : []),
     card.title,
     card.draftHash,
     ...card.allows,
@@ -926,6 +993,7 @@ try {
       genuineCallbackAbsentFromOpenClaw: true,
       receiptAbsentFromModelAndTrajectory: true,
       conflictExplanationAbsentFromModelAndTrajectory: true,
+      declineExplanationAbsentFromModelAndTrajectory: true,
       banderTokenAbsentFromOpenClawEnvironment: true,
     },
     evidenceDirectory: path.relative(process.cwd(), runRoot),

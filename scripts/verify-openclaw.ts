@@ -204,7 +204,7 @@ try {
     ],
     environments.openclaw,
   );
-  if (!unsupportedResult.stdout.includes("couldn’t safely line up")) {
+  if (!unsupportedResult.stdout.includes("not sure how to prepare that safely")) {
     throw new Error("OpenClaw did not return the friendly unsupported-request response");
   }
 

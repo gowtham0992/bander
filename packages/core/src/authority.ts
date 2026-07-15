@@ -729,6 +729,9 @@ export class AuthorityEngine {
 
   decline(draftId: string): AgentReceipt {
     const draft = this.#requireDraft(draftId);
+    if (draft.status === "declined") {
+      return { draftId, status: "declined" };
+    }
     if (draft.status !== "proposed") {
       throw new AuthorityError("draft_not_declinable", "This Draft is no longer pending", 409);
     }

@@ -22,7 +22,7 @@ describe("deterministic OpenClaw provider", () => {
           {
             role: "user",
             content:
-              "Move dinner with Sarah to 7:30 and tell her I'll be 20 minutes late.",
+              "Move dinner with Sarah to 7:30 and tell her I'll be 20 minutes late",
           },
           {
             role: "user",
@@ -72,7 +72,7 @@ describe("deterministic OpenClaw provider", () => {
         {
           message: {
             content:
-              "I couldn’t safely line up that request with a bounded Bander action. Please phrase the exact Calendar or Messages change you want reviewed.",
+              "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
           },
         },
       ],
@@ -150,7 +150,7 @@ describe("deterministic OpenClaw provider", () => {
       choices: [
         {
           message: {
-            content: "Bander prepared the deal for human review. Nothing was executed.",
+            content: "I’m checking with Bander. Nothing has happened yet.",
           },
         },
       ],
@@ -184,10 +184,38 @@ describe("deterministic OpenClaw provider", () => {
         {
           message: {
             content:
-              "I couldn’t safely line up that request with a bounded Bander action. Please phrase the exact Calendar or Messages change you want reviewed.",
+              "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
           },
         },
       ],
     });
+  });
+
+  it("does not say nothing happened after an automatic action executed", async () => {
+    const provider = buildOpenClawMockProvider();
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          { role: "user", content: "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late." },
+          { role: "assistant", content: null },
+          { role: "toolResult", content: '{"draftId":"draft_auto","status":"executed"}' },
+          {
+            role: "user",
+            content:
+              "OpenClaw runtime context for the immediately preceding user message.\nInternal context.",
+          },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    const content = response.json().choices[0].message.content as string;
+    expect(content).toContain("handled that within the automatic limits");
+    expect(content).not.toContain("Nothing has happened yet");
   });
 });

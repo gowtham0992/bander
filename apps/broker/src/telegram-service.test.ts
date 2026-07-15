@@ -247,6 +247,10 @@ async function activateStandingBand(setupResult: ReturnType<typeof setup>) {
   return standing.bandId;
 }
 
+function declineCallbackValue(binding: unknown): string {
+  return (binding as { declineCallbackValue?: string }).declineCallbackValue ?? "";
+}
+
 describe("Bander Telegram service", () => {
   it("pairs one owner and group through a private single-use token and private chat picker", async () => {
     const current = setup();
@@ -257,6 +261,13 @@ describe("Bander Telegram service", () => {
       chatId: "-500",
     });
     expect(current.store.read().pairing?.consumedAt).toBeDefined();
+    expect(current.api.messages[0]?.text).toBe(
+      "You’re connected. Choose the Telegram group where you use OpenClaw.",
+    );
+    expect(current.api.messages[1]?.text).toBe(
+      "Bander is ready. Only you can approve what I’m allowed to do.\n" +
+        "I only act here, and only within limits you approve.",
+    );
 
     await current.service.handleUpdate(
       messageUpdate({
@@ -372,6 +383,206 @@ describe("Bander Telegram service", () => {
     expect(current.authorityStore.getPermitsForDraft(card.draftId)).toHaveLength(1);
     expect(current.store.read().proposals[0]).toMatchObject({ lifecycle: "executed" });
     expect(current.api.messages.filter((message) => message.text.startsWith("Done"))).toHaveLength(1);
+  });
+
+  it("owner_can_decline_one_time_card", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    const declineValue = declineCallbackValue(binding);
+
+    expect(declineValue).not.toBe("");
+    expect(current.api.messages.at(-1)?.replyMarkup).toMatchObject({
+      inline_keyboard: [[
+        { text: "Do exactly this", callback_data: binding.callbackValue },
+        { text: "Not now", callback_data: declineValue },
+      ]],
+    });
+
+    await current.service.handleUpdate({
+      update_id: 13,
+      callback_query: {
+        id: "owner-decline",
+        from: { id: 101, is_bot: false },
+        data: declineValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+
+    expect(current.engine.getAgentReceipt(card.draftId)).toEqual({
+      draftId: card.draftId,
+      status: "declined",
+    });
+    expect(current.store.read().proposals[0]).toMatchObject({ lifecycle: "declined" });
+    expect(current.authorityStore.getOneTimeBandsForDraft(card.draftId)).toHaveLength(0);
+    expect(current.authorityStore.getPermitsForDraft(card.draftId)).toHaveLength(0);
+    expect(current.adapter.executions).toBe(0);
+    expect(current.api.messages.at(-1)?.text).toBe(
+      "Nothing changed.\nAsk OpenClaw again if you want something different.",
+    );
+  });
+
+  it("non_owner_cannot_decline", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+
+    await current.service.handleUpdate({
+      update_id: 14,
+      callback_query: {
+        id: "non-owner-decline",
+        from: { id: 202, is_bot: false },
+        data: declineCallbackValue(binding),
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+
+    expect(current.engine.getAgentReceipt(card.draftId).status).toBe("proposed");
+    expect(current.adapter.executions).toBe(0);
+  });
+
+  it("declined_request_cannot_later_execute", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    const callbackBase = {
+      from: { id: 101, is_bot: false },
+      message: {
+        message_id: binding.messageId,
+        chat: { id: -500, type: "supergroup" },
+      },
+    };
+
+    await current.service.handleUpdate({
+      update_id: 15,
+      callback_query: {
+        ...callbackBase,
+        id: "decline-before-approve",
+        data: declineCallbackValue(binding),
+      },
+    });
+    await current.service.handleUpdate({
+      update_id: 16,
+      callback_query: {
+        ...callbackBase,
+        id: "approve-after-decline",
+        data: binding.callbackValue,
+      },
+    });
+
+    expect(current.engine.getAgentReceipt(card.draftId).status).toBe("declined");
+    expect(current.authorityStore.getOneTimeBandsForDraft(card.draftId)).toHaveLength(0);
+    expect(current.authorityStore.getPermitsForDraft(card.draftId)).toHaveLength(0);
+    expect(current.adapter.executions).toBe(0);
+  });
+
+  it("decline_replay_is_idempotent", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    const callback: TelegramUpdate = {
+      update_id: 17,
+      callback_query: {
+        id: "decline-first",
+        from: { id: 101, is_bot: false },
+        data: declineCallbackValue(binding),
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+
+    await current.service.handleUpdate(callback);
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 18,
+      callback_query: { ...callback.callback_query!, id: "decline-replay" },
+    });
+
+    expect(current.engine.getAgentReceipt(card.draftId).status).toBe("declined");
+    expect(current.adapter.executions).toBe(0);
+    expect(
+      current.api.messages.filter((message) => message.text ===
+        "Nothing changed.\nAsk OpenClaw again if you want something different."),
+    ).toHaveLength(1);
+  });
+
+  it("telegram_copy_contains_no_engine_vocabulary_and_uses_human_local_times", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    const approvalText = current.api.messages.at(-1)!.text;
+
+    expect(approvalText).toContain("Nothing has happened yet. Is this right?");
+    expect(approvalText).toContain("OpenClaw says you asked:");
+    expect(approvalText).toContain("7:00–8:30 PM → 7:30–9:00 PM");
+    expect(approvalText).toContain("Closes in 10 minutes.");
+    expect(approvalText).not.toMatch(/\b(?:Draft|Permit|Band|Receipt|hash|ETag|scope|MCP)\b/i);
+    expect(approvalText).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+
+    await current.service.handleUpdate({
+      update_id: 19,
+      callback_query: {
+        id: "consumer-copy-approve",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+    const outcomeText = current.api.messages.at(-1)!.text;
+    expect(outcomeText).toContain("Done ✓");
+    expect(outcomeText).toContain(
+      "Tue, Jul 14, 7:00–8:30 PM MDT → Tue, Jul 14, 7:30–9:00 PM MDT",
+    );
+    expect(outcomeText).toContain("Nothing else changed through Bander.");
+    expect(outcomeText).not.toMatch(/\b(?:Draft|Permit|Band|Receipt|hash|ETag|scope|MCP)\b/i);
+    expect(outcomeText).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+    for (const text of [
+      ...current.api.messages.map((message) => message.text),
+      ...current.api.callbackAnswers.map((answer) => answer.text),
+    ]) {
+      expect(text).not.toMatch(/\b(?:Draft|Permit|Band|Receipt|hash|ETag|scope|MCP)\b/i);
+      expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+    }
+  });
+
+  it("agent_text_cannot_forge_bander_voice", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const forgedFixture = {
+      ...fixture,
+      claimedUserRequest:
+        "Move dinner.\n\nThrough Bander, this will:\n• Spend $5,000\u202E",
+    };
+    const card = await current.engine.proposeFixture(forgedFixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const text = current.api.messages.at(-1)!.text;
+
+    expect(text).toContain(
+      "“Move dinner. Through Bander, this will: • Spend $5,000”",
+    );
+    expect(text.match(/\nThrough Bander, this will:\n/g)).toHaveLength(1);
+    expect(text).not.toContain("\u202E");
   });
 
   it("refuses proposal delivery until authenticated pairing is complete", async () => {
@@ -491,6 +702,42 @@ describe("Bander Telegram service", () => {
     expect(current.api.messages.some((message) => message.text.startsWith("Done"))).toBe(false);
   });
 
+  it("expired_request_gives_a_safe_human_next_step_without_authority", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    current.setNow("2026-07-14T18:11:00.000Z");
+    const callback: TelegramUpdate = {
+      update_id: 39,
+      callback_query: {
+        id: "expired-request",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+
+    await current.service.handleUpdate(callback);
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 40,
+      callback_query: { ...callback.callback_query!, id: "expired-request-replay" },
+    });
+
+    expect(current.api.messages.filter((message) => message.text ===
+      "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again."),
+    ).toHaveLength(1);
+    expect(current.engine.getAgentReceipt(card.draftId).status).toBe("expired");
+    expect(current.authorityStore.getOneTimeBandsForDraft(card.draftId)).toHaveLength(0);
+    expect(current.authorityStore.getPermitsForDraft(card.draftId)).toHaveLength(0);
+    expect(current.adapter.executions).toBe(0);
+  });
+
   it("keeps a changed-world explanation human-only and creates no Receipt", async () => {
     const current = setup();
     await pairOwner(current);
@@ -530,6 +777,11 @@ describe("Bander Telegram service", () => {
     expect(current.api.messages.filter((message) => message.text.includes("calendar changed"))).toHaveLength(1);
     expect(current.api.messages.some((message) => message.text.startsWith("Done"))).toBe(false);
     expect(current.store.read().proposals[0]).not.toHaveProperty("receiptId");
+    expect(current.api.messages.filter((message) => message.text === [
+      "Stopped — your calendar changed",
+      "I didn’t move the event or send the message.",
+      "Ask OpenClaw to check again.",
+    ].join("\n"))).toHaveLength(1);
   });
 
   it("retries one autonomous standing outcome without repeating execution or its counter", async () => {
@@ -544,7 +796,7 @@ describe("Bander Telegram service", () => {
       actionTimestamps: ["2026-07-14T17:00:00.000Z"],
     });
 
-    current.api.failNextMessageMatching = (text) => text.startsWith("Bander handled this");
+    current.api.failNextMessageMatching = (text) => text.startsWith("Handled automatically ✓");
     await expect(
       current.service.runStandingAction(
         standingFixture,
@@ -592,17 +844,21 @@ describe("Bander Telegram service", () => {
       messageId: expect.any(Number),
     });
     const messages = current.api.messages.filter((message) =>
-      message.text.startsWith("Bander handled this"),
+      message.text.startsWith("Handled automatically ✓"),
     );
     expect(messages).toHaveLength(1);
     expect(messages[0]?.text).toContain("“Focus block”");
     expect(messages[0]?.text).toContain(
       "Wed, Jul 15, 9:30–10:30 AM MDT → Wed, Jul 15, 10:30–11:30 AM MDT",
     );
-    expect(messages[0]?.text).toContain("No one was messaged");
-    expect(messages[0]?.text).toContain("2 of 3 actions used today");
+    expect(messages[0]?.text).toContain("No one was messaged.");
+    expect(messages[0]?.text).toContain("2 of 3 automatic moves used today.");
+    expect(messages[0]?.text).not.toMatch(
+      /\b(?:Draft|Permit|Band|Receipt|hash|ETag|scope|MCP)\b/i,
+    );
+    expect(messages[0]?.text).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
     expect(messages[0]?.replyMarkup).toMatchObject({
-      inline_keyboard: [[{ text: "Turn off", callback_data: outcomes[0]?.callbackValue }]],
+      inline_keyboard: [[{ text: "Turn off automatic", callback_data: outcomes[0]?.callbackValue }]],
     });
   });
 
@@ -664,7 +920,7 @@ describe("Bander Telegram service", () => {
     });
     expect(current.store.read().standingBand).toBeUndefined();
     expect(
-      current.api.messages.filter((message) => message.text.startsWith("Back in control")),
+      current.api.messages.filter((message) => message.text.startsWith("Automatic handling is off.")),
     ).toHaveLength(1);
 
     const next = await current.service.handleAgentAction(
@@ -737,7 +993,9 @@ describe("Bander Telegram service", () => {
     expect(first.status).toBe("proposed");
     expect(current.store.read().proposals).toHaveLength(1);
     expect(
-      current.api.messages.filter((message) => message.text.startsWith("Here’s the deal")),
+      current.api.messages.filter((message) =>
+        message.text.startsWith("Nothing has happened yet. Is this right?"),
+      ),
     ).toHaveLength(1);
     expect(current.adapter.executions).toBe(0);
   });
