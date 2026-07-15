@@ -1,5 +1,10 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { AuthorityEngine, AuthorityError, type DraftFixture } from "@bander/core";
+import {
+  AuthorityEngine,
+  AuthorityError,
+  type DraftFixture,
+} from "@bander/core";
+import type { ApprovalCard } from "@bander/contracts";
 import { CompilerError, type DraftCompiler } from "./compiler.js";
 import { registerMcpRoutes } from "./mcp.js";
 
@@ -8,6 +13,7 @@ interface BrokerAppOptions {
   fixtures: Map<string, DraftFixture>;
   compiler?: DraftCompiler;
   agentCompiler?: DraftCompiler;
+  deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
   resetDemo?: () => Promise<void>;
   simulateCalendarChange?: () => Promise<void>;
   dropNextStandingRunResponseAfterCompletion?: () => boolean;

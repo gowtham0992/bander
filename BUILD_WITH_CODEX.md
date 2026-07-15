@@ -464,3 +464,43 @@ no OpenAI or Telegram token-shaped secrets found
 ```
 
 The reusable live command is `npm run verify:telegram-privacy`. It validates the generated OpenClaw policy before starting Telegram, keeps tokens out of logs and tracked files, and writes its complete local evidence under `.bander/`. `/feedback` remains deferred. The privacy gate is now open for a later polished hero-flow slice, but that slice was intentionally not started in this checkpoint.
+
+## Checkpoint 14 — real Bander Telegram one-time service
+
+**Status:** verified end to end on July 14, 2026; changed-world Telegram refusal and live GPT-5.6 Sol evidence remain pending
+
+The reviewed privacy checkpoint was sanity-checked, committed as `0c615e7`, and pushed to `origin/main` before this slice began.
+
+The production Telegram behavior now lives in the Bander broker process as `TelegramService`. It owns the Bander bot credential, one-owner installation, Card delivery, callback ingestion and authorization, the call to the existing authority engine, and human Receipt delivery. The active `verify:telegram-privacy` command uses that service instead of duplicating Card and callback behavior in the harness.
+
+Trust-on-first-use `/bind` is gone from production. Bander creates a high-entropy, expiring, single-use pairing token and stores only its SHA-256 digest. The owner consumes it in a private Bander-bot conversation. Bander then sends Telegram's private `request_chat` control with `bot_is_member: true`; the matching `chat_shared` update selects the single group. The agent never receives, provides, or selects the token, owner, or destination. Pairing, installation, update offset, and proposal mappings are stored in owner-only files under ignored `.bander/` state.
+
+Each proposal persists the Bander installation ID, owner Telegram ID, group ID, Bander-authored message ID, opaque per-proposal callback value, Draft ID and hash, expiry, lifecycle, and Receipt-delivery state. The callback value is not described as a nonce or as independently single-use. Safety comes from exact surface authorization plus the authority engine's idempotent lifecycle. Every valid first callback and replay calls `approveAndExecute`; no callback mints authority directly. The production service has no `nonOwnerCheckComplete` state.
+
+OpenClaw's generated Telegram configuration is built and asserted from one pinned policy: owner-only sender allowlists, one group, `requireMention: false`, `historyLimit: 0`, allowlisted context visibility, configuration writes off, and exactly three Bander tools. Runtime projection maps only the OpenClaw bot token into OpenClaw and only the Bander bot token into the broker. Neither environment receives the other's token; OpenClaw receives no mock-service, Calendar, or Messages credential.
+
+The first service test was observed red before implementation:
+
+```text
+FAIL apps/broker/src/telegram-service.test.ts
+Cannot find module './telegram-service.js'
+```
+
+The restored focused run passed three service-boundary tests covering private single-use pairing, private group selection, exact persisted approval-surface authorization, non-owner/wrong-surface rejection, owner replay, one Receipt delivery, and refusal before pairing. The full functional suite now passes 10 files and 61 tests; the attack suite remains 20 tests.
+
+The live service run produced:
+
+```text
+pairing: private token and private group picker consumed once
+OpenClaw: pinned policy and isolated environment validated
+proposal: real service posted Card; MCP returned only draftId and status
+rejected: non-owner, wrong chat, wrong message, wrong callback, OpenClaw imitation
+authority: 1 Draft, 1 Band, 1 Permit, 1 execution, 1 Receipt
+privacy: Card, genuine callback and Receipt absent from model input and trajectory
+```
+
+The deterministic OpenClaw provider also returns a friendly clarification for unsupported natural requests. The real OpenClaw verifier observed that response without a tool call or authority creation.
+
+Post-slice verification passed `npm run check`, `npm run attack`, `npm run verify:demo`, both recovery verifiers, the real OpenClaw verifier, the production build, and `npm audit --audit-level=moderate` with zero vulnerabilities. Complete live evidence is stored locally under ignored `.bander/telegram-service-verification-1784089547327-4d3bd4ce/` with owner-only permissions.
+
+Per the builder's sequencing, this slice did not add Telegram changed-world behavior or standing Bands. `/feedback` remains deferred. The live GPT-5.6 Sol call should be captured as soon as API access is available.

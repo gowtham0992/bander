@@ -1,7 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import { createRuntimeEnvironments } from "./process-env.js";
 
 export async function runLocal(mode: "development" | "demo"): Promise<void> {
+  if (fs.existsSync(".env")) process.loadEnvFile(".env");
   const environments = createRuntimeEnvironments({ ...process.env, NODE_ENV: mode });
   const children: ChildProcess[] = [];
   let stopping = false;

@@ -26,6 +26,7 @@ npm run verify:demo
 npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
+npm run verify:telegram-privacy
 ```
 
 `npm run verify:recovery` opens a real local HTTP listener and proves the ambiguous-response path: the Calendar commits, the first approval response is lost, the same-hash approval is retried, and Bander returns one Receipt without minting new authority or repeating the mutation.
@@ -44,6 +45,14 @@ OpenClaw runs through the compatible Node runtime pinned inside this project and
 
 `npm run verify:openclaw` runs a real local OpenClaw agent turn against a deterministic OpenAI-compatible mock provider. The model receives exactly `bander__list_capabilities`, `bander__propose_action`, and `bander__get_receipt`; it passes the human request through MCP, creates a proposed Draft/Card, and performs no execution.
 
+## Telegram one-time journey
+
+Set separate `OPENCLAW_TELEGRAM_BOT_TOKEN` and `BANDER_TELEGRAM_BOT_TOKEN` values only in ignored local `.env`. On an unpaired installation, Bander writes an expiring private pairing link to `.bander/telegram-service/pairing-link.txt`. The owner opens that link in a private Bander-bot chat, then uses Telegram's private group picker. Neither the pairing token nor the selected destination enters the shared group or OpenClaw.
+
+The Bander-owned service persists the one-owner installation and every approval surface under `.bander/telegram-service/`. It posts the human Card, checks the owner, chat, Bander-authored message and opaque per-proposal callback value, calls the existing idempotent approval engine, and posts the human Receipt. OpenClaw receives only Draft ID and lifecycle status.
+
+`npm run verify:telegram-privacy` runs this real service with real Telegram and OpenClaw. It requires the owner and non-owner taps described in the terminal. The older `scripts/telegram-privacy-spike.ts` remains historical evidence; it is not the active verifier or production implementation.
+
 ## Optional GPT-5.6 compiler
 
 Set `OPENAI_API_KEY` before `npm run demo` to enable `/api/compiler/proposals`. The model uses strict Structured Outputs to select a versioned candidate fixture; deterministic Bander code still creates the Draft and owns every authorization decision. Without a key, the compiler route stays closed and the full judge demo remains runnable.
@@ -58,6 +67,6 @@ The reference MCP endpoint is intentionally local-only and currently has no appl
 
 ## Build status
 
-The current implementation verifies the isolated credential boundary, exact one-time authority, duration-preserving Calendar reschedules, idempotent response-loss recovery, changed-world refusal, attack suite, proposal flood control, the first narrow standing Band, the real OpenClaw Streamable HTTP proposal flow, effective session tool inventory, provenance-isolated agent text, the empirical two-bot Telegram privacy boundary, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
+The current implementation verifies the isolated credential boundary, exact one-time authority, duration-preserving Calendar reschedules, idempotent response-loss recovery, changed-world refusal, attack suite, proposal flood control, the first narrow standing Band, the real OpenClaw Streamable HTTP proposal flow, effective session tool inventory, provenance-isolated agent text, the real Bander-owned Telegram one-time journey, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
 
 For demo preparation, see [docs/recording-plan.md](./docs/recording-plan.md) and [docs/submission-checklist.md](./docs/submission-checklist.md).

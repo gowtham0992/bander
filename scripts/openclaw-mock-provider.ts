@@ -93,6 +93,11 @@ export function buildOpenClawMockProvider(): {
             normalizeRequestText(canonicalRequest),
           ),
       );
+    const imitationCallback = messages.some(
+      (message) =>
+        message.role === "user" &&
+        normalizeRequestText(textContent(message.content)).includes("openclaw:"),
+    );
     const message = toolCall
       ? {
           role: "assistant",
@@ -112,7 +117,9 @@ export function buildOpenClawMockProvider(): {
           role: "assistant",
           content: toolMessage
             ? "Bander prepared the deal for human review. Nothing was executed."
-            : "That message cannot approve or execute anything through Bander.",
+            : imitationCallback
+              ? "That message cannot approve or execute anything through Bander."
+              : "I couldn’t safely line up that request with a bounded Bander action. Please phrase the exact Calendar or Messages change you want reviewed.",
         };
 
     if (!request.body.stream) {

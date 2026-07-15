@@ -51,7 +51,7 @@ export class ExactFixtureDraftCompiler implements DraftCompiler {
     if (!fixture) {
       throw new CompilerError(
         "clarification_required",
-        "That wording does not exactly match a bounded local action. Ask the person to restate one of Bander’s listed capabilities.",
+        "I couldn’t safely line up that request with a bounded Bander action. Please phrase the exact Calendar or Messages change you want reviewed.",
       );
     }
     return {

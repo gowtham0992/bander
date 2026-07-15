@@ -10,6 +10,8 @@ describe("canonical process credential projection", () => {
       CALENDAR_API_KEY: "must-not-cross-boundary",
       MESSAGES_API_KEY: "must-not-cross-boundary",
       MOCK_SERVICE_TOKEN: "must-not-cross-boundary",
+      BANDER_TELEGRAM_BOT_TOKEN: "bander-only-token",
+      OPENCLAW_TELEGRAM_BOT_TOKEN: "openclaw-only-token",
     });
 
     expect(environments.openclaw).toMatchObject({
@@ -27,6 +29,13 @@ describe("canonical process credential projection", () => {
     expect(environments.openclaw).not.toHaveProperty("CALENDAR_API_KEY");
     expect(environments.openclaw).not.toHaveProperty("MESSAGES_API_KEY");
     expect(environments.openclaw).not.toHaveProperty("MOCK_SERVICE_TOKEN");
+    expect(environments.openclaw).not.toHaveProperty("BANDER_TELEGRAM_BOT_TOKEN");
+    expect(environments.openclaw.TELEGRAM_BOT_TOKEN).toBe("openclaw-only-token");
+    expect(environments.broker.BANDER_TELEGRAM_BOT_TOKEN).toBe(
+      "bander-only-token",
+    );
+    expect(environments.broker).not.toHaveProperty("OPENCLAW_TELEGRAM_BOT_TOKEN");
+    expect(environments.broker).not.toHaveProperty("TELEGRAM_BOT_TOKEN");
     expect(environments.broker.MOCK_SERVICE_TOKEN).toHaveLength(64);
   });
 });

@@ -1,6 +1,6 @@
 # Telegram privacy spike
 
-**Gate status:** passed empirically on July 14, 2026 with OpenClaw 2026.7.1.
+**Gate status:** the spike passed, and the real Bander Telegram service passed the same privacy gate on July 14, 2026 with OpenClaw 2026.7.1.
 
 The live test used one private Telegram group, separate OpenClaw and Bander bot tokens, one bound owner, and one bound non-owner. Raw updates, tokens, and numeric identities remained in ignored local `.bander/` evidence only.
 
@@ -20,16 +20,14 @@ Configure both bots through the official `@BotFather` interface:
 - Do not make either bot a group administrator.
 - The Bander bot can keep Group Privacy Mode enabled; it needs its own callback updates, not ambient group messages.
 
-Store and export these values only from the ignored local `.env` file—never paste them into Codex or commit them:
+Store only the bot tokens in ignored local `.env`—never paste them into Codex or commit them:
 
 ```text
 OPENCLAW_TELEGRAM_BOT_TOKEN=<OpenClaw bot token>
 BANDER_TELEGRAM_BOT_TOKEN=<separate Bander bot token>
-BANDER_TELEGRAM_OWNER_ID=<numeric Mum test-user ID>
-BANDER_TELEGRAM_CHAT_ID=<negative test group/supergroup ID>
 ```
 
-The non-owner does not need a configured identity. The callback test must prove that any `CallbackQuery.from.id` other than the single bound owner is rejected.
+The production service does not trust owner or group IDs from environment variables or `/bind`. It creates an expiring single-use token for a private Bander-bot conversation. After authenticating the token holder, it uses Telegram's private `request_chat` picker with `bot_is_member: true`. The resulting `chat_shared` update binds that owner and group once. The pairing token and destination choice never appear in the shared group, so OpenClaw cannot receive, provide, or select them.
 
 ## Required OpenClaw policy
 
@@ -39,7 +37,7 @@ The spike generates an ignored local OpenClaw config that maps `OPENCLAW_TELEGRA
 - `bander__propose_action`
 - `bander__get_receipt`
 
-The Bander bot token, owner ID, and chat ID remain Bander-side configuration. MCP callers cannot choose or replace `ownerRef`.
+The Bander bot token and persisted installation remain Bander-side. MCP callers cannot choose or replace the owner or destination.
 
 ## Empirical pass conditions
 
@@ -63,4 +61,10 @@ If any privacy condition fails, the shared group gets only a minimal Bander noti
 - An OpenClaw-authored imitation callback reached OpenClaw but minted no Bander authority and executed nothing.
 - The exported complete OpenClaw trajectory contained the human request, the Bander proposal tool, and the OpenClaw imitation callback. It contained zero Bander Card/Receipt/conflict canaries, zero real Bander callback handles, zero Card titles, zero Draft hashes, zero exact effect disclosures, and zero Receipt IDs.
 
-The polished Telegram hero flow may now proceed in a later slice. This spike did not implement it.
+## Real-service result
+
+`npm run verify:telegram-privacy` now exercises `TelegramService`, not a second implementation inside the harness. The live run observed private token consumption and private group selection, then one continuous natural request through real OpenClaw, minimal MCP status, service-owned Card delivery, callback authorization, idempotent execution, and service-owned Receipt delivery.
+
+The real-service run rejected the non-owner, wrong chat, wrong Bander message, wrong callback value, and OpenClaw imitation. Owner replay returned the same Receipt. Exactly one Draft, one one-time Band, one Permit, one downstream execution, and one Receipt existed. The complete model input and exported trajectory contained no human Card, genuine Bander callback, or Receipt details. OpenClaw had exactly three Bander tools and no Bander bot token.
+
+Changed-world Telegram refusal and standing Bands remain outside this slice. The next Telegram slice is the real changed-world refusal with its human-only explanation.

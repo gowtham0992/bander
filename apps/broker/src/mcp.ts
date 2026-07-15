@@ -2,7 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod/v4";
-import { AuthorityError, type AuthorityEngine, type DraftFixture } from "@bander/core";
+import {
+  AuthorityError,
+  type AuthorityEngine,
+  type DraftFixture,
+} from "@bander/core";
+import type { ApprovalCard } from "@bander/contracts";
 import {
   CompilerError,
   createDeterministicDraftCompiler,
@@ -13,6 +18,7 @@ interface McpRoutesOptions {
   engine: AuthorityEngine;
   fixtures: Map<string, DraftFixture>;
   agentCompiler?: DraftCompiler;
+  deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
 }
 
 const MCP_RATE_LIMIT_MAX_REQUESTS = 30;
@@ -89,6 +95,7 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
           fixture,
           "openclaw-reference",
         );
+        await options.deliverAgentProposal?.(card);
         const agentStatus = options.engine.getAgentReceipt(card.draftId);
         return {
           content: [{ type: "text", text: JSON.stringify(agentStatus) }],

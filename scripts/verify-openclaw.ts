@@ -92,10 +92,14 @@ async function run(
   });
 }
 
-const environments = createRuntimeEnvironments({
+const verificationSource: NodeJS.ProcessEnv = {
   ...process.env,
   NODE_ENV: "test",
-});
+};
+delete verificationSource.BANDER_TELEGRAM_BOT_TOKEN;
+delete verificationSource.OPENCLAW_TELEGRAM_BOT_TOKEN;
+delete verificationSource.TELEGRAM_BOT_TOKEN;
+const environments = createRuntimeEnvironments(verificationSource);
 const provider = buildOpenClawMockProvider();
 const children: Array<{ child: ChildProcess; logs: () => string }> = [];
 
@@ -182,6 +186,28 @@ try {
     throw new Error("The OpenClaw proposal crossed the human approval boundary");
   }
 
+  const unsupportedResult = await run(
+    node,
+    [
+      openclaw,
+      "agent",
+      "--local",
+      "--session-id",
+      `bander-unsupported-${Date.now()}`,
+      "--message",
+      "Book me a flight to Tokyo tomorrow.",
+      "--thinking",
+      "off",
+      "--json",
+      "--timeout",
+      "60",
+    ],
+    environments.openclaw,
+  );
+  if (!unsupportedResult.stdout.includes("couldn’t safely line up")) {
+    throw new Error("OpenClaw did not return the friendly unsupported-request response");
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -192,6 +218,7 @@ try {
         draftId: proposalStatus.draftId,
         draftStatus: agentReceipt.status,
         execution: "not_started",
+        unsupportedRequest: "friendly clarification returned without authority",
       },
       null,
       2,

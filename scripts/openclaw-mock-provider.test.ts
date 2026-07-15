@@ -49,4 +49,36 @@ describe("deterministic OpenClaw provider", () => {
     });
     expect(provider.evidence.sawHumanRequest).toBe(true);
   });
+
+  it("answers an unsupported natural request with a friendly clarification", async () => {
+    const provider = buildOpenClawMockProvider();
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          { role: "user", content: "Book me a flight to Tokyo tomorrow." },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      choices: [
+        {
+          message: {
+            content:
+              "I couldn’t safely line up that request with a bounded Bander action. Please phrase the exact Calendar or Messages change you want reviewed.",
+          },
+        },
+      ],
+    });
+    expect(provider.evidence.toolInventories[0]).toEqual([
+      "bander__propose_action",
+    ]);
+  });
 });

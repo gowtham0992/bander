@@ -193,9 +193,13 @@ describe("broker approval boundary", () => {
 
   it("registers only the three narrow agent tools", async () => {
     const setup = createApp();
+    let deliveredCard: { draftId: string; draftHash: string } | undefined;
     const server = createBanderMcpServer({
       engine: setup.engine,
       fixtures: setup.fixtures,
+      deliverAgentProposal: async (card) => {
+        deliveredCard = card;
+      },
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: "bander-test", version: "1.0.0" });
@@ -242,6 +246,10 @@ describe("broker approval boundary", () => {
       expect(first.text).not.toContain("Here’s the deal");
       expect(first.text).not.toContain(fixture.claimedUserRequest);
       expect(first.text).not.toContain("effects");
+      expect(deliveredCard).toMatchObject({
+        draftId: JSON.parse(first.text).draftId,
+        draftHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
       expect(setup.adapter.executions).toBe(0);
     } finally {
       await client.close();
