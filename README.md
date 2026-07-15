@@ -27,6 +27,7 @@ npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
 npm run verify:telegram-privacy
+npm run verify:telegram-conflict
 ```
 
 `npm run verify:recovery` opens a real local HTTP listener and proves the ambiguous-response path: the Calendar commits, the first approval response is lost, the same-hash approval is retried, and Bander returns one Receipt without minting new authority or repeating the mutation.
@@ -52,6 +53,8 @@ Set separate `OPENCLAW_TELEGRAM_BOT_TOKEN` and `BANDER_TELEGRAM_BOT_TOKEN` value
 The Bander-owned service persists the one-owner installation and every approval surface under `.bander/telegram-service/`. It posts the human Card, checks the owner, chat, Bander-authored message and opaque per-proposal callback value, calls the existing idempotent approval engine, and posts the human Receipt. OpenClaw receives only Draft ID and lifecycle status.
 
 `npm run verify:telegram-privacy` runs this real service with real Telegram and OpenClaw. It requires the owner and non-owner taps described in the terminal. The older `scripts/telegram-privacy-spike.ts` remains historical evidence; it is not the active verifier or production implementation.
+
+`npm run verify:telegram-conflict` changes the seeded Calendar after the real service posts its Card. The owner's approval produces one human-only refusal, no Bander mutation and no Receipt; replay stays closed, and the exported OpenClaw trajectory contains none of the refusal explanation.
 
 ## Optional GPT-5.6 compiler
 

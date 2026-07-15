@@ -504,3 +504,26 @@ The deterministic OpenClaw provider also returns a friendly clarification for un
 Post-slice verification passed `npm run check`, `npm run attack`, `npm run verify:demo`, both recovery verifiers, the real OpenClaw verifier, the production build, and `npm audit --audit-level=moderate` with zero vulnerabilities. Complete live evidence is stored locally under ignored `.bander/telegram-service-verification-1784089547327-4d3bd4ce/` with owner-only permissions.
 
 Per the builder's sequencing, this slice did not add Telegram changed-world behavior or standing Bands. `/feedback` remains deferred. The live GPT-5.6 Sol call should be captured as soon as API access is available.
+
+## Checkpoint 15 — real Telegram changed-world refusal
+
+**Status:** verified end to end on July 14, 2026; live GPT-5.6 Sol evidence remains pending
+
+The one-time Telegram service slice was committed as `616a30c` and pushed before this follow-up began. The production service already translated the authority engine's changed-world conflict into a human Telegram message, so the new service-level regression passed without a behavior patch. It now pins the required lifecycle: one Band and Permit, Draft status `conflict`, one human explanation across callback replay, no Receipt, and no `Done` message.
+
+The real verifier gained a separate `verify:telegram-conflict` mode. It reused the previously authenticated installation, ran a fresh real OpenClaw natural-request turn, let the real Bander service post the Card, and changed the seeded Calendar precondition before the owner approved. Wrong chat, message and callback probes still created no authority. Two legitimate owner callbacks both passed through `approveAndExecute`: the first observed the downstream precondition conflict, while replay refused to resume the conflicted Draft.
+
+Observed live evidence:
+
+```text
+scenario: conflict
+authority: 1 Draft, 1 Band, 1 Permit, 1 downstream dispatch
+Bander mutations: 0
+Receipts: 0
+human refusal messages: 1 across replay
+agent status: conflict
+Card, genuine callback, Receipt and conflict explanation in OpenClaw trajectory: 0
+OpenClaw imitation authority: 0
+```
+
+The ignored owner-only evidence directory is `.bander/telegram-service-verification-conflict-1784090189301-f05e6dce/`. Standing Bands remain outside the Telegram service slice. `/feedback` remains deferred. `OPENAI_API_KEY` is not configured in the local environment, so the external GPT-5.6 Sol evidence call could not yet be captured.

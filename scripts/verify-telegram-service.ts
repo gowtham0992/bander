@@ -14,6 +14,7 @@ import {
   TelegramHttpApi,
   TelegramService,
   type TelegramBotApi,
+  type TelegramInstallation,
   type TelegramMessage,
   type TelegramUpdate,
 } from "../apps/broker/src/telegram-service.js";
@@ -29,6 +30,12 @@ import { createRuntimeEnvironments } from "./process-env.js";
 
 const canonicalRequest =
   "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.";
+const conflictExplanation =
+  "Your calendar changed after you approved this. I didn’t act.";
+const scenario =
+  process.env.BANDER_TELEGRAM_VERIFY_SCENARIO === "conflict"
+    ? "conflict"
+    : "success";
 
 class CountingAuthorityStore extends AuthorityStore {
   draftWrites = 0;
@@ -140,6 +147,27 @@ function loadPriorIdentities(): PriorSpikeIdentities {
   throw new Error("Validated Telegram adversary identity evidence is unavailable");
 }
 
+function loadAuthenticatedInstallation(): TelegramInstallation | undefined {
+  const candidates = fs
+    .readdirSync(".bander", { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        entry.name.startsWith("telegram-service-verification-"),
+    )
+    .map((entry) => path.resolve(".bander", entry.name, "telegram-state.json"))
+    .filter((candidate) => fs.existsSync(candidate))
+    .sort()
+    .reverse();
+  for (const candidate of candidates) {
+    const state = JSON.parse(fs.readFileSync(candidate, "utf8")) as {
+      installation?: TelegramInstallation;
+    };
+    if (state.installation) return state.installation;
+  }
+  return undefined;
+}
+
 async function waitFor(
   label: string,
   condition: () => boolean | Promise<boolean>,
@@ -233,7 +261,9 @@ if (!banderToken || !openclawToken) {
 
 const prior = loadPriorIdentities();
 const runId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
-const runRoot = path.resolve(`.bander/telegram-service-verification-${runId}`);
+const runRoot = path.resolve(
+  `.bander/telegram-service-verification-${scenario}-${runId}`,
+);
 fs.mkdirSync(runRoot, { recursive: true, mode: 0o700 });
 fs.chmodSync(runRoot, 0o700);
 
@@ -246,11 +276,24 @@ const engine = new AuthorityEngine({ store: authorityStore, adapter });
 const telegramApi = new RecordingTelegramApi(banderToken);
 const telegramStore = new FileTelegramServiceStore(path.join(runRoot, "telegram-state.json"));
 const telegramService = new TelegramService({ api: telegramApi, engine, store: telegramStore });
-const pairing = await telegramService.createPairing();
-const pairingPath = path.join(runRoot, "pairing-link.txt");
-fs.writeFileSync(pairingPath, `${pairing.link}\nExpires: ${pairing.expiresAt}\n`, {
-  mode: 0o600,
-});
+const reusedInstallation =
+  scenario === "conflict" ? loadAuthenticatedInstallation() : undefined;
+let pairingPath: string | undefined;
+if (reusedInstallation) {
+  telegramStore.write({
+    version: 1,
+    installation: reusedInstallation,
+    proposals: [],
+  });
+} else {
+  const pairing = await telegramService.createPairing();
+  pairingPath = path.join(runRoot, "pairing-link.txt");
+  fs.writeFileSync(
+    pairingPath,
+    `${pairing.link}\nExpires: ${pairing.expiresAt}\n`,
+    { mode: 0o600 },
+  );
+}
 telegramService.start();
 
 let broker: ReturnType<typeof buildBrokerApp> | undefined;
@@ -259,16 +302,20 @@ let gateway: ChildProcess | undefined;
 let gatewayLog: fs.WriteStream | undefined;
 
 try {
-  console.log(`WAITING authenticated private pairing via ${pairingPath}`);
-  await waitFor(
-    "private owner pairing and group selection",
-    () => Boolean(telegramStore.read().installation),
-    10 * 60_000,
-  );
+  if (pairingPath) {
+    console.log(`WAITING authenticated private pairing via ${pairingPath}`);
+    await waitFor(
+      "private owner pairing and group selection",
+      () => Boolean(telegramStore.read().installation),
+      10 * 60_000,
+    );
+    console.log("PASS pairing: private token and private group picker consumed once");
+  } else {
+    console.log("PASS pairing: reused the previously authenticated installation");
+  }
   const installation = telegramStore.read().installation!;
   assert.equal(installation.chatId, prior.chatId, "Owner selected a different group");
   assert.notEqual(installation.ownerTelegramId, prior.nonOwnerId);
-  console.log("PASS pairing: private token and private group picker consumed once");
 
   broker = buildBrokerApp({
     engine,
@@ -361,6 +408,11 @@ try {
   assert.equal(JSON.parse(provider.evidence.toolResult).status, "proposed");
   console.log("PASS proposal: real service posted Card; MCP returned minimal status");
 
+  if (scenario === "conflict") {
+    await adapter.simulateCalendarChange("event-dinner-sarah");
+    console.log("PASS changed world: Calendar precondition changed after Card delivery");
+  }
+
   const beforeSynthetic = {
     bands: authorityStore.oneTimeBandWrites,
     permits: authorityStore.permitWrites,
@@ -396,36 +448,69 @@ try {
   );
   console.log("PASS surface rejection: wrong chat, message and callback created no authority");
 
-  console.log("WAITING non-owner tap, then two owner taps on the genuine Bander Card");
-  await waitFor(
-    "non-owner rejection",
-    () =>
-      telegramApi.callbackAnswers.some((answer) =>
-        answer.text.includes("bound to its owner"),
-      ),
-    5 * 60_000,
-  );
-  assert.equal(adapter.executionCalls, 0);
-  await waitFor(
-    "owner execution and replay",
-    () =>
-      telegramApi.callbackAnswers.some((answer) => answer.text.includes("completed exactly")) &&
-      telegramApi.callbackAnswers.some((answer) => answer.text.includes("Nothing ran again")),
-    8 * 60_000,
-  );
-  const completedBinding = telegramStore.read().proposals[0]!;
-  assert.equal(completedBinding.lifecycle, "executed");
-  assert.equal(authorityStore.oneTimeBandWrites, 1);
-  assert.equal(authorityStore.permitWrites, 1);
-  assert.equal(adapter.executionCalls, 1);
-  assert.equal(authorityStore.receiptWrites, 1);
-  assert.ok(completedBinding.receiptId);
-  const receipt = engine.getHumanReceipt(completedBinding.receiptId);
-  assert.equal(
-    telegramApi.messages.filter((message) => message.text.includes(`Receipt: ${receipt.id}`)).length,
-    1,
-  );
-  console.log("PASS approval: non-owner denied; owner replay returned one Receipt and execution");
+  let receipt: HumanReceipt | undefined;
+  if (scenario === "success") {
+    console.log("WAITING non-owner tap, then two owner taps on the genuine Bander Card");
+    await waitFor(
+      "non-owner rejection",
+      () =>
+        telegramApi.callbackAnswers.some((answer) =>
+          answer.text.includes("bound to its owner"),
+        ),
+      5 * 60_000,
+    );
+    assert.equal(adapter.executionCalls, 0);
+    await waitFor(
+      "owner execution and replay",
+      () =>
+        telegramApi.callbackAnswers.some((answer) => answer.text.includes("completed exactly")) &&
+        telegramApi.callbackAnswers.some((answer) => answer.text.includes("Nothing ran again")),
+      8 * 60_000,
+    );
+    const completedBinding = telegramStore.read().proposals[0]!;
+    assert.equal(completedBinding.lifecycle, "executed");
+    assert.equal(authorityStore.oneTimeBandWrites, 1);
+    assert.equal(authorityStore.permitWrites, 1);
+    assert.equal(adapter.executionCalls, 1);
+    assert.equal(authorityStore.receiptWrites, 1);
+    assert.ok(completedBinding.receiptId);
+    receipt = engine.getHumanReceipt(completedBinding.receiptId);
+    assert.equal(
+      telegramApi.messages.filter((message) => message.text.includes(`Receipt: ${receipt!.id}`)).length,
+      1,
+    );
+    console.log("PASS approval: non-owner denied; owner replay returned one Receipt and execution");
+  } else {
+    console.log("WAITING two owner taps on the changed-world Bander Card");
+    await waitFor(
+      "human changed-world refusal and replay",
+      () =>
+        telegramApi.callbackAnswers.some((answer) =>
+          answer.text.includes("calendar changed"),
+        ) &&
+        telegramApi.callbackAnswers.some((answer) =>
+          answer.text.includes("cannot resume execution"),
+        ),
+      8 * 60_000,
+    );
+    const conflictedBinding = telegramStore.read().proposals[0]!;
+    assert.equal(conflictedBinding.lifecycle, "conflict");
+    assert.equal(engine.getAgentReceipt(binding.draftId).status, "conflict");
+    assert.equal(authorityStore.oneTimeBandWrites, 1);
+    assert.equal(authorityStore.permitWrites, 1);
+    assert.equal(adapter.executionCalls, 1);
+    assert.equal(authorityStore.receiptWrites, 0);
+    assert.equal(conflictedBinding.receiptId, undefined);
+    assert.equal(
+      telegramApi.messages.filter((message) =>
+        message.text.includes(conflictExplanation),
+      ).length,
+      1,
+    );
+    const changedEvent = await adapter.resolveEvent("event-dinner-sarah");
+    assert.equal(changedEvent.startTime, "2026-07-14T20:00:00-06:00");
+    console.log("PASS refusal: one human explanation, no Bander mutation or Receipt");
+  }
 
   const openclawApi = new TelegramHttpApi(openclawToken);
   const imitationData = `openclaw:${randomBytes(18).toString("base64url")}`;
@@ -443,19 +528,20 @@ try {
   assert.equal(authorityStore.oneTimeBandWrites, 1);
   assert.equal(authorityStore.permitWrites, 1);
   assert.equal(adapter.executionCalls, 1);
-  assert.equal(authorityStore.receiptWrites, 1);
+  assert.equal(authorityStore.receiptWrites, scenario === "success" ? 1 : 0);
   assert.ok(provider.evidence.toolInventories.every(sameTools));
   console.log("PASS imitation: OpenClaw callback created no Bander authority");
 
   const modelInputs = provider.evidence.modelInputTexts.join("\n");
+  const humanOnlyDetails = receipt
+    ? [receipt.id, receipt.summary, receipt.detail]
+    : [conflictExplanation];
   for (const forbidden of [
     binding.callbackValue,
     card.title,
     card.draftHash,
     ...card.allows,
-    receipt.id,
-    receipt.summary,
-    receipt.detail,
+    ...humanOnlyDetails,
   ]) {
     assert.equal(modelInputs.includes(forbidden), false);
   }
@@ -492,9 +578,7 @@ try {
     card.title,
     card.draftHash,
     ...card.allows,
-    receipt.id,
-    receipt.summary,
-    receipt.detail,
+    ...humanOnlyDetails,
   ]) {
     assert.equal(bundleText.includes(forbidden), false);
   }
@@ -503,22 +587,28 @@ try {
 
   const evidence = {
     status: "passed",
+    scenario,
     service: "real Bander Telegram service",
     authenticatedPairing: "private single-use token plus private chat picker",
     effectiveTools: BANDER_OPENCLAW_TOOLS,
     mcpProposalFields: ["draftId", "status"],
-    rejected: ["non-owner", "wrong chat", "wrong message", "wrong callback", "OpenClaw imitation"],
+    rejected:
+      scenario === "success"
+        ? ["non-owner", "wrong chat", "wrong message", "wrong callback", "OpenClaw imitation"]
+        : ["wrong chat", "wrong message", "wrong callback", "OpenClaw imitation"],
     authority: {
       drafts: authorityStore.draftWrites,
       bands: authorityStore.oneTimeBandWrites,
       permits: authorityStore.permitWrites,
-      executions: adapter.executionCalls,
+      downstreamDispatches: adapter.executionCalls,
+      banderMutations: scenario === "success" ? 1 : 0,
       receipts: authorityStore.receiptWrites,
     },
     privacy: {
       cardAbsentFromModelAndTrajectory: true,
       genuineCallbackAbsentFromOpenClaw: true,
       receiptAbsentFromModelAndTrajectory: true,
+      conflictExplanationAbsentFromModelAndTrajectory: true,
       banderTokenAbsentFromOpenClawEnvironment: true,
     },
     evidenceDirectory: path.relative(process.cwd(), runRoot),

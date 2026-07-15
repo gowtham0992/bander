@@ -3,6 +3,7 @@ import type { ApprovalCard, CalendarEvent, DraftDocument, Person } from "@bander
 import {
   AuthorityEngine,
   AuthorityStore,
+  ExecutionConflictError,
   type DraftFixture,
   type ExecutionAdapter,
 } from "@bander/core";
@@ -31,6 +32,7 @@ const fixture: DraftFixture = {
 
 class FakeAdapter implements ExecutionAdapter {
   executions = 0;
+  conflict = false;
 
   async resolveEvent(): Promise<CalendarEvent> {
     return {
@@ -61,6 +63,7 @@ class FakeAdapter implements ExecutionAdapter {
     document: DraftDocument;
   }): Promise<void> {
     this.executions += 1;
+    if (this.conflict) throw new ExecutionConflictError();
   }
 
   async getExecution(): Promise<boolean> {
@@ -266,5 +269,46 @@ describe("Bander Telegram service", () => {
     await expect(current.service.deliverProposal(card)).rejects.toThrow(
       "Telegram installation is not paired",
     );
+  });
+
+  it("keeps a changed-world explanation human-only and creates no Receipt", async () => {
+    const current = setup();
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(fixture, "openclaw-reference");
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    current.adapter.conflict = true;
+
+    const callback = {
+      update_id: 20,
+      callback_query: {
+        id: "owner-conflict",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    } satisfies TelegramUpdate;
+    await current.service.handleUpdate(callback);
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 21,
+      callback_query: { ...callback.callback_query, id: "owner-conflict-replay" },
+    });
+
+    expect(current.engine.getAgentReceipt(card.draftId)).toEqual({
+      draftId: card.draftId,
+      status: "conflict",
+    });
+    expect(current.store.read().proposals[0]).toMatchObject({
+      lifecycle: "conflict",
+    });
+    expect(current.authorityStore.getOneTimeBandsForDraft(card.draftId)).toHaveLength(1);
+    expect(current.authorityStore.getPermitsForDraft(card.draftId)).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.text.includes("calendar changed"))).toHaveLength(1);
+    expect(current.api.messages.some((message) => message.text.startsWith("Done"))).toBe(false);
+    expect(current.store.read().proposals[0]).not.toHaveProperty("receiptId");
   });
 });
