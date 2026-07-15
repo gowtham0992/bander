@@ -15,6 +15,14 @@ interface McpRoutesOptions {
   agentCompiler?: DraftCompiler;
 }
 
+const MCP_RATE_LIMIT_MAX_REQUESTS = 30;
+const MCP_RATE_LIMIT_WINDOW_MS = 60_000;
+
+interface McpRateWindow {
+  count: number;
+  resetAt: number;
+}
+
 function asToolError(error: unknown) {
   const message =
     error instanceof AuthorityError
@@ -81,7 +89,10 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
           fixture,
           "openclaw-reference",
         );
-        return { content: [{ type: "text", text: JSON.stringify(card) }] };
+        const agentStatus = options.engine.getAgentReceipt(card.draftId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(agentStatus) }],
+        };
       } catch (error) {
         if (error instanceof CompilerError) {
           return {
@@ -121,7 +132,36 @@ export function registerMcpRoutes(
   app: FastifyInstance,
   options: McpRoutesOptions,
 ): void {
+  const rateWindows = new Map<string, McpRateWindow>();
+
   app.post("/mcp", async (request, reply) => {
+    const now = Date.now();
+    const current = rateWindows.get(request.ip);
+    const window =
+      !current || current.resetAt <= now
+        ? { count: 0, resetAt: now + MCP_RATE_LIMIT_WINDOW_MS }
+        : current;
+    if (window.count >= MCP_RATE_LIMIT_MAX_REQUESTS) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((window.resetAt - now) / 1000),
+      );
+      return reply
+        .header("retry-after", String(retryAfterSeconds))
+        .code(429)
+        .send({
+          jsonrpc: "2.0",
+          error: {
+            code: -32001,
+            message: "Too many MCP requests; retry after the current window.",
+            data: { code: "mcp_rate_limited" },
+          },
+          id: null,
+        });
+    }
+    window.count += 1;
+    rateWindows.set(request.ip, window);
+
     const server = createBanderMcpServer(options);
     const transport = new StreamableHTTPServerTransport({
       enableJsonResponse: true,

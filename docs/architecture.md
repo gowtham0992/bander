@@ -47,3 +47,15 @@ After an ambiguous failure, Bander first asks whether that exact operation commi
 **Status:** accepted, July 13, 2026
 
 The MCP proposal tool accepts the person's natural request verbatim, not an internal fixture ID. In no-key mode, deterministic code matches only the discoverable versioned requests returned by `list_capabilities`; adjacent wording requests clarification. When configured, GPT-5.6 may replace only this selection step. Both paths produce the same versioned candidate and cannot approve, mint authority, or supply execution parameters.
+
+## ADR-006: Telegram privacy is an empirical release gate
+
+**Status:** accepted after empirical Telegram spike, July 14, 2026
+
+The intended consumer flow uses separate OpenClaw and Bander Telegram bots in one test group. Bander must own its messages, callbacks, identity checks, and approval surface. OpenClaw must receive only the owner's natural request and Bander's minimal MCP status—not Bander's Card, Receipt, conflict details, callback payloads, or canary.
+
+This boundary cannot be accepted from documentation or configuration review alone. Telegram's current Bot-to-Bot Communication Mode can deliver other-bot messages to a bot whose group privacy is disabled, and the installed OpenClaw Telegram handler does not categorically discard every other bot. The release gate therefore requires Bot-to-Bot Communication Mode to be disabled, an owner-only OpenClaw group sender allowlist, and inspection of OpenClaw's exported model trajectory after real messages and callbacks in the target group.
+
+Until that test passes, no Telegram hero-flow implementation is part of the accepted architecture. The fallback is a minimal shared notification that opens a Bander-owned review surface.
+
+The local Streamable HTTP MCP endpoint remains deliberately unauthenticated in the hackathon reference build. It binds to `127.0.0.1`, accepts no agent-controlled owner identity, and is limited to 30 POST requests per source address per 60-second fixed window. This is a local demonstration boundary, not a deployable network authentication design.

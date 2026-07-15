@@ -359,3 +359,108 @@ exit 0
 The real HTTP verifier covers downstream response loss, successful broker-response loss, changed-content rejection, expired undispatched authority, stable review Cards, and exact state counts. Core tests cover committed recovery and cached replay; the browser tests cover automatic/manual request-ID reuse and assert that ambiguous standing UI never renders “Bander didn’t act.”
 
 The final code-freeze matrix also passed the six-outcome demo verifier, the one-time HTTP recovery verifier, the real OpenClaw agent verifier with exactly three effective Bander tools and no execution, the production build, and the high-severity dependency audit. The repository scan found no committed OpenAI keys, mock-service tokens, or `sk-` secrets.
+
+## Checkpoint 12 — Telegram privacy gate and local MCP boundary
+
+**Status:** Telegram spike blocked on external test identities; local MCP rate limit verified
+
+Codex read the complete updated request, source-of-truth plan, architecture and recording documents, and `transcription_day2.md`. It checked the current official Telegram Bot API, Telegram Bot-to-Bot Communication documentation, current OpenClaw Telegram documentation, and the installed OpenClaw 2026.7.1 implementation.
+
+The review found a load-bearing current-platform detail: Telegram can deliver other-bot group messages when Bot-to-Bot Communication Mode is enabled and the receiving bot is an administrator or has Group Privacy Mode disabled. The installed OpenClaw Telegram message handler ignores its own bot ID but does not categorically discard every other bot. OpenClaw's explicit numeric group-sender allowlist provides a second filter, but the privacy claim will be accepted only after the complete exported OpenClaw trajectory proves that a Bander canary, Card, Receipt, conflict, and callbacks never reached the model.
+
+No Telegram variables are configured in the current process, and the repository has no Telegram credential file. The required real group spike therefore has not run. No Telegram hero-flow code was started and no privacy claim is marked verified. The exact BotFather, group, identity, and ignored-local-environment prerequisites are recorded in `docs/telegram-privacy-spike.md`. `/feedback` remains deferred.
+
+The same review confirmed that the loopback Streamable HTTP MCP endpoint had no application-level authentication or rate limit. Authentication remains deliberately out of scope for this one-machine reference integration, but the endpoint is now documented as local-only and limited to 30 POST requests per source address per 60 seconds. It remains bound to `127.0.0.1`, and the proposal tool still supplies its fixed paired agent identity internally rather than accepting an agent-controlled owner reference.
+
+Required red evidence observed before the rate-limit implementation:
+
+```text
+$ npx vitest run apps/broker/src/app.test.ts
+rate-limits the unauthenticated loopback MCP endpoint
+AssertionError: expected 200 to be 429
+Tests: 1 failed, 4 passed
+```
+
+Observed focused green evidence:
+
+```text
+$ npx vitest run apps/broker/src/app.test.ts
+Test Files  1 passed (1)
+Tests       5 passed (5)
+```
+
+Cold pre-Telegram baseline on July 14, 2026 remains green: 51 functional tests, 20 attack tests, six demo outcomes, one-time and standing real-process recovery, real OpenClaw with exactly three Bander tools, zero dependency vulnerabilities, and no OpenAI- or Telegram-token-shaped repository secrets. The real OpenClaw verifier initially hit Codex's restricted local IPC sandbox and passed unchanged when rerun with permission; this was an environment restriction, not a product failure.
+
+## Checkpoint 13 — empirical Telegram privacy spike
+
+**Status:** passed; polished Telegram hero flow not started
+
+The builder configured a private Telegram group with the owner, a non-owner, a dedicated OpenClaw bot, and a separate Bander bot. Neither bot was an administrator; Bot-to-Bot Communication was off for both; OpenClaw Group Privacy was off and Bander Group Privacy was on. Codex derived the two human identities, group, and both bot identities from explicit Telegram commands and `getMe` responses without printing tokens, raw updates, or numeric IDs. The bindings and evidence remain under ignored `.bander/` state with owner-only file permissions.
+
+The first privacy regression exposed a real contradiction before the live test: `propose_action` returned the complete human Card as its MCP tool result, so the OpenClaw model received the Card even if Telegram hid Bander's message. The focused test failed with the complete Card where only `{draftId, status}` was expected. MCP now returns only the minimal agent status, while Bander independently fetches and renders the human Card.
+
+The callback boundary test was also observed red before its implementation because the exact owner/chat/Bander-message/opaque-handle classifier did not exist. The restored tests deny the bound non-owner and unknown users, reject an OpenClaw imitation or wrong message, make the owner wait for the negative check, and allow the owner only on the exact Bander-authored surface.
+
+The real spike then observed this sequence:
+
+```text
+owner natural unmentioned request -> OpenClaw model -> bander__propose_action
+MCP result -> draftId + proposed only
+Bander bot -> unique canary + human Card + inline approval
+non-owner tap -> denied before authority
+owner tap -> one Draft, Band, Permit, downstream execution and Receipt
+owner replay -> same Receipt, no duplicate effect
+OpenClaw-bot imitation tap -> OpenClaw callback, no Bander authority or execution
+```
+
+An initial imitation probe appeared inert because the spike configuration had intentionally disabled OpenClaw inline callbacks. That result was rejected as insufficient evidence. The definitive run enabled callback observation for the one bound group without adding tools. The imitation callback then appeared in OpenClaw's model input and trajectory while the real Bander callback remained absent.
+
+The first definitive privacy assertion also produced a deliberate false alarm because it forbade the Card's `claimedUserRequest`, which is intentionally identical to the person's natural request. Codex corrected the assertion to forbid Bander-owned Card fields instead: Card title, exact effect disclosures, Draft hash, Bander canaries, real callback handle, Receipt ID, and private-conflict marker. Offline export of the already-completed real session produced:
+
+```text
+natural request present:                 true
+bander__propose_action present:          true
+OpenClaw imitation callback occurrences: 10
+Bander privacy canary occurrences:       0
+Bander Receipt canary occurrences:       0
+private-conflict canary occurrences:     0
+real Bander callback occurrences:        0
+Card title occurrences:                  0
+Draft-hash field occurrences:            0
+Receipt-ID occurrences:                  0
+exact effect-disclosure occurrences:     0
+```
+
+The live authority assertions passed before trajectory export: exactly one Draft, one one-time Band, one Permit, one downstream execution, one consumed Permit, one Receipt record, and one Bander Receipt message. The non-owner was denied before those existed; legitimate replay returned the same Receipt; the OpenClaw imitation changed none of those counts.
+
+Post-spike verification on July 14, 2026:
+
+```text
+$ npm run check
+Test Files  9 passed (9)
+Tests       56 passed (56)
+
+$ npm run attack
+Test Files  2 passed (2)
+Tests       20 passed (20)
+
+$ npm run verify:demo
+six expected outcomes passed
+
+$ npm run verify:recovery
+1 mutation · 1 Band · 1 Permit · 1 Receipt
+
+$ npm run verify:standing-recovery
+all recovery, mismatch, expiry and stable-review outcomes passed
+
+$ npm run verify:openclaw
+exactly three effective Bander tools · proposed · not executed
+
+$ npm audit --audit-level=moderate
+found 0 vulnerabilities
+
+repository token-shaped secret scan
+no OpenAI or Telegram token-shaped secrets found
+```
+
+The reusable live command is `npm run verify:telegram-privacy`. It validates the generated OpenClaw policy before starting Telegram, keeps tokens out of logs and tracked files, and writes its complete local evidence under `.bander/`. `/feedback` remains deferred. The privacy gate is now open for a later polished hero-flow slice, but that slice was intentionally not started in this checkpoint.

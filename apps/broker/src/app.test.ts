@@ -81,6 +81,52 @@ function createApp() {
 }
 
 describe("broker approval boundary", () => {
+  it("rate-limits the unauthenticated loopback MCP endpoint", async () => {
+    const setup = createApp();
+    const request = {
+      jsonrpc: "2.0",
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "rate-limit-test", version: "1.0.0" },
+      },
+    };
+
+    for (let index = 0; index < 30; index += 1) {
+      const response = await setup.app.inject({
+        method: "POST",
+        url: "/mcp",
+        headers: {
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+        },
+        payload: { ...request, id: index },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const blocked = await setup.app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      payload: { ...request, id: 30 },
+    });
+
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json()).toMatchObject({
+      jsonrpc: "2.0",
+      error: { data: { code: "mcp_rate_limited" } },
+      id: null,
+    });
+    const retryAfter = Number(blocked.headers["retry-after"]);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(60);
+  });
+
   it("requires a client request ID for every standing execution", async () => {
     const setup = createApp();
     const candidate = await setup.app.inject({
@@ -189,10 +235,13 @@ describe("broker approval boundary", () => {
       if (!first || first.type !== "text" || !first.text) {
         throw new Error("Expected text content");
       }
-      expect(JSON.parse(first.text)).toMatchObject({
-        title: "Here’s the deal",
-        claimedUserRequest: fixture.claimedUserRequest,
+      expect(JSON.parse(first.text)).toEqual({
+        draftId: expect.stringMatching(/^draft_/),
+        status: "proposed",
       });
+      expect(first.text).not.toContain("Here’s the deal");
+      expect(first.text).not.toContain(fixture.claimedUserRequest);
+      expect(first.text).not.toContain("effects");
       expect(setup.adapter.executions).toBe(0);
     } finally {
       await client.close();

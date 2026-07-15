@@ -54,8 +54,10 @@ In the canonical demo, the OpenClaw process has no Calendar or Messages credenti
 
 OpenClaw may use network transport to reach its model provider and Bander's MCP endpoint. It has no direct Calendar, Messages, browser, shell, generic outbound-action tool, or downstream service credential in the canonical configuration.
 
+The reference MCP endpoint is intentionally local-only and currently has no application-level authentication. The broker binds to `127.0.0.1` and limits each source address to 30 MCP POST requests per 60 seconds. Do not expose this endpoint directly to a LAN or the public internet.
+
 ## Build status
 
-The current implementation verifies the isolated credential boundary, exact one-time authority, duration-preserving Calendar reschedules, idempotent response-loss recovery, changed-world refusal, attack suite, proposal flood control, the first narrow standing Band, the real OpenClaw Streamable HTTP proposal flow, effective session tool inventory, provenance-isolated agent text, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
+The current implementation verifies the isolated credential boundary, exact one-time authority, duration-preserving Calendar reschedules, idempotent response-loss recovery, changed-world refusal, attack suite, proposal flood control, the first narrow standing Band, the real OpenClaw Streamable HTTP proposal flow, effective session tool inventory, provenance-isolated agent text, the empirical two-bot Telegram privacy boundary, and the optional gated GPT-5.6 candidate compiler. See [BUILD_WITH_CODEX.md](./BUILD_WITH_CODEX.md) for the evidence ledger and [Bander_Build_Plan.md](./Bander_Build_Plan.md) for the product source of truth.
 
 For demo preparation, see [docs/recording-plan.md](./docs/recording-plan.md) and [docs/submission-checklist.md](./docs/submission-checklist.md).

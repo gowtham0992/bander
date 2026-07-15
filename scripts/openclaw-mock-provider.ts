@@ -19,6 +19,7 @@ export interface MockProviderEvidence {
   calls: number;
   toolInventories: string[][];
   sawHumanRequest: boolean;
+  modelInputTexts: string[];
   toolResult?: string;
 }
 
@@ -34,6 +35,15 @@ function textContent(content: unknown): string {
     .join(" ");
 }
 
+function normalizeRequestText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 export function buildOpenClawMockProvider(): {
   app: FastifyInstance;
   evidence: MockProviderEvidence;
@@ -43,6 +53,7 @@ export function buildOpenClawMockProvider(): {
     calls: 0,
     toolInventories: [],
     sawHumanRequest: false,
+    modelInputTexts: [],
   };
 
   app.get("/v1/models", async () => ({
@@ -59,16 +70,29 @@ export function buildOpenClawMockProvider(): {
       .map((tool) => tool.function?.name)
       .filter((name): name is string => Boolean(name));
     evidence.toolInventories.push(toolNames);
+    const inputText = messages.map((message) => textContent(message.content)).join("\n");
+    evidence.modelInputTexts.push(inputText);
     evidence.sawHumanRequest ||= messages.some(
       (message) =>
-        message.role === "user" && textContent(message.content).includes(canonicalRequest),
+        message.role === "user" &&
+        normalizeRequestText(textContent(message.content)).includes(
+          normalizeRequestText(canonicalRequest),
+        ),
     );
     const toolMessage = [...messages].reverse().find((message) => message.role === "tool");
     if (toolMessage) evidence.toolResult = textContent(toolMessage.content);
 
     const created = Math.floor(Date.now() / 1000);
     const id = `chatcmpl-bander-${evidence.calls}`;
-    const toolCall = !toolMessage;
+    const toolCall =
+      !toolMessage &&
+      messages.some(
+        (message) =>
+          message.role === "user" &&
+          normalizeRequestText(textContent(message.content)).includes(
+            normalizeRequestText(canonicalRequest),
+          ),
+      );
     const message = toolCall
       ? {
           role: "assistant",
@@ -86,7 +110,9 @@ export function buildOpenClawMockProvider(): {
         }
       : {
           role: "assistant",
-          content: "Bander prepared the deal for human review. Nothing was executed.",
+          content: toolMessage
+            ? "Bander prepared the deal for human review. Nothing was executed."
+            : "That message cannot approve or execute anything through Bander.",
         };
 
     if (!request.body.stream) {

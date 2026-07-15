@@ -165,12 +165,20 @@ try {
     throw new Error("The model provider observed an unexpected effective tool inventory");
   }
   if (!evidence.toolResult) throw new Error("OpenClaw did not call Bander");
-  const card = JSON.parse(evidence.toolResult) as { draftId: string; title: string };
+  const proposalStatus = JSON.parse(evidence.toolResult) as {
+    draftId: string;
+    status: string;
+  };
   const agentReceiptResponse = await fetch(
-    `http://127.0.0.1:4310/api/agent/drafts/${encodeURIComponent(card.draftId)}/receipt`,
+    `http://127.0.0.1:4310/api/agent/drafts/${encodeURIComponent(proposalStatus.draftId)}/receipt`,
   );
   const agentReceipt = (await agentReceiptResponse.json()) as { status?: string };
-  if (card.title !== "Here’s the deal" || agentReceipt.status !== "proposed") {
+  if (
+    proposalStatus.status !== "proposed" ||
+    agentReceipt.status !== "proposed" ||
+    "title" in proposalStatus ||
+    "claimedUserRequest" in proposalStatus
+  ) {
     throw new Error("The OpenClaw proposal crossed the human approval boundary");
   }
 
@@ -181,7 +189,7 @@ try {
         effectiveTools,
         toolPolicyAudit: "removed all non-allowlisted tools",
         toolCalls: parsed.meta?.toolSummary,
-        draftId: card.draftId,
+        draftId: proposalStatus.draftId,
         draftStatus: agentReceipt.status,
         execution: "not_started",
       },
