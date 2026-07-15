@@ -721,3 +721,120 @@ changed-world refusal + replay + imitation resistance
 ```
 
 The final matrix is green: typecheck, 99 functional tests, 20 attack tests, six-outcome demo verifier, both real-process recovery verifiers, real OpenClaw verifier with exactly three tools, all three real Telegram scenarios, production build, moderate dependency audit with zero vulnerabilities, and tracked token-shaped secret scan. `transcription_day2.md` remains untouched. Live GPT-5.6 Sol evidence and `/feedback` remain deferred.
+
+## Checkpoint 21 — dedicated Hero mode and visible downstream proof
+
+**Status:** implemented and manually verified end to end on July 15, 2026
+
+Hero mode is now a distinct product runtime launched with `npm run hero`. It
+uses `.bander/hero/` for the authenticated Telegram installation and a unique
+per-run OpenClaw home, state, workspace, configuration and log tree. Existing
+verification commands and their explicit security choreography remain
+unchanged and use separate state.
+
+One Hero process owns the real Bander Telegram service, authority engine,
+credential-protected seeded Calendar/Messages service, three-tool Streamable
+HTTP MCP endpoint, deterministic OpenAI-compatible provider, and real isolated
+OpenClaw gateway. Only the OpenClaw token enters OpenClaw's process environment;
+the Bander bot token and downstream service credential remain absent. Hero
+startup validates the same pinned owner-only group policy and exact three-tool
+inventory before declaring readiness.
+
+The browser now exposes a calm read-only **Demo Calendar** and **Demo Messages**
+ledger. `/api/hero/state` exists only in explicit Hero mode, is marked
+`no-store`, and returns sanitized titles, intervals, recipient names, message
+bodies and sent times—never IDs, ETags, hashes or credentials. It reads the
+same in-memory maps used by the credential-protected operation endpoint. There
+is no second UI-only simulation. The view polls without overlapping requests,
+has deliberate loading/reconnect states, and was visually checked both before
+and after a committed dinner/message operation. Visual QA corrected a
+misleading `Today` label to `Schedule` because the seeded events span two days.
+
+Hero Telegram uses compact consumer copy for pairing, one-time review, success,
+decline, conflict and expiry. Dynamic hearsay remains normalized plain text
+without Telegram parse mode. The exact approved message body remains in the
+human success outcome. The Hero entrypoint sends no setup instructions,
+imitation probes, replay probes or verification terminology to Telegram.
+
+OpenClaw's successful post-proposal final response is the documented exact
+`NO_REPLY` token rather than a timer or a fourth/message tool. During the live
+standing journey, the owner's screenshot exposed that automatic execution
+still produced a redundant OpenClaw reply. A focused regression was then
+observed red:
+
+```text
+$ npx vitest run scripts/openclaw-mock-provider.test.ts
+Test Files  1 failed (1)
+Tests       1 failed | 7 passed (8)
+Received: "Bander handled that within the automatic limits you approved..."
+Expected: "NO_REPLY"
+```
+
+Hero now suppresses OpenClaw's redundant final text for `proposed`, `executed`,
+`conflict`, and `declined` minimal Bander statuses. Bander alone owns those
+human outcomes. The restored focused run passed all eight provider tests.
+Unsupported wording is deliberately not suppressed; the final real Telegram
+turn returned the useful clarification without a tool call, proposal,
+authority or household mutation.
+
+The manual Hero journey used no verifier messages or pre-seeded authority and
+proved:
+
+```text
+one-time success
+  natural Telegram request -> real OpenClaw -> three-tool MCP -> Bander Card
+  genuine approval -> Dinner 7:00–8:30 PM to 7:30–9:00 PM
+  exact Sarah message visible once in Demo Messages
+
+decline
+  separate Focus Card -> Not now -> terminal decline
+  Focus and Demo Messages unchanged
+
+changed world
+  dinner Card prepared -> explicit external Demo Calendar change to 8:00–8:30 PM
+  approval -> terminal conflict and one human refusal
+  external Calendar value preserved; Demo Messages empty
+
+standing autonomy
+  natural opt-in -> deterministic five-clause Card -> owner activation
+  Focus 10:00–11:00 AM to 10:30–11:30 AM automatically
+  one visible outcome, zero messages, counter 1 of 3
+  Turn off -> authority revoked and detached
+  repeated Focus request -> pending one-time Card, no second mutation
+
+privacy and isolation
+  exactly three Bander tools on every observed OpenClaw turn
+  human Cards, standing clauses, exact intervals and outcomes absent from model input
+  unsupported request -> OpenClaw clarification, zero Bander tool calls
+```
+
+The shared-state regressions prove approval retry updates the visible Calendar
+and Messages once and a stale-world conflict changes neither. Broker tests pin
+Hero-route separation and no-store responses. Source tests reject verifier
+instructions in the Hero entrypoint. Telegram tests pin Hero copy while the
+default verification copy remains unchanged.
+
+No timer, ambient Bander listener, fourth MCP tool, Google OAuth, additional
+channel, model-authored predicate or new authority behavior was introduced.
+`transcription_day2.md` remains untouched. Before filming, the Telegram group
+and both bot display names still require the owner's manual product-identity
+rename to remove “Test”; the bots are not group administrators and code cannot
+truthfully perform that change. Live GPT-5.6 Sol evidence and `/feedback` remain
+deferred.
+
+Final restored-green evidence passed typecheck, 109 functional tests, 20 attack
+tests, the six-outcome demo verifier, both real-process recovery verifiers, the
+real OpenClaw three-tool verifier, production build, a moderate dependency audit
+with zero vulnerabilities, and a scan of 83 tracked files with zero
+token-shaped secret hits. Fresh unchanged-path Telegram runs also passed:
+
+```text
+one-time privacy, approval replay, decline and imitation resistance
+  .bander/telegram-service-verification-success-1784133225117-28ee464a/
+
+changed-world refusal, replay and imitation resistance
+  .bander/telegram-service-verification-conflict-1784133392616-bdee85a9/
+
+standing activation, exact execution, revoke and return to one-time review
+  .bander/telegram-service-verification-standing-1784133550071-69af215d/
+```

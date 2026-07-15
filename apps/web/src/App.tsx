@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type {
   ApprovalCard,
   ApprovalEffectPreview,
+  DemoSandboxState,
   HumanReceipt,
   StandingBandCard,
 } from "@bander/contracts";
@@ -34,6 +35,7 @@ type Screen =
 interface Status {
   fixtureMode: boolean;
   modelCompiler: "available" | "not_configured";
+  heroMode: boolean;
 }
 
 export class ApiError extends Error {
@@ -104,6 +106,158 @@ function Brand() {
       <img src="/bander_mark_transparent.svg" alt="" />
       <span>Bander</span>
     </a>
+  );
+}
+
+function heroInterval(
+  startTime: string,
+  endTime: string,
+  timeZone: string,
+): { day: string; time: string } {
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  const day = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone,
+  }).format(start);
+  const time = formatReceiptInterval({ startTime, endTime }, timeZone);
+  return { day, time };
+}
+
+export function HeroSandbox() {
+  const [state, setState] = useState<DemoSandboxState | null>(null);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let stopped = false;
+    let timeout: number | undefined;
+    const refresh = async () => {
+      try {
+        const next = await api<DemoSandboxState>("/api/hero/state", {
+          cache: "no-store",
+        });
+        if (stopped) return;
+        setState(next);
+        setError(false);
+      } catch {
+        if (!stopped) setError(true);
+      } finally {
+        if (!stopped) timeout = window.setTimeout(refresh, 600);
+      }
+    };
+    void refresh();
+    return () => {
+      stopped = true;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    };
+  }, [retry]);
+
+  return (
+    <main className="hero-sandbox">
+      <section className="hero-intro">
+        <div>
+          <span className="hero-kicker">Live household sandbox</span>
+          <h1>What happened,<br />at a glance.</h1>
+        </div>
+        <div className="hero-live" aria-label="Live demo data">
+          <span aria-hidden="true" /> Live
+        </div>
+      </section>
+
+      {error && !state && (
+        <section className="hero-load-error" role="alert">
+          <h2>The household view is reconnecting.</h2>
+          <p>Telegram and Bander can keep working while this view catches up.</p>
+          <button className="secondary" onClick={() => setRetry((value) => value + 1)}>
+            Try again
+          </button>
+        </section>
+      )}
+
+      {!state && !error && (
+        <section className="hero-loading" aria-live="polite">
+          <div className="loader" />
+          <p>Opening your demo household…</p>
+        </section>
+      )}
+
+      {state && (
+        <div className="hero-ledger" aria-live="polite">
+          <section className="hero-panel calendar-panel">
+            <header>
+              <span className="hero-panel-icon calendar-icon" aria-hidden="true">CAL</span>
+              <div>
+                <p>Demo Calendar</p>
+                <h2>Schedule</h2>
+              </div>
+            </header>
+            <div className="calendar-list">
+              {state.calendar.map((event) => {
+                const interval = heroInterval(
+                  event.startTime,
+                  event.endTime,
+                  event.timeZone,
+                );
+                return (
+                  <article className="calendar-event" key={`${event.title}-${event.startTime}`}>
+                    <div className="event-time">
+                      <strong>{interval.time.split("–")[0]}</strong>
+                      <span>{interval.day}</span>
+                    </div>
+                    <div className="event-rule" aria-hidden="true" />
+                    <div>
+                      <h3>{event.title}</h3>
+                      <p>{interval.time}</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="hero-panel messages-panel">
+            <header>
+              <span className="hero-panel-icon message-icon" aria-hidden="true">•••</span>
+              <div>
+                <p>Demo Messages</p>
+                <h2>Sent</h2>
+              </div>
+            </header>
+            {state.messages.length === 0 ? (
+              <div className="messages-empty">
+                <span aria-hidden="true">✓</span>
+                <h3>No messages sent</h3>
+                <p>Approved messages will appear here.</p>
+              </div>
+            ) : (
+              <div className="message-list">
+                {state.messages.map((message) => (
+                  <article className="message-item" key={`${message.sentAt}-${message.body}`}>
+                    <div className="message-avatar" aria-hidden="true">
+                      {message.recipientDisplayName.charAt(0)}
+                    </div>
+                    <div>
+                      <p>To {message.recipientDisplayName}</p>
+                      <blockquote>{message.body}</blockquote>
+                    </div>
+                    <time dateTime={message.sentAt}>
+                      {new Intl.DateTimeFormat("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      }).format(new Date(message.sentAt))}
+                    </time>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+      <p className="hero-footnote">A read-only view of Bander’s demo household</p>
+    </main>
   );
 }
 
@@ -642,6 +796,15 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (status?.heroMode) {
+    return (
+      <div className="app-frame hero-frame">
+        <header><Brand /><span className="tagline">Help without surprises.</span></header>
+        <HeroSandbox />
+      </div>
+    );
   }
 
   return (

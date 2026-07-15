@@ -289,10 +289,13 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
   }
 }
 
+type TelegramCopyMode = "verification" | "hero";
+
 interface TelegramServiceOptions {
   api: TelegramBotApi;
   engine: AuthorityEngine;
   store: TelegramServiceStore;
+  mode?: TelegramCopyMode;
   now?: () => Date;
   randomValue?: () => string;
 }
@@ -317,7 +320,11 @@ function startToken(text: string | undefined): string | undefined {
   return match?.[1];
 }
 
-function cardText(card: ApprovalCard, now: Date): string {
+function cardText(
+  card: ApprovalCard,
+  now: Date,
+  mode: TelegramCopyMode,
+): string {
   const effects = card.effectPreviews.flatMap((effect) => {
     if (effect.kind === "calendar.reschedule_event") {
       return [
@@ -334,6 +341,35 @@ function cardText(card: ApprovalCard, now: Date): string {
     1,
     Math.ceil((new Date(card.expiresAt).getTime() - now.getTime()) / 60_000),
   );
+  if (mode === "hero") {
+    const approvedBoundary =
+      card.effectPreviews.length === 1
+        ? "Only this change is approved."
+        : card.effectPreviews.length === 2
+          ? "Only these two changes are approved."
+          : `Only these ${card.effectPreviews.length} changes are approved.`;
+    const heroEffects = card.effectPreviews.flatMap((effect) => {
+      if (effect.kind === "calendar.reschedule_event") {
+        return [
+          `📅 Move “${safeDisplayText(effect.eventTitle)}”`,
+          `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
+        ];
+      }
+      return [
+        `💬 Send ${firstName(effect.recipientDisplayName)}:`,
+        `“${safeDisplayText(effect.body)}”`,
+      ];
+    });
+    return [
+      "Ready to approve?",
+      "",
+      "OpenClaw asked Bander to:",
+      ...heroEffects,
+      "",
+      approvedBoundary,
+      `Closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
+    ].join("\n");
+  }
   return [
     "Nothing has happened yet. Is this right?",
     "",
@@ -350,7 +386,41 @@ function cardText(card: ApprovalCard, now: Date): string {
   ].join("\n");
 }
 
-function receiptText(receipt: HumanReceipt): string {
+function compactReceiptInterval(
+  interval: { startTime: string; endTime: string },
+  timeZone: string,
+): string {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
+  const start = formatter.format(new Date(interval.startTime));
+  const end = formatter.format(new Date(interval.endTime));
+  const startMeridiem = start.match(/ (AM|PM)$/)?.[1];
+  const endMeridiem = end.match(/ (AM|PM)$/)?.[1];
+  return `${startMeridiem === endMeridiem ? start.replace(/ (AM|PM)$/, "") : start}–${end}`;
+}
+
+function receiptText(
+  receipt: HumanReceipt,
+  mode: TelegramCopyMode,
+): string {
+  if (mode === "hero") {
+    return [
+      "Done ✓",
+      `📅 “${safeDisplayText(receipt.calendar.title)}” is now ${compactReceiptInterval(
+        receipt.calendar.completed,
+        receipt.calendar.timeZone,
+      )}.`,
+      ...(receipt.message
+        ? [
+            `💬 Sent ${firstName(receipt.message.recipientDisplayName)}:`,
+            `“${safeDisplayText(receipt.message.body)}”`,
+          ]
+        : ["No one was messaged."]),
+    ].join("\n");
+  }
   return [
     "Done ✓",
     `“${safeDisplayText(receipt.calendar.title)}”`,
@@ -385,9 +455,15 @@ function firstName(value: string): string {
   return safeDisplayText(value).split(" ")[0] ?? "them";
 }
 
-function refusalText(code: string, card: ApprovalCard): string {
+function refusalText(
+  code: string,
+  card: ApprovalCard,
+  mode: TelegramCopyMode,
+): string {
   if (code === "draft_expired") {
-    return "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again.";
+    return mode === "hero"
+      ? "That request timed out, so I did nothing.\nAsk OpenClaw again if you still want it."
+      : "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again.";
   }
   if (code !== "conflict") {
     return [
@@ -406,6 +482,12 @@ function refusalText(code: string, card: ApprovalCard): string {
       : "I didn’t move the event.",
     "Ask OpenClaw to check again.",
   ].join("\n");
+}
+
+function declineText(mode: TelegramCopyMode): string {
+  return mode === "hero"
+    ? "Nothing changed."
+    : "Nothing changed.\nAsk OpenClaw again if you want something different.";
 }
 
 function standingOutcomeText(
@@ -469,6 +551,7 @@ export class TelegramService {
   readonly #store: TelegramServiceStore;
   readonly #now: () => Date;
   readonly #randomValue: () => string;
+  readonly #mode: TelegramCopyMode;
   readonly #stateLock = new KeyedLock();
   readonly #callbackLock = new KeyedLock();
   readonly #standingRequestLock = new KeyedLock();
@@ -479,6 +562,7 @@ export class TelegramService {
     this.#api = options.api;
     this.#engine = options.engine;
     this.#store = options.store;
+    this.#mode = options.mode ?? "verification";
     this.#now = options.now ?? (() => new Date());
     this.#randomValue =
       options.randomValue ?? (() => randomBytes(24).toString("base64url"));
@@ -524,11 +608,14 @@ export class TelegramService {
       }
       const message = await this.#api.sendMessage(
         installation.chatId,
-        cardText(card, this.#now()),
+        cardText(card, this.#now(), this.#mode),
         {
           inline_keyboard: [
             [
-              { text: "Do exactly this", callback_data: callbackValue },
+              {
+                text: this.#mode === "hero" ? "Yes, do this" : "Do exactly this",
+                callback_data: callbackValue,
+              },
               { text: "Not now", callback_data: declineCallbackValue },
             ],
           ],
@@ -901,7 +988,9 @@ export class TelegramService {
     this.#store.write(state);
     await this.#api.sendMessage(
       String(message.chat.id),
-      "You’re connected. Choose the Telegram group where you use OpenClaw.",
+      this.#mode === "hero"
+        ? "You’re the person who approves Bander’s limits.\nChoose the Telegram group where you use OpenClaw."
+        : "You’re connected. Choose the Telegram group where you use OpenClaw.",
       {
         keyboard: [
           [
@@ -955,10 +1044,12 @@ export class TelegramService {
     this.#store.write(state);
     await this.#api.sendMessage(
       String(message.chat.id),
-      [
-        "Bander is ready. Only you can approve what I’m allowed to do.",
-        "I only act here, and only within limits you approve.",
-      ].join("\n"),
+      this.#mode === "hero"
+        ? "Bander is ready.\nI only act here, and only within limits you approve."
+        : [
+            "Bander is ready. Only you can approve what I’m allowed to do.",
+            "I only act here, and only within limits you approve.",
+          ].join("\n"),
       { remove_keyboard: true },
     );
   }
@@ -1024,7 +1115,11 @@ export class TelegramService {
       ) {
         state.proposals[index] = { ...binding, lifecycle: "expired" };
         this.#store.write(state);
-        const text = refusalText("draft_expired", this.#engine.getCard(binding.draftId));
+        const text = refusalText(
+          "draft_expired",
+          this.#engine.getCard(binding.draftId),
+          this.#mode,
+        );
         try {
           await this.#api.sendMessage(binding.chatId, text);
           const delivered = this.#store.read();
@@ -1053,7 +1148,7 @@ export class TelegramService {
           if (!binding.declineDeliveredAt) {
             await this.#api.sendMessage(
               binding.chatId,
-              "Nothing changed.\nAsk OpenClaw again if you want something different.",
+              declineText(this.#mode),
             );
             const delivered = this.#store.read();
             const deliveredIndex = delivered.proposals.findIndex(
@@ -1091,7 +1186,7 @@ export class TelegramService {
         this.#store.write(declined);
         await this.#api.sendMessage(
           binding.chatId,
-          "Nothing changed.\nAsk OpenClaw again if you want something different.",
+          declineText(this.#mode),
         );
         const delivered = this.#store.read();
         const deliveredIndex = delivered.proposals.findIndex(
@@ -1127,7 +1222,10 @@ export class TelegramService {
         };
         this.#store.write(current);
         if (deliveryPending) {
-          await this.#api.sendMessage(binding.chatId, receiptText(receipt));
+          await this.#api.sendMessage(
+            binding.chatId,
+            receiptText(receipt, this.#mode),
+          );
           const deliveredState = this.#store.read();
           const deliveredIndex = deliveredState.proposals.findIndex(
             (proposal) => proposal.callbackValue === callback.data,
@@ -1155,10 +1253,13 @@ export class TelegramService {
           );
           const conflictBinding = conflictState.proposals[conflictIndex];
           if (conflictBinding) {
-            const conflictMessage = conflictBinding.conflictMessage ?? refusalText(
-              error.code,
-              this.#engine.getCard(binding.draftId),
-            );
+            const conflictMessage =
+              conflictBinding.conflictMessage ??
+              refusalText(
+                error.code,
+                this.#engine.getCard(binding.draftId),
+                this.#mode,
+              );
             const deliveryPending = !conflictBinding.conflictDeliveredAt;
             conflictState.proposals[conflictIndex] = {
               ...conflictBinding,

@@ -7,6 +7,8 @@ interface MockProviderOptions {
   canonicalRequest?: string;
   standingRequestId?: string;
   supportedRequests?: Array<{ request: string; requestId?: string }>;
+  suppressProposedReply?: boolean;
+  suppressBanderReplies?: boolean;
 }
 
 interface ChatMessage {
@@ -62,11 +64,25 @@ function isOpenClawRuntimeContext(value: string): boolean {
   );
 }
 
-function responseForToolResult(message: ChatMessage): string {
+function responseForToolResult(
+  message: ChatMessage,
+  suppressProposedReply = false,
+  suppressBanderReplies = false,
+): string {
   try {
     const result = JSON.parse(textContent(message.content)) as { status?: string };
+    if (
+      suppressBanderReplies &&
+      ["proposed", "executed", "conflict", "declined"].includes(
+        result.status ?? "",
+      )
+    ) {
+      return "NO_REPLY";
+    }
     if (result.status === "proposed") {
-      return "I’m checking with Bander. Nothing has happened yet.";
+      return suppressProposedReply
+        ? "NO_REPLY"
+        : "I’m checking with Bander. Nothing has happened yet.";
     }
     if (result.status === "executed") {
       return "Bander handled that within the automatic limits you approved. It will show you exactly what changed.";
@@ -185,7 +201,11 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
       : {
           role: "assistant",
           content: toolMessage
-            ? responseForToolResult(toolMessage)
+            ? responseForToolResult(
+                toolMessage,
+                options.suppressProposedReply,
+                options.suppressBanderReplies,
+              )
             : imitationCallback
               ? "That message cannot approve or execute anything through Bander."
               : "I’m not sure how to prepare that safely yet. Could you say it a little differently?",

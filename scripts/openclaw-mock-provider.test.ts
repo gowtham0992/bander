@@ -9,6 +9,70 @@ afterEach(async () => {
 });
 
 describe("deterministic OpenClaw provider", () => {
+  it("suppresses only the redundant proposed reply in Hero mode", async () => {
+    const provider = buildOpenClawMockProvider({ suppressProposedReply: true });
+    app = provider.app;
+    const proposed = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          { role: "toolResult", content: '{"draftId":"draft_hero","status":"proposed"}' },
+        ],
+      },
+    });
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [{ role: "user", content: "Book a flight tomorrow" }],
+      },
+    });
+
+    expect(proposed.json().choices[0].message.content).toBe("NO_REPLY");
+    expect(unsupported.json().choices[0].message.content).toBe(
+      "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
+    );
+  });
+  it("lets Bander alone own automatic and terminal human outcomes in Hero mode", async () => {
+    const provider = buildOpenClawMockProvider({ suppressBanderReplies: true });
+    app = provider.app;
+
+    for (const status of ["executed", "conflict", "declined"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        payload: {
+          model: "household-model",
+          stream: false,
+          messages: [
+            {
+              role: "toolResult",
+              content: JSON.stringify({ draftId: "draft_hero", status }),
+            },
+          ],
+        },
+      });
+      expect(response.json().choices[0].message.content).toBe("NO_REPLY");
+    }
+
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "household-model",
+        stream: false,
+        messages: [{ role: "user", content: "Book a flight tomorrow" }],
+      },
+    });
+    expect(unsupported.json().choices[0].message.content).toBe(
+      "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
+    );
+  });
   it("recognizes the natural request with an ordinary apostrophe", async () => {
     const provider = buildOpenClawMockProvider();
     app = provider.app;

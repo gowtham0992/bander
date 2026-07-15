@@ -1,6 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
-import type { CalendarEvent, MockSeed, SentMessage } from "@bander/contracts";
+import type {
+  CalendarEvent,
+  DemoSandboxState,
+  MockSeed,
+  SentMessage,
+} from "@bander/contracts";
 
 interface MockServicesOptions {
   token: string;
@@ -84,6 +89,21 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
       });
     }
   });
+
+  app.get("/demo/state", async (): Promise<DemoSandboxState> => ({
+    calendar: [...events.values()].map((event) => ({
+      title: event.title,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      timeZone: event.timeZone,
+    })),
+    messages: [...messagesByKey.values()].map((message) => ({
+      recipientDisplayName:
+        people.get(message.recipientId)?.displayName ?? "Unknown recipient",
+      body: message.body,
+      sentAt: message.sentAt,
+    })),
+  }));
 
   app.get<{ Params: { eventId: string } }>(
     "/calendar/events/:eventId",

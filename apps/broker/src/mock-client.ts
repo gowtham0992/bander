@@ -1,6 +1,7 @@
 import type {
   CalendarEvent,
   CalendarRescheduleEffect,
+  DemoSandboxState,
   DraftDocument,
   MessageSendEffect,
   Person,
@@ -30,6 +31,10 @@ export class MockServiceClient implements ExecutionAdapter {
 
   resolvePerson(id: string): Promise<Person> {
     return this.#request(`/people/${encodeURIComponent(id)}`);
+  }
+
+  readDemoState(): Promise<DemoSandboxState> {
+    return this.#request("/demo/state");
   }
 
   async executeDraft(input: {

@@ -22,6 +22,32 @@ function createApp(): FastifyInstance {
 }
 
 describe("mock-service credential boundary", () => {
+  it("exposes the exact seeded Demo Calendar and Messages state only with Bander's credential", async () => {
+    const instance = createApp();
+    const denied = await instance.inject({ method: "GET", url: "/demo/state" });
+    const visible = await instance.inject({
+      method: "GET",
+      url: "/demo/state",
+      headers: authorization,
+    });
+
+    expect(denied.statusCode).toBe(401);
+    expect(visible.statusCode).toBe(200);
+    expect(visible.json()).toEqual({
+      calendar: [
+        expect.objectContaining({
+          title: "Dinner with Sarah",
+          startTime: "2026-07-14T19:00:00-06:00",
+          endTime: "2026-07-14T20:30:00-06:00",
+          timeZone: "America/Denver",
+        }),
+        expect.objectContaining({ title: "Focus block" }),
+      ],
+      messages: [],
+    });
+    expect(visible.body).not.toContain("event-dinner-sarah");
+    expect(visible.body).not.toContain("etag");
+  });
   it("rejects downstream reads without Bander's service credential", async () => {
     const response = await createApp().inject({
       method: "GET",
@@ -142,6 +168,93 @@ describe("mock Messages idempotency", () => {
 });
 
 describe("atomic seeded deal execution", () => {
+  it("updates the same Demo Calendar and Messages state that the Hero view reads", async () => {
+    const instance = createApp();
+    const operation = {
+      method: "POST",
+      url: "/operations/execute",
+      headers: authorization,
+      payload: {
+        operationKey: "hero-visible-operation-0001",
+        draftHash: "a".repeat(64),
+        calendar: {
+          eventId: "event-dinner-sarah",
+          expectedEtag: "event-dinner-sarah-r1",
+          newStartTime: "2026-07-14T19:30:00-06:00",
+          newEndTime: "2026-07-14T21:00:00-06:00",
+        },
+        message: {
+          recipientId: "person-sarah",
+          expectedRecipientRevision: 1,
+          body: "I’ll be about 20 minutes late. See you at 7:30!",
+        },
+      },
+    } as const;
+    const first = await instance.inject(operation);
+    const retry = await instance.inject(operation);
+
+    const visible = await instance.inject({
+      method: "GET",
+      url: "/demo/state",
+      headers: authorization,
+    });
+    expect(visible.json()).toEqual({
+      calendar: expect.arrayContaining([
+        expect.objectContaining({
+          title: "Dinner with Sarah",
+          startTime: "2026-07-14T19:30:00-06:00",
+          endTime: "2026-07-14T21:00:00-06:00",
+        }),
+      ]),
+      messages: [
+        {
+          recipientDisplayName: "Sarah Chen",
+          body: "I’ll be about 20 minutes late. See you at 7:30!",
+          sentAt: "2026-07-13T18:00:00.000Z",
+        },
+      ],
+    });
+    expect(first.statusCode).toBe(201);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual(first.json());
+  });
+
+  it("leaves both visible Hero panels unchanged when the committed world conflicts", async () => {
+    const instance = createApp();
+    const before = await instance.inject({
+      method: "GET",
+      url: "/demo/state",
+      headers: authorization,
+    });
+    const conflict = await instance.inject({
+      method: "POST",
+      url: "/operations/execute",
+      headers: authorization,
+      payload: {
+        operationKey: "hero-conflict-operation-0001",
+        draftHash: "b".repeat(64),
+        calendar: {
+          eventId: "event-dinner-sarah",
+          expectedEtag: "stale-etag",
+          newStartTime: "2026-07-14T19:30:00-06:00",
+          newEndTime: "2026-07-14T21:00:00-06:00",
+        },
+        message: {
+          recipientId: "person-sarah",
+          expectedRecipientRevision: 1,
+          body: "This must not be sent.",
+        },
+      },
+    });
+    const after = await instance.inject({
+      method: "GET",
+      url: "/demo/state",
+      headers: authorization,
+    });
+
+    expect(conflict.statusCode).toBe(412);
+    expect(after.json()).toEqual(before.json());
+  });
   it("returns one Calendar mutation for repeated operation-key execution", async () => {
     const instance = createApp();
     const request = {

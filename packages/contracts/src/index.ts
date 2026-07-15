@@ -25,6 +25,24 @@ export interface SentMessage {
   sentAt: string;
 }
 
+export interface DemoCalendarItem {
+  title: string;
+  startTime: string;
+  endTime: string;
+  timeZone: string;
+}
+
+export interface DemoMessageItem {
+  recipientDisplayName: string;
+  body: string;
+  sentAt: string;
+}
+
+export interface DemoSandboxState {
+  calendar: DemoCalendarItem[];
+  messages: DemoMessageItem[];
+}
+
 export interface MockSeed {
   events: CalendarEvent[];
   people: Person[];

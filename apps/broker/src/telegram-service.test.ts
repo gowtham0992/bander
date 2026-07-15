@@ -175,7 +175,7 @@ function messageUpdate(input: {
   };
 }
 
-function setup() {
+function setup(mode: "verification" | "hero" = "verification") {
   let currentTime = new Date("2026-07-14T18:00:00.000Z");
   const adapter = new FakeAdapter();
   const authorityStore = new AuthorityStore();
@@ -192,6 +192,7 @@ function setup() {
     api,
     engine,
     store,
+    mode,
     now: () => currentTime,
     randomValue: () => values[tokenIndex++] ?? `random-${tokenIndex}`,
   });
@@ -252,6 +253,70 @@ function declineCallbackValue(binding: unknown): string {
 }
 
 describe("Bander Telegram service", () => {
+  it("uses compact exact consumer copy in Hero mode without changing verification copy", async () => {
+    const hero = setup("hero");
+    await pairOwner(hero);
+    const card = await hero.engine.proposeFixture(fixture);
+    await hero.service.deliverProposal(card);
+    const binding = hero.store.read().proposals[0]!;
+    const heroCard = hero.api.messages.at(-1)!;
+
+    expect(heroCard.text).toBe([
+      "Ready to approve?",
+      "",
+      "OpenClaw asked Bander to:",
+      "📅 Move “Dinner with Sarah”",
+      "7:00–8:30 PM → 7:30–9:00 PM",
+      "💬 Send Sarah:",
+      "“See you at 7:30!”",
+      "",
+      "Only these two changes are approved.",
+      "Closes in 10 minutes.",
+    ].join("\n"));
+    expect(heroCard.replyMarkup).toEqual({
+      inline_keyboard: [[
+        { text: "Yes, do this", callback_data: binding.callbackValue },
+        { text: "Not now", callback_data: binding.declineCallbackValue },
+      ]],
+    });
+
+    await hero.service.handleUpdate({
+      update_id: 70,
+      callback_query: {
+        id: "hero-approve",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+    expect(hero.api.messages.at(-1)?.text).toBe([
+      "Done ✓",
+      "📅 “Dinner with Sarah” is now 7:30–9:00 PM.",
+      "💬 Sent Sarah:",
+      "“See you at 7:30!”",
+    ].join("\n"));
+
+    const verification = setup();
+    await pairOwner(verification);
+    const verificationCard = await verification.engine.proposeFixture(fixture);
+    await verification.service.deliverProposal(verificationCard);
+    expect(verification.api.messages.at(-1)?.text).toContain(
+      "Nothing has happened yet. Is this right?",
+    );
+  });
+  it("uses parent-friendly pairing copy in Hero mode", async () => {
+    const current = setup("hero");
+    await pairOwner(current);
+    expect(current.api.messages[0]?.text).toBe(
+      "You’re the person who approves Bander’s limits.\nChoose the Telegram group where you use OpenClaw.",
+    );
+    expect(current.api.messages.at(-1)?.text).toBe(
+      "Bander is ready.\nI only act here, and only within limits you approve.",
+    );
+  });
   it("owner_can_activate_standing_from_telegram", async () => {
     const current = setup();
     await pairOwner(current);

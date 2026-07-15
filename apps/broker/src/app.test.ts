@@ -82,6 +82,39 @@ function createApp() {
 }
 
 describe("broker approval boundary", () => {
+  it("serves sanitized Hero state only when Hero mode is explicitly enabled", async () => {
+    const setup = createApp();
+    const verificationResponse = await setup.app.inject({
+      method: "GET",
+      url: "/api/hero/state",
+    });
+    await setup.app.close();
+    const heroState = {
+      calendar: [
+        {
+          title: "Dinner with Sarah",
+          startTime: "2026-07-14T19:00:00-06:00",
+          endTime: "2026-07-14T20:30:00-06:00",
+          timeZone: "America/Denver",
+        },
+      ],
+      messages: [],
+    };
+    app = buildBrokerApp({
+      engine: setup.engine,
+      fixtures: setup.fixtures,
+      heroMode: true,
+      readHeroState: async () => heroState,
+    });
+    const heroResponse = await app.inject({ method: "GET", url: "/api/hero/state" });
+
+    expect(verificationResponse.statusCode).toBe(404);
+    expect(heroResponse.statusCode).toBe(200);
+    expect(heroResponse.headers["cache-control"]).toBe("no-store");
+    expect(heroResponse.json()).toEqual(heroState);
+    expect(heroResponse.body).not.toContain("etag");
+    expect(heroResponse.body).not.toContain("draftId");
+  });
   it("rate-limits the unauthenticated loopback MCP endpoint", async () => {
     const setup = createApp();
     const request = {

@@ -4,7 +4,11 @@ import {
   AuthorityError,
   type DraftFixture,
 } from "@bander/core";
-import type { AgentReceipt, ApprovalCard } from "@bander/contracts";
+import type {
+  AgentReceipt,
+  ApprovalCard,
+  DemoSandboxState,
+} from "@bander/contracts";
 import { CompilerError, type DraftCompiler } from "./compiler.js";
 import { registerMcpRoutes } from "./mcp.js";
 
@@ -25,6 +29,8 @@ interface BrokerAppOptions {
   resetDemo?: () => Promise<void>;
   simulateCalendarChange?: () => Promise<void>;
   dropNextStandingRunResponseAfterCompletion?: () => boolean;
+  heroMode?: boolean;
+  readHeroState?: () => Promise<DemoSandboxState>;
 }
 
 function sendError(error: unknown, reply: { code(status: number): { send(body: unknown): unknown } }) {
@@ -49,7 +55,15 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     status: "ready",
     fixtureMode: true,
     modelCompiler: options.compiler ? "available" : "not_configured",
+    heroMode: options.heroMode === true,
   }));
+
+  if (options.heroMode && options.readHeroState) {
+    app.get("/api/hero/state", async (_request, reply) => {
+      reply.header("cache-control", "no-store");
+      return options.readHeroState!();
+    });
+  }
 
   app.post<{ Body: { request: string } }>(
     "/api/compiler/proposals",

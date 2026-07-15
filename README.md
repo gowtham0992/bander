@@ -17,6 +17,26 @@ npm run demo
 
 Open `http://127.0.0.1:4310`. The app includes the one-time approval, changed-world refusal, and narrow standing-Band flows. Calendar moves preserve duration and show the complete before/after interval. Every execution shape uses an idempotent operation record so an ambiguous lost response can be reconciled truthfully.
 
+For the clean consumer presentation with real Telegram bots and a real isolated
+OpenClaw gateway, use:
+
+```bash
+npm run hero
+```
+
+Hero mode keeps its state and generated OpenClaw configuration under
+`.bander/hero/`, separate from every verification run. On first launch it writes
+an expiring private pairing link to `.bander/hero/pairing-link.txt`. After
+pairing, open `http://127.0.0.1:4310` for a read-only **Demo Calendar** and
+**Demo Messages** view backed by the exact credential-protected sandbox Bander
+mutates. Press `c` in the Hero terminal only when deliberately demonstrating a
+Calendar change that happens after Bander prepared a review Card.
+
+Hero Telegram contains no verifier instructions or probes. OpenClaw stays
+silent after Bander-owned proposed, automatic, conflict, and declined outcomes,
+while unsupported wording still receives a useful OpenClaw reply. Verification
+mode retains its explicit evidence choreography and isolated state.
+
 Run the deterministic verification commands with no personal account or model key:
 
 ```bash
