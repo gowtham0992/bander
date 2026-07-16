@@ -19,6 +19,7 @@ interface BrokerAppOptions {
   compiler?: DraftCompiler;
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
+  deliverAgentClarification?: (message: string) => Promise<void>;
   proposeAgentStandingOptIn?: (
     request: string,
   ) => Promise<{ status: "proposed" } | undefined>;
@@ -56,6 +57,8 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     status: "ready",
     runtimeMode: options.runtimeMode ?? "sandbox",
     fixtureMode: options.runtimeMode !== "real",
+    calendarBackend: options.runtimeMode === "real" ? "google" : "sandbox",
+    compilerKind: options.runtimeMode === "real" ? "real_calendar" : "fixture",
     modelCompiler: options.compiler ? "available" : "not_configured",
     heroMode: options.heroMode === true,
   }));

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -71,14 +71,15 @@ afterEach(async () => {
 
 function createApp() {
   const adapter = new FakeAdapter();
+  const authorityStore = new AuthorityStore();
   const engine = new AuthorityEngine({
-    store: new AuthorityStore(),
+    store: authorityStore,
     adapter,
     now: () => new Date("2026-07-13T18:00:00.000Z"),
   });
   const fixtures = new Map([[fixture.id, fixture]]);
   app = buildBrokerApp({ engine, fixtures });
-  return { adapter, app, engine, fixtures };
+  return { adapter, app, authorityStore, engine, fixtures };
 }
 
 describe("broker approval boundary", () => {
@@ -407,6 +408,7 @@ describe("broker approval boundary", () => {
 
   it("returns a minimal non-error status for unsupported wording", async () => {
     const setup = createApp();
+    const delivered: string[] = [];
     const server = createBanderMcpServer({
       engine: setup.engine,
       fixtures: setup.fixtures,
@@ -417,6 +419,9 @@ describe("broker approval boundary", () => {
             "model-authored detail that must stay internal",
           );
         },
+      },
+      deliverAgentClarification: async (message) => {
+        delivered.push(message);
       },
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -432,8 +437,54 @@ describe("broker approval boundary", () => {
       const text = (result.content as Array<{ type: string; text?: string }>)[0]?.text ?? "";
 
       expect(result.isError).not.toBe(true);
-      expect(JSON.parse(text)).toEqual({ status: "unsupported" });
+      expect(JSON.parse(text)).toEqual({ status: "clarification_required" });
       expect(text).not.toContain("model-authored detail");
+      expect(delivered).toEqual([]);
+      expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("delivers only a deterministic clarification while returning minimal agent status", async () => {
+    const setup = createApp();
+    const proposeFixture = vi.spyOn(setup.engine, "proposeFixture");
+    const delivered: string[] = [];
+    const safeMessage =
+      "What date should I move “Bander Demo Appointment” to?\nNothing happened.";
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: setup.fixtures,
+      agentCompiler: {
+        compile: async () => {
+          throw new CompilerError(
+            "clarification_required",
+            "internal compiler detail",
+            safeMessage,
+          );
+        },
+      },
+      deliverAgentClarification: async (message) => {
+        delivered.push(message);
+      },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-clarification-test", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: { request: "Move it" },
+      });
+      const text = (result.content as Array<{ type: string; text?: string }>)[0]?.text ?? "";
+
+      expect(JSON.parse(text)).toEqual({ status: "clarification_required" });
+      expect(text).not.toContain(safeMessage);
+      expect(delivered).toEqual([safeMessage]);
+      expect(proposeFixture).not.toHaveBeenCalled();
       expect(setup.adapter.executions).toBe(0);
     } finally {
       await client.close();

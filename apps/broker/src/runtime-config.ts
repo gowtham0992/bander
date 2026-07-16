@@ -13,6 +13,7 @@ export type BanderRuntimeConfiguration =
       openaiApiKey: string;
       googleClientPath: string;
       googleTokenPath: string;
+      calendarTimeZone: string;
       telegramToken: string;
       telegramStatePath: string;
       telegramPairingPath: string;
@@ -53,6 +54,11 @@ export function parseRuntimeConfiguration(
       googleTokenPath: required(
         environment,
         "GOOGLE_OAUTH_TOKEN_PATH",
+        "real",
+      ),
+      calendarTimeZone: required(
+        environment,
+        "BANDER_CALENDAR_TIME_ZONE",
         "real",
       ),
       telegramToken: required(

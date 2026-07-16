@@ -74,7 +74,10 @@ const auth = await loadGoogleCalendarOAuth({ clientPath, tokenPath });
 const boundary = createGoogleCalendarBoundary(auth);
 const adapter = new GoogleCalendarAdapter(boundary);
 verificationStage = "discovery";
-const original = await adapter.discoverEvent({ titleHint, localDate });
+const original = await adapter.discoverEvent({
+  titleHint,
+  sourceLocalDateHint: localDate,
+});
 verificationStage = "target_resolution";
 const durationMs = Date.parse(original.endTime) - Date.parse(original.startTime);
 if (!Number.isFinite(durationMs) || durationMs <= 0) {

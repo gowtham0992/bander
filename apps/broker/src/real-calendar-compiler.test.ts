@@ -5,6 +5,7 @@ import {
   RealCalendarDraftCompiler,
   type CalendarIntentSelector,
 } from "./compiler.js";
+import { GoogleCalendarError } from "./google-calendar.js";
 
 const event: CalendarEvent = {
   id: "google-event-id",
@@ -29,15 +30,47 @@ function calendar() {
 }
 
 describe("real Calendar intent compiler", () => {
+  it("separates an optional source date from a required cross-day target", async () => {
+    const resolver = calendar();
+    const compiler = new RealCalendarDraftCompiler(
+      resolver,
+      selector({
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-17",
+        targetLocalStart: "14:00",
+        needsClarification: false,
+        clarificationReason: "none",
+        clarification: "",
+      }),
+    );
+
+    const fixture = await compiler.compile(
+      "Move the fictional planning block to July 17 at 2 PM.",
+    );
+
+    expect(resolver.discoverEvent).toHaveBeenCalledWith({
+      titleHint: "Fictional planning block",
+      sourceLocalDateHint: null,
+    });
+    expect(fixture.calendar).toEqual({
+      eventId: event.id,
+      expectedEtag: event.etag,
+      newStartTime: "2026-07-17T20:00:00.000Z",
+    });
+  });
+
   it("lets GPT extract only bounded hints while Bander resolves authority", async () => {
     const resolver = calendar();
     const compiler = new RealCalendarDraftCompiler(
       resolver,
       selector({
         eventTitleHint: "Fictional planning block",
-        localDateHint: "2026-07-20",
-        requestedLocalStart: "11:15",
+        sourceLocalDateHint: "2026-07-20",
+        targetLocalDate: "2026-07-20",
+        targetLocalStart: "11:15",
         needsClarification: false,
+        clarificationReason: "none",
         clarification: "",
       }),
     );
@@ -48,7 +81,7 @@ describe("real Calendar intent compiler", () => {
 
     expect(resolver.discoverEvent).toHaveBeenCalledWith({
       titleHint: "Fictional planning block",
-      localDate: "2026-07-20",
+      sourceLocalDateHint: "2026-07-20",
     });
     expect(fixture).toEqual({
       id: "real-google-calendar-reschedule",
@@ -71,9 +104,11 @@ describe("real Calendar intent compiler", () => {
       "model-authored authority",
       {
         eventTitleHint: "Fictional planning block",
-        localDateHint: "2026-07-20",
-        requestedLocalStart: "11:15",
+        sourceLocalDateHint: "2026-07-20",
+        targetLocalDate: "2026-07-20",
+        targetLocalStart: "11:15",
         needsClarification: false,
+        clarificationReason: "none",
         clarification: "",
         eventId: "model-selected-event",
       },
@@ -82,9 +117,11 @@ describe("real Calendar intent compiler", () => {
       "malformed local time",
       {
         eventTitleHint: "Fictional planning block",
-        localDateHint: "Monday-ish",
-        requestedLocalStart: "after lunch",
+        sourceLocalDateHint: "Monday-ish",
+        targetLocalDate: "Monday-ish",
+        targetLocalStart: "after lunch",
         needsClarification: false,
+        clarificationReason: "none",
         clarification: "",
       },
     ],
@@ -102,15 +139,19 @@ describe("real Calendar intent compiler", () => {
       resolver,
       selector({
         eventTitleHint: "Fictional planning block",
-        localDateHint: "2026-07-20",
-        requestedLocalStart: "11:15",
+        sourceLocalDateHint: null,
+        targetLocalDate: "",
+        targetLocalStart: "11:15",
         needsClarification: true,
+        clarificationReason: "missing_target_date",
         clarification: "Which Monday do you mean?",
       }),
     );
 
+    const expected =
+      "What date should I move “Fictional planning block” to?\nNothing happened.";
     await expect(compiler.compile("Move it Monday")).rejects.toEqual(
-      new CompilerError("clarification_required", "Which Monday do you mean?"),
+      new CompilerError("clarification_required", expected, expected),
     );
     expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });
@@ -118,22 +159,102 @@ describe("real Calendar intent compiler", () => {
   it("propagates a fail-closed ambiguous Calendar match", async () => {
     const resolver = {
       discoverEvent: vi.fn(async () => {
-        throw new Error("ambiguous_event_match");
+        throw new GoogleCalendarError(
+          "ambiguous_event_match",
+          "more than one eligible event",
+        );
       }),
     };
     const compiler = new RealCalendarDraftCompiler(
       resolver,
       selector({
         eventTitleHint: "Fictional planning block",
-        localDateHint: "2026-07-20",
-        requestedLocalStart: "11:15",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-20",
+        targetLocalStart: "11:15",
         needsClarification: false,
+        clarificationReason: "none",
         clarification: "",
       }),
     );
 
-    await expect(compiler.compile("Move the block")).rejects.toThrow(
-      "ambiguous_event_match",
+    await expect(compiler.compile("Move the block")).rejects.toMatchObject({
+      code: "clarification_required",
+      humanMessage:
+        "I found more than one eligible upcoming event called “Fictional planning block”.\nNothing happened.\nWhich date did you mean?",
+    });
+  });
+
+  it("gives a specific no-match reason without creating authority", async () => {
+    const resolver = {
+      discoverEvent: vi.fn(async () => {
+        throw new GoogleCalendarError("event_not_found", "no event");
+      }),
+    };
+    const compiler = new RealCalendarDraftCompiler(
+      resolver,
+      selector({
+        eventTitleHint: "Bander Demo Appointment",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-17",
+        targetLocalStart: "14:00",
+        needsClarification: false,
+        clarificationReason: "none",
+        clarification: "model text must not be shown",
+      }),
     );
+
+    await expect(compiler.compile("Move it")).rejects.toMatchObject({
+      code: "clarification_required",
+      humanMessage:
+        "I couldn’t find an eligible upcoming event called “Bander Demo Appointment”.\nNothing happened.\nCheck the name or tell OpenClaw which date it is on.",
+    });
+  });
+
+  it.each([
+    ["date", "", "14:00", "What date should I move “Fictional planning block” to?\nNothing happened."],
+    ["time", "2026-07-17", "", "What time should I move “Fictional planning block” to?\nNothing happened."],
+  ])("asks specifically for a missing target %s", async (_field, date, time, message) => {
+    const resolver = calendar();
+    const compiler = new RealCalendarDraftCompiler(
+      resolver,
+      selector({
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: date,
+        targetLocalStart: time,
+        needsClarification: true,
+        clarificationReason: date ? "missing_target_time" : "missing_target_date",
+        clarification: "untrusted model prose",
+      }),
+    );
+
+    await expect(compiler.compile("Move it")).rejects.toMatchObject({
+      code: "clarification_required",
+      humanMessage: message,
+    });
+    expect(resolver.discoverEvent).not.toHaveBeenCalled();
+  });
+
+  it("returns a specific bounded explanation for cancellation", async () => {
+    const resolver = calendar();
+    const compiler = new RealCalendarDraftCompiler(
+      resolver,
+      selector({
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: "",
+        targetLocalStart: "",
+        needsClarification: true,
+        clarificationReason: "unsupported_action",
+        clarification: "",
+      }),
+    );
+
+    await expect(compiler.compile("Cancel the planning block")).rejects.toMatchObject({
+      humanMessage:
+        "I can safely prepare an eligible Calendar reschedule here, but not that kind of action yet.\nNothing happened.",
+    });
+    expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });
 });

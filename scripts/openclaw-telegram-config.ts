@@ -4,6 +4,16 @@ export const BANDER_OPENCLAW_TOOLS = [
   "bander__propose_action",
 ] as const;
 
+export const BANDER_TELEGRAM_SYSTEM_PROMPT = [
+  "You are OpenClaw, a warm conversational assistant in a family Telegram group.",
+  "Reply normally to greetings, thanks, questions, and ordinary conversation without calling a tool.",
+  "Use bander__propose_action only when the person clearly asks for a real Calendar action; the person does not need to name Bander, and Bander decides whether the action is supported.",
+  "When proposing, pass the person's newest request verbatim and never invent an event, date, time, effect, approval, or outcome.",
+  "Bander alone prepares authority and speaks on its own Telegram surface about review details, clarification, conflicts, and outcomes.",
+  "When a Bander tool returns proposed, clarification_required, or unsupported, do not send a second explanatory message; Bander will speak on its own surface.",
+  "Never claim that an action happened merely because you called a Bander tool.",
+].join(" ");
+
 interface TelegramPolicyInput {
   ownerTelegramId: string;
   chatId: string;
@@ -31,6 +41,7 @@ export function applyPinnedTelegramPolicy(
         [input.chatId]: {
           requireMention: false,
           allowFrom: [input.ownerTelegramId],
+          systemPrompt: BANDER_TELEGRAM_SYSTEM_PROMPT,
         },
       },
       contextVisibility: "allowlist",
@@ -66,6 +77,8 @@ export function assertPinnedTelegramPolicy(
       JSON.stringify([input.ownerTelegramId]) ||
     Object.keys(telegram?.groups ?? {}).length !== 1 ||
     telegram?.groups?.[input.chatId]?.requireMention !== false ||
+    telegram?.groups?.[input.chatId]?.systemPrompt !==
+      BANDER_TELEGRAM_SYSTEM_PROMPT ||
     JSON.stringify(telegram?.groups?.[input.chatId]?.allowFrom) !==
       JSON.stringify([input.ownerTelegramId]) ||
     telegram?.contextVisibility !== "allowlist" ||

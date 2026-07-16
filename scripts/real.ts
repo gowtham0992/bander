@@ -1,3 +1,3 @@
-import { runLocal } from "./run-local.js";
+import { runRealProduct } from "./real-product.js";
 
-await runLocal("real");
+await runRealProduct();

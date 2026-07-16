@@ -650,6 +650,21 @@ export class TelegramService {
     });
   }
 
+  async deliverClarification(message: string): Promise<void> {
+    await this.#stateLock.run("telegram-state", async () => {
+      const installation = this.#store.read().installation;
+      if (!installation) throw new Error("Telegram installation is not paired");
+      const text = message
+        .normalize("NFKC")
+        .replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ")
+        .replace(/\r\n?/g, "\n")
+        .trim()
+        .slice(0, 800);
+      if (!text) throw new Error("Bander clarification is empty");
+      await this.#api.sendMessage(installation.chatId, text);
+    });
+  }
+
   async proposeStandingOptIn(
     request: string,
   ): Promise<{ status: "proposed" } | undefined> {

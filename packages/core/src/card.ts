@@ -49,6 +49,18 @@ export function formatCalendarIntervalWithContext(
   return `${date}, ${formatInterval(start, end, timeZone)} ${zone}`;
 }
 
+function localDate(start: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).formatToParts(new Date(start));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 function calendarLine(effect: CalendarRescheduleEffect): string {
   const previous = formatInterval(
     effect.expected.startTime,
@@ -84,20 +96,28 @@ export function renderApprovalCard(
   ];
   const effectPreviews = document.effects.map((effect) =>
     effect.type === "calendar.reschedule_event"
-      ? {
-          kind: effect.type,
-          eventTitle: effect.expected.title,
-          previousInterval: formatInterval(
-            effect.expected.startTime,
-            effect.expected.endTime,
-            effect.expected.timeZone,
-          ),
-          resultingInterval: formatInterval(
-            effect.changes.startTime,
-            effect.changes.endTime,
-            effect.expected.timeZone,
-          ),
-        }
+      ? (() => {
+          const crossesLocalDate =
+            localDate(effect.expected.startTime, effect.expected.timeZone) !==
+            localDate(effect.changes.startTime, effect.expected.timeZone);
+          const preview = crossesLocalDate
+            ? formatCalendarIntervalWithContext
+            : formatInterval;
+          return {
+            kind: effect.type,
+            eventTitle: effect.expected.title,
+            previousInterval: preview(
+              effect.expected.startTime,
+              effect.expected.endTime,
+              effect.expected.timeZone,
+            ),
+            resultingInterval: preview(
+              effect.changes.startTime,
+              effect.changes.endTime,
+              effect.expected.timeZone,
+            ),
+          };
+        })()
       : {
           kind: effect.type,
           recipientDisplayName: effect.expected.displayName,

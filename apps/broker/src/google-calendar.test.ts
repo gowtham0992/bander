@@ -30,8 +30,12 @@ class FakeBoundary implements GoogleCalendarBoundary {
   events: GoogleEventResource[] = [structuredClone(eligibleEvent)];
   patches: Parameters<GoogleCalendarBoundary["patchEvent"]>[0][] = [];
   patchError: unknown;
+  lists: Parameters<GoogleCalendarBoundary["listEvents"]>[0][] = [];
 
-  async listEvents(): Promise<GoogleEventResource[]> {
+  async listEvents(
+    input: Parameters<GoogleCalendarBoundary["listEvents"]>[0],
+  ): Promise<GoogleEventResource[]> {
+    this.lists.push(structuredClone(input));
     return structuredClone(this.events);
   }
 
@@ -86,6 +90,67 @@ function calendarOnlyDraft(): DraftDocument {
 }
 
 describe("real Google Calendar boundary", () => {
+  it("finds one exact-title eligible event in a bounded upcoming window without a source date", async () => {
+    const boundary = new FakeBoundary();
+    const adapter = new GoogleCalendarAdapter(
+      boundary,
+      () => new Date("2026-07-15T12:00:00.000Z"),
+    );
+
+    await expect(
+      adapter.discoverEvent({
+        titleHint: "  FICTIONAL   planning block ",
+        sourceLocalDateHint: null,
+      }),
+    ).resolves.toMatchObject({ id: "google-event-1" });
+    expect(boundary.lists).toEqual([
+      {
+        calendarId: "primary",
+        timeMin: "2026-07-15T12:00:00.000Z",
+        timeMax: "2026-08-15T12:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("rejects multiple exact-title upcoming matches across dates", async () => {
+    const boundary = new FakeBoundary();
+    boundary.events.push({
+      ...structuredClone(eligibleEvent),
+      id: "google-event-2",
+      start: {
+        dateTime: "2026-07-22T09:00:00-06:00",
+        timeZone: "America/Denver",
+      },
+      end: {
+        dateTime: "2026-07-22T10:00:00-06:00",
+        timeZone: "America/Denver",
+      },
+    });
+    const adapter = new GoogleCalendarAdapter(
+      boundary,
+      () => new Date("2026-07-15T12:00:00.000Z"),
+    );
+
+    await expect(
+      adapter.discoverEvent({
+        titleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+      }),
+    ).rejects.toMatchObject({ code: "ambiguous_event_match" });
+  });
+
+  it("returns a distinct no-match result for an exact title miss", async () => {
+    const boundary = new FakeBoundary();
+    const adapter = new GoogleCalendarAdapter(boundary);
+
+    await expect(
+      adapter.discoverEvent({
+        titleHint: "An event that is not there",
+        sourceLocalDateHint: null,
+      }),
+    ).rejects.toMatchObject({ code: "event_not_found" });
+  });
+
   it("google_adapter_rejects_ambiguous_event_match", async () => {
     const boundary = new FakeBoundary();
     boundary.events.push({ ...structuredClone(eligibleEvent), id: "google-event-2" });
@@ -94,7 +159,7 @@ describe("real Google Calendar boundary", () => {
     await expect(
       adapter.discoverEvent({
         titleHint: "Fictional planning block",
-        localDate: "2026-07-20",
+        sourceLocalDateHint: "2026-07-20",
       }),
     ).rejects.toEqual(
       new GoogleCalendarError(
@@ -119,7 +184,7 @@ describe("real Google Calendar boundary", () => {
       await expect(
         adapter.discoverEvent({
           titleHint: "Fictional planning block",
-          localDate: "2026-07-20",
+          sourceLocalDateHint: "2026-07-20",
         }),
       ).rejects.toMatchObject({ code: "unsupported_event_shape" });
     },

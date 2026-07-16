@@ -1285,3 +1285,106 @@ No Telegram listener, callback, Google adapter, compiler authority boundary,
 standing predicate or MCP tool inventory changed. The running manual stack was
 stopped before the real-process verifier and restarted only after the verified
 checkpoint. `transcription_day2.md` remains untracked and untouched.
+
+## Checkpoint 28 — canonical conversational real-product path
+
+**Status:** complete — manual real-product Telegram journey and final matrix green
+
+The parent-experience failures were reproduced before implementation. A live
+two-character greeting reached the deterministic reference provider and then
+called `propose_action`; OpenClaw returned the generic unsupported response.
+The ordinary cross-day request also failed because the live intent contract
+used one date as both the event lookup date and destination date. The first
+focused acceptance run was red:
+
+```text
+openclaw real-product configuration: missing
+cross-day source/target contract: invalid_model_output
+Test Files  2 failed
+Tests       2 failed | 9 passed
+```
+
+A separate canonical-runtime test was added and observed red because no
+real-product supervisor existed. `npm run real` previously started only the
+broker and could silently coexist with a separately started reference/mock
+gateway.
+
+Real mode now has its own OpenClaw configuration using the official Responses
+API and exact `gpt-5.6-sol` model. Its system prompt leaves greetings, thanks,
+questions and ordinary conversation with OpenClaw, while clear Calendar
+actions may invoke Bander without requiring the person to mention Bander or
+memorize a phrase. The deterministic reference provider remains available only
+to sandbox tests and Hero mode.
+
+The Calendar intent contract now contains `eventTitleHint`, optional
+`sourceLocalDateHint`, required `targetLocalDate`, and required
+`targetLocalStart`, plus a bounded clarification classification. Without a
+source date, Bander searches the next 31 days on `primary`, exhausts Google
+pagination, requires one normalized exact-title eligible match, and creates no
+authority on zero or multiple matches. Target dates resolve in the explicitly
+configured connected-Calendar timezone (`America/Denver` for this product
+slice), not the host process's implicit timezone. The selected Google event
+still supplies the canonical ID, ETag, complete interval and timezone;
+deterministic Bander code preserves duration and constructs the action.
+
+Model-authored clarification prose is not relayed. Bander maps bounded failure
+reasons to deterministic human copy, sanitizes it, sends it as plain text from
+the independently bound Bander Telegram bot, and returns only
+`clarification_required` or `unsupported` to OpenClaw. Tests prove the
+clarification creates no Draft and that arbitrary compiler/model detail cannot
+cross this boundary.
+
+The canonical `npm run real` command now supervises both the broker and a fresh
+OpenClaw gateway. Before reporting ready it validates real runtime mode, the
+Google backend, the real Calendar compiler, active owner/group pairing, the
+live model provider, exact three-tool MCP inventory, unreachable fixture and
+standing demo routes, and absence of Google paths, Bander bot credentials and
+mock-service configuration from OpenClaw. It refuses to attach to an existing
+broker and writes a fresh private generated OpenClaw config and gateway log.
+
+Restored-green evidence:
+
+```text
+focused contract/runtime/Telegram tests: 62 passed
+typecheck: passed
+functional suite: 16 files, 163 tests passed
+attack suite: 2 files, 20 tests passed
+canonical startup: real broker + live OpenClaw gateway ready
+live provider: bander-openai/gpt-5.6-sol
+effective MCP tools: exactly three Bander tools
+live cross-day Sol + Google compilation: passed; no mutation
+dependency audit: 0 vulnerabilities
+production build: passed
+```
+
+The manual parent/product acceptance then ran through the canonical command.
+Two natural `Hi` turns produced ordinary live-Sol OpenClaw replies; the exported
+trajectory contained only user text and assistant thinking/text, with no tool
+call. The parent then wrote `can you move the bander demo appointment to July
+17, 1 pm mst?` without a source date or magic syntax. Live Sol extracted the
+bounded target, deterministic Bander uniquely resolved the real upcoming Google
+event, and the owner approved one real mutation. The human outcome showed the
+complete authoritative before/after interval and no simulated Messages effect.
+
+That live journey exposed one final disclosure regression: the first cross-day
+Card showed only `4:00–5:00 PM → 1:00–2:00 PM`, even though its truthful outcome
+contained both dates. A focused test reproduced it red (`1 failed | 36
+skipped`). Approval previews now retain the compact consumer format for
+same-day moves but automatically include weekday, date, complete interval and
+timezone on both sides of a cross-day move. The restored live Card showed:
+
+```text
+Fri, Jul 17, 1:00–2:00 PM MDT → Sat, Jul 18, 4:00–5:00 PM MDT
+```
+
+The owner approved that second Card and Bander performed exactly the displayed
+real Google move. The final existing matrix passed: 163 functional tests, 20
+attack tests, all six demo outcomes, one-time recovery, standing recovery, the
+real OpenClaw verifier with exactly three tools and no execution, production
+build, and a moderate dependency audit with zero vulnerabilities.
+
+Hero remains an explicitly hermetic sandbox and was not converted into the
+product path. `transcription_day2.md` remains untracked and untouched. This
+checkpoint's canonical parent/product command is `npm run real`; it owns both
+processes and fails closed rather than attaching to a stale broker or mock
+gateway.

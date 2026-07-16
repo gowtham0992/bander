@@ -3,7 +3,10 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod/v4";
 import type { DraftFixture } from "@bander/core";
 import type { CalendarEvent } from "@bander/contracts";
-import { resolveLocalStart } from "./google-calendar.js";
+import {
+  GoogleCalendarError,
+  resolveLocalStart,
+} from "./google-calendar.js";
 
 const fixtureIds = [
   "move-dinner-and-notify-sarah",
@@ -77,6 +80,7 @@ export class CompilerError extends Error {
       | "invalid_model_output"
       | "model_unavailable",
     message: string,
+    readonly humanMessage?: string,
   ) {
     super(message);
   }
@@ -84,10 +88,20 @@ export class CompilerError extends Error {
 
 const CalendarIntentSchema = z
   .object({
-    eventTitleHint: z.string().trim().min(1).max(160),
-    localDateHint: z.string().trim().max(10),
-    requestedLocalStart: z.string().trim().max(5),
+    eventTitleHint: z.string().trim().max(160),
+    sourceLocalDateHint: z.string().trim().max(10).nullable(),
+    targetLocalDate: z.string().trim().max(10),
+    targetLocalStart: z.string().trim().max(5),
     needsClarification: z.boolean(),
+    clarificationReason: z.enum([
+      "none",
+      "missing_event",
+      "missing_target_date",
+      "missing_target_time",
+      "missing_destination",
+      "unsupported_action",
+      "ambiguous",
+    ]),
     clarification: z.string().trim().max(240),
   })
   .strict();
@@ -102,7 +116,7 @@ export interface CalendarIntentSelector {
 export interface RealCalendarResolver {
   discoverEvent(input: {
     titleHint: string;
-    localDate: string;
+    sourceLocalDateHint: string | null;
   }): Promise<CalendarEvent>;
 }
 
@@ -124,15 +138,19 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
     }
     const intent = parsed.data;
     if (intent.needsClarification) {
+      const humanMessage = deterministicIntentClarification(intent);
       throw new CompilerError(
         "clarification_required",
-        intent.clarification ||
-          "The request needs clarification before Bander can prepare it.",
+        humanMessage,
+        humanMessage,
       );
     }
     if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(intent.localDateHint) ||
-      !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(intent.requestedLocalStart)
+      !intent.eventTitleHint ||
+      (intent.sourceLocalDateHint !== null &&
+        !/^\d{4}-\d{2}-\d{2}$/.test(intent.sourceLocalDateHint)) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(intent.targetLocalDate) ||
+      !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(intent.targetLocalStart)
     ) {
       throw new CompilerError(
         "invalid_model_output",
@@ -140,13 +158,45 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       );
     }
 
-    const event = await this.calendar.discoverEvent({
-      titleHint: intent.eventTitleHint,
-      localDate: intent.localDateHint,
-    });
+    let event: CalendarEvent;
+    try {
+      event = await this.calendar.discoverEvent({
+        titleHint: intent.eventTitleHint,
+        sourceLocalDateHint: intent.sourceLocalDateHint,
+      });
+    } catch (error) {
+      if (error instanceof GoogleCalendarError) {
+        const title = safeIntentLabel(intent.eventTitleHint);
+        if (error.code === "event_not_found") {
+          const humanMessage = `I couldn’t find an eligible upcoming event called “${title}”.\nNothing happened.\nCheck the name or tell OpenClaw which date it is on.`;
+          throw new CompilerError(
+            "clarification_required",
+            humanMessage,
+            humanMessage,
+          );
+        }
+        if (error.code === "ambiguous_event_match") {
+          const humanMessage = `I found more than one eligible upcoming event called “${title}”.\nNothing happened.\nWhich date did you mean?`;
+          throw new CompilerError(
+            "clarification_required",
+            humanMessage,
+            humanMessage,
+          );
+        }
+        if (error.code === "unsupported_event_shape") {
+          const humanMessage = `I found “${title}”, but it isn’t a Calendar event Bander can safely move yet.\nNothing happened.`;
+          throw new CompilerError(
+            "unsupported_request",
+            humanMessage,
+            humanMessage,
+          );
+        }
+      }
+      throw error;
+    }
     const newStartTime = resolveLocalStart({
-      localDate: intent.localDateHint,
-      localTime: intent.requestedLocalStart,
+      localDate: intent.targetLocalDate,
+      localTime: intent.targetLocalStart,
       timeZone: event.timeZone,
     });
     return {
@@ -163,9 +213,16 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
 
 export class OpenAISolIntentSelector implements CalendarIntentSelector {
   readonly #client: OpenAI;
+  readonly #calendarTimeZone: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, calendarTimeZone = "America/Denver") {
     this.#client = new OpenAI({ apiKey, timeout: 15_000, maxRetries: 1 });
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone }).format();
+    } catch {
+      throw new CompilerError("invalid_model_output", "Invalid Calendar timezone configuration");
+    }
+    this.#calendarTimeZone = calendarTimeZone;
   }
 
   async select(agentClaimedRequest: string): Promise<unknown> {
@@ -177,10 +234,16 @@ export class OpenAISolIntentSelector implements CalendarIntentSelector {
         max_output_tokens: 300,
         instructions: [
           "Extract one narrow Calendar reschedule intent for Bander.",
-          "Return only the event-title hint, complete local date YYYY-MM-DD, and requested local start HH:mm.",
+          "Return only the event-title hint, optional current/source local date hint, required destination local date, and required destination local start.",
           "Do not choose or emit a Calendar ID, event ID, ETag, end time, duration, effects, execution parameters, approval, or authority.",
-          "Resolve relative dates using the date explicitly present in the request; if it is not unambiguous, set needsClarification true.",
-          "If the title, date, or start time is missing or ambiguous, set needsClarification true and ask one short question.",
+          `The connected Calendar's authoritative timezone is ${this.#calendarTimeZone}; resolve dates in that timezone.`,
+          `Today's date in that Calendar timezone is ${currentInstallationLocalDate(new Date(), this.#calendarTimeZone)}.`,
+          "sourceLocalDateHint identifies the event's current date only when the person actually supplied it; otherwise return null.",
+          "targetLocalDate and targetLocalStart describe where the person wants the event moved.",
+          "Resolve a month and day without a year to its next unambiguous occurrence relative to today's local date.",
+          "If the event title, target date, or target start time is missing or ambiguous, set needsClarification true and leave the missing target field empty.",
+          "Set clarificationReason to none for a complete reschedule; otherwise classify only as missing_event, missing_target_date, missing_target_time, missing_destination, unsupported_action, or ambiguous.",
+          "Cancellation, deletion, invitation, messaging, spending, and every non-reschedule action are unsupported_action.",
           "You are advisory extraction only. Deterministic Bander code resolves the event and constructs the action.",
         ].join(" "),
         input: agentClaimedRequest,
@@ -205,13 +268,61 @@ export class OpenAISolIntentSelector implements CalendarIntentSelector {
   }
 }
 
+function safeIntentLabel(value: string): string {
+  return (
+    value
+      .normalize("NFKC")
+      .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, " ")
+      .replace(/[“”]/g, '"')
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160) || "that event"
+  );
+}
+
+function deterministicIntentClarification(intent: CalendarIntent): string {
+  const title = safeIntentLabel(intent.eventTitleHint);
+  if (!intent.eventTitleHint) {
+    return "Which Calendar event would you like to move?\nNothing happened.";
+  }
+  if (intent.clarificationReason === "unsupported_action") {
+    return "I can safely prepare an eligible Calendar reschedule here, but not that kind of action yet.\nNothing happened.";
+  }
+  if (!intent.targetLocalDate && !intent.targetLocalStart) {
+    return `What date and time should I move “${title}” to?\nNothing happened.`;
+  }
+  if (!intent.targetLocalDate) {
+    return `What date should I move “${title}” to?\nNothing happened.`;
+  }
+  if (!intent.targetLocalStart) {
+    return `What time should I move “${title}” to?\nNothing happened.`;
+  }
+  return `I need one clear destination date and time for “${title}”.\nNothing happened.`;
+}
+
+function currentInstallationLocalDate(
+  now = new Date(),
+  timeZone = "America/Denver",
+): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 export function createRealCalendarDraftCompiler(input: {
   apiKey: string;
   calendar: RealCalendarResolver;
+  calendarTimeZone: string;
 }): DraftCompiler {
   return new RealCalendarDraftCompiler(
     input.calendar,
-    new OpenAISolIntentSelector(input.apiKey),
+    new OpenAISolIntentSelector(input.apiKey, input.calendarTimeZone),
   );
 }
 

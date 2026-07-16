@@ -45,13 +45,14 @@ async function main(): Promise<void> {
   const request = required("BANDER_SOL_EVIDENCE_REQUEST");
   const clientPath = required("GOOGLE_OAUTH_CLIENT_PATH");
   const tokenPath = required("GOOGLE_OAUTH_TOKEN_PATH");
+  const calendarTimeZone = required("BANDER_CALENDAR_TIME_ZONE");
 
   stage = "oauth";
   const auth = await loadGoogleCalendarOAuth({ clientPath, tokenPath });
   const calendar = new GoogleCalendarAdapter(createGoogleCalendarBoundary(auth));
 
   stage = "live_sol_call";
-  const intent = await new OpenAISolIntentSelector(apiKey).select(request);
+  const intent = await new OpenAISolIntentSelector(apiKey, calendarTimeZone).select(request);
   if (hasForbiddenKey(intent)) {
     throw new Error("The model returned a forbidden authority field");
   }
@@ -80,9 +81,11 @@ async function main(): Promise<void> {
         liveResponsesCall: true,
         modelOutputFields: [
           "eventTitleHint",
-          "localDateHint",
-          "requestedLocalStart",
+          "sourceLocalDateHint",
+          "targetLocalDate",
+          "targetLocalStart",
           "needsClarification",
+          "clarificationReason",
           "clarification",
         ],
         exactlyOneRealEventResolved: true,

@@ -3,7 +3,7 @@ import path from "node:path";
 
 type Role = "mock-services" | "broker" | "web" | "openclaw";
 
-const agentAllowlist = [
+const sandboxAgentAllowlist = [
   "PATH",
   "HOME",
   "USER",
@@ -27,13 +27,21 @@ export function createRuntimeEnvironments(
     NODE_ENV: source.NODE_ENV ?? "development",
   };
   const openclaw: NodeJS.ProcessEnv = {};
+  const agentAllowlist =
+    runtimeMode === "real"
+      ? (["PATH", "HOME", "USER", "SHELL", "TMPDIR", "OPENAI_API_KEY"] as const)
+      : sandboxAgentAllowlist;
   for (const key of agentAllowlist) {
     if (source[key] !== undefined) openclaw[key] = source[key];
   }
   openclaw.HOME = path.resolve(".bander/openclaw-home");
   openclaw.BANDER_MCP_URL = "http://localhost:4310/mcp";
   openclaw.OPENCLAW_STATE_DIR = path.resolve(".bander/openclaw-reference-state");
-  openclaw.OPENCLAW_CONFIG_PATH = path.resolve("openclaw/reference.openclaw.json");
+  openclaw.OPENCLAW_CONFIG_PATH = path.resolve(
+    runtimeMode === "real"
+      ? "openclaw/real-product.openclaw.json"
+      : "openclaw/reference.openclaw.json",
+  );
   if (source.OPENCLAW_TELEGRAM_BOT_TOKEN) {
     openclaw.TELEGRAM_BOT_TOKEN = source.OPENCLAW_TELEGRAM_BOT_TOKEN;
   }
@@ -58,6 +66,7 @@ export function createRuntimeEnvironments(
             GOOGLE_OAUTH_TOKEN_PATH: source.GOOGLE_OAUTH_TOKEN_PATH
               ? path.resolve(source.GOOGLE_OAUTH_TOKEN_PATH)
               : undefined,
+            BANDER_CALENDAR_TIME_ZONE: source.BANDER_CALENDAR_TIME_ZONE,
           }
         : {
             MOCK_SERVICE_TOKEN: serviceToken,

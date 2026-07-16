@@ -253,6 +253,23 @@ function declineCallbackValue(binding: unknown): string {
 }
 
 describe("Bander Telegram service", () => {
+  it("delivers a deterministic clarification through Bander as plain text", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    current.api.messages.length = 0;
+
+    await current.service.deliverClarification(
+      "What date should I move “Bander Demo Appointment” to?\u202e\nNothing happened.",
+    );
+
+    expect(current.api.messages).toEqual([
+      {
+        chatId: "-500",
+        text: "What date should I move “Bander Demo Appointment” to? \nNothing happened.",
+      },
+    ]);
+  });
+
   it("renders a Calendar-only real Card and exact changed-world refusal", async () => {
     const current = setup("real");
     await pairOwner(current);
@@ -298,6 +315,30 @@ describe("Bander Telegram service", () => {
     );
     expect(current.api.messages.some((message) => message.text.startsWith("Done"))).toBe(false);
     expect(current.store.read().proposals[0]).not.toHaveProperty("receiptId");
+  });
+
+  it("shows complete source and destination context on a cross-day approval Card", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const crossDayFixture: DraftFixture = {
+      ...standingFixture,
+      id: "telegram-cross-day-fixture",
+      claimedUserRequest: "Move my focus block to July 17 at 1 PM.",
+      calendar: {
+        ...standingFixture.calendar,
+        newStartTime: "2026-07-17T13:00:00-06:00",
+      },
+    };
+    const card = await current.engine.proposeFixture(
+      crossDayFixture,
+      "openclaw-reference",
+    );
+
+    await current.service.deliverProposal(card);
+
+    expect(current.api.messages.at(-1)?.text).toContain(
+      "Wed, Jul 15, 9:30–10:30 AM MDT → Fri, Jul 17, 1:00–2:00 PM MDT",
+    );
   });
 
   it("renders a human-time Calendar-only real success outcome", async () => {

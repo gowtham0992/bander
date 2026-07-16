@@ -8,8 +8,10 @@ describe("canonical process credential projection", () => {
         PATH: "/usr/bin",
         HOME: "/tmp/demo-owner",
         OPENAI_API_KEY: "live-sol-key",
+        ANTHROPIC_API_KEY: "unrelated-provider-key",
         GOOGLE_OAUTH_CLIENT_PATH: ".bander/google-client.json",
         GOOGLE_OAUTH_TOKEN_PATH: ".bander/google-token.json",
+        BANDER_CALENDAR_TIME_ZONE: "America/Denver",
         BANDER_TELEGRAM_BOT_TOKEN: "bander-only-token",
         OPENCLAW_TELEGRAM_BOT_TOKEN: "openclaw-only-token",
       },
@@ -20,6 +22,7 @@ describe("canonical process credential projection", () => {
       BANDER_RUNTIME_MODE: "real",
       OPENAI_API_KEY: "live-sol-key",
       BANDER_TELEGRAM_BOT_TOKEN: "bander-only-token",
+      BANDER_CALENDAR_TIME_ZONE: "America/Denver",
     });
     expect(environments.broker.GOOGLE_OAUTH_CLIENT_PATH).toMatch(
       /\.bander\/google-client\.json$/,
@@ -33,6 +36,10 @@ describe("canonical process credential projection", () => {
     expect(environments.openclaw).not.toHaveProperty("GOOGLE_OAUTH_TOKEN_PATH");
     expect(environments.openclaw).not.toHaveProperty(
       "BANDER_TELEGRAM_BOT_TOKEN",
+    );
+    expect(environments.openclaw).not.toHaveProperty("ANTHROPIC_API_KEY");
+    expect(environments.openclaw.OPENCLAW_CONFIG_PATH).toMatch(
+      /openclaw\/real-product\.openclaw\.json$/,
     );
   });
 

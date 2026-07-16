@@ -6,6 +6,7 @@ const realEnvironment = {
   OPENAI_API_KEY: "local-test-openai-key",
   GOOGLE_OAUTH_CLIENT_PATH: ".bander/google-oauth-client.json",
   GOOGLE_OAUTH_TOKEN_PATH: ".bander/google-oauth-token.json",
+  BANDER_CALENDAR_TIME_ZONE: "America/Denver",
   BANDER_TELEGRAM_BOT_TOKEN: "local-test-telegram-token",
 };
 
@@ -22,6 +23,7 @@ describe("runtime mode isolation", () => {
       openaiApiKey: "local-test-openai-key",
       googleClientPath: ".bander/google-oauth-client.json",
       googleTokenPath: ".bander/google-oauth-token.json",
+      calendarTimeZone: "America/Denver",
       telegramToken: "local-test-telegram-token",
       telegramStatePath: ".bander/real/telegram-service/state.json",
       telegramPairingPath: ".bander/real/telegram-service/pairing-link.txt",
@@ -32,6 +34,7 @@ describe("runtime mode isolation", () => {
     "OPENAI_API_KEY",
     "GOOGLE_OAUTH_CLIENT_PATH",
     "GOOGLE_OAUTH_TOKEN_PATH",
+    "BANDER_CALENDAR_TIME_ZONE",
     "BANDER_TELEGRAM_BOT_TOKEN",
   ])("fails real mode closed when %s is missing", (key) => {
     const environment = { ...realEnvironment };

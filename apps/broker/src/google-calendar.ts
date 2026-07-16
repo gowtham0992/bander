@@ -143,6 +143,19 @@ function discoveryWindow(localDate: string): { timeMin: string; timeMax: string 
   };
 }
 
+function upcomingDiscoveryWindow(now: Date): { timeMin: string; timeMax: string } {
+  if (!Number.isFinite(now.getTime())) {
+    throw new GoogleCalendarError(
+      "invalid_discovery_clock",
+      "Bander could not establish the upcoming Calendar window",
+    );
+  }
+  return {
+    timeMin: now.toISOString(),
+    timeMax: new Date(now.getTime() + 31 * 24 * 60 * 60_000).toISOString(),
+  };
+}
+
 function isUnsupported(resource: GoogleEventResource): boolean {
   return (
     resource.status === "cancelled" ||
@@ -218,13 +231,18 @@ function sameInstant(left: string | null | undefined, right: string): boolean {
 export class GoogleCalendarAdapter implements ExecutionAdapter {
   readonly #executions = new Map<string, string>();
 
-  constructor(readonly boundary: GoogleCalendarBoundary) {}
+  constructor(
+    readonly boundary: GoogleCalendarBoundary,
+    readonly now: () => Date = () => new Date(),
+  ) {}
 
   async discoverEvent(input: {
     titleHint: string;
-    localDate: string;
+    sourceLocalDateHint: string | null;
   }): Promise<CalendarEvent> {
-    const window = discoveryWindow(input.localDate);
+    const window = input.sourceLocalDateHint
+      ? discoveryWindow(input.sourceLocalDateHint)
+      : upcomingDiscoveryWindow(this.now());
     let resources: GoogleEventResource[];
     try {
       resources = await this.boundary.listEvents({
@@ -242,22 +260,51 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
         typeof resource.summary === "string" &&
         normalize(resource.summary) === normalize(input.titleHint),
     );
-    const dateMatches = titleMatches.filter((resource) => {
+    const sourceMatches = titleMatches.filter((resource) => {
+      if (!input.sourceLocalDateHint) return true;
       const start = resource.start?.dateTime ?? resource.start?.date;
       if (!start) return false;
-      if (resource.start?.date) return start === input.localDate;
+      if (resource.start?.date) return start === input.sourceLocalDateHint;
       const resourceTimeZone =
         resource.start?.timeZone ?? resource.end?.timeZone;
       if (!resourceTimeZone) return false;
-      return localDateOf(start, resourceTimeZone) === input.localDate;
+      return localDateOf(start, resourceTimeZone) === input.sourceLocalDateHint;
     });
-    if (dateMatches.length !== 1) {
+    const eligibleMatches: CalendarEvent[] = [];
+    let unsupportedMatches = 0;
+    for (const resource of sourceMatches) {
+      try {
+        eligibleMatches.push(toCalendarEvent(resource));
+      } catch (error) {
+        if (
+          error instanceof GoogleCalendarError &&
+          error.code === "unsupported_event_shape"
+        ) {
+          unsupportedMatches += 1;
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (eligibleMatches.length === 0) {
+      if (unsupportedMatches > 0) {
+        throw new GoogleCalendarError(
+          "unsupported_event_shape",
+          "The matching Calendar event is not eligible for Bander",
+        );
+      }
+      throw new GoogleCalendarError(
+        "event_not_found",
+        "Bander could not find one eligible Calendar event",
+      );
+    }
+    if (eligibleMatches.length > 1) {
       throw new GoogleCalendarError(
         "ambiguous_event_match",
         "Bander could not identify exactly one eligible Calendar event",
       );
     }
-    return toCalendarEvent(dateMatches[0]!);
+    return eligibleMatches[0]!;
   }
 
   async resolveEvent(id: string): Promise<CalendarEvent> {
@@ -366,15 +413,31 @@ export function createGoogleCalendarBoundary(
   const calendar = google.calendar({ version: "v3", auth });
   return {
     async listEvents(input) {
-      const response = await calendar.events.list({
-        calendarId: input.calendarId,
-        timeMin: input.timeMin,
-        timeMax: input.timeMax,
-        singleEvents: false,
-        showDeleted: false,
-        maxResults: 100,
-      });
-      return response.data.items ?? [];
+      const events: GoogleEventResource[] = [];
+      const seenPageTokens = new Set<string>();
+      let pageToken: string | undefined;
+      do {
+        const response = await calendar.events.list({
+          calendarId: input.calendarId,
+          timeMin: input.timeMin,
+          timeMax: input.timeMax,
+          singleEvents: false,
+          showDeleted: false,
+          maxResults: 2500,
+          ...(pageToken ? { pageToken } : {}),
+        });
+        events.push(...(response.data.items ?? []));
+        const nextPageToken = response.data.nextPageToken ?? undefined;
+        if (nextPageToken && seenPageTokens.has(nextPageToken)) {
+          throw new GoogleCalendarError(
+            "google_calendar_pagination_invalid",
+            "Google Calendar returned an invalid pagination sequence",
+          );
+        }
+        if (nextPageToken) seenPageTokens.add(nextPageToken);
+        pageToken = nextPageToken;
+      } while (pageToken);
+      return events;
     },
     async getEvent(input) {
       const response = await calendar.events.get({

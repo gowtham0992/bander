@@ -15,6 +15,27 @@ interface ReferenceConfig {
 }
 
 describe("OpenClaw reference tool manifest", () => {
+  it("uses genuine model tool selection in real product mode", () => {
+    const config = JSON.parse(
+      readFileSync("openclaw/real-product.openclaw.json", "utf8"),
+    ) as any;
+
+    expect(config.agents.defaults.model.primary).toBe(
+      "bander-openai/gpt-5.6-sol",
+    );
+    expect(config.models.providers["bander-openai"]).toMatchObject({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "${OPENAI_API_KEY}",
+      api: "openai-responses",
+    });
+    expect(config.models.providers).not.toHaveProperty("bander-mock");
+    expect(config.tools.allow).toEqual([
+      "bander__list_capabilities",
+      "bander__propose_action",
+      "bander__get_receipt",
+    ]);
+  });
+
   it("allowlists only Bander's three narrow MCP tools", () => {
     const config = JSON.parse(
       readFileSync("openclaw/reference.openclaw.json", "utf8"),

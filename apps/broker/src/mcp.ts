@@ -20,6 +20,7 @@ interface McpRoutesOptions {
   runtimeMode?: "sandbox" | "real";
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
+  deliverAgentClarification?: (message: string) => Promise<void>;
   proposeAgentStandingOptIn?: (
     request: string,
   ) => Promise<{ status: "proposed" } | undefined>;
@@ -151,11 +152,19 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
         };
       } catch (error) {
         if (error instanceof CompilerError) {
+          if (error.humanMessage) {
+            await options.deliverAgentClarification?.(error.humanMessage);
+          }
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ status: "unsupported" }),
+                text: JSON.stringify({
+                  status:
+                    error.code === "clarification_required"
+                      ? "clarification_required"
+                      : "unsupported",
+                }),
               },
             ],
           };

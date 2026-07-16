@@ -47,6 +47,7 @@ if (configuration.mode === "real") {
   compiler = createRealCalendarDraftCompiler({
     apiKey: configuration.openaiApiKey,
     calendar: googleAdapter,
+    calendarTimeZone: configuration.calendarTimeZone,
   });
 } else {
   mockAdapter = new MockServiceClient({
@@ -83,6 +84,8 @@ const app = buildBrokerApp({
   ...(telegramService
     ? {
         deliverAgentProposal: (card) => telegramService.deliverProposal(card),
+        deliverAgentClarification: (message) =>
+          telegramService.deliverClarification(message),
         ...(configuration.mode === "sandbox"
           ? {
               proposeAgentStandingOptIn: (request: string) =>
