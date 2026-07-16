@@ -45,6 +45,14 @@ const standingFixture: DraftFixture = {
   },
 };
 
+const familyNotificationDocument = {
+  kind: "calendar_transition",
+  eventTitle: "Bander Demo Appointment",
+  newStartTime: "2026-07-18T22:00:00.000Z",
+  newEndTime: "2026-07-18T23:00:00.000Z",
+  timeZone: "America/Denver",
+};
+
 class FakeAdapter implements ExecutionAdapter {
   executions = 0;
   conflict = false;
@@ -113,6 +121,7 @@ class FakeAdapter implements ExecutionAdapter {
 }
 
 class FakeTelegramApi implements TelegramBotApi {
+  sendAttempts = 0;
   readonly messages: Array<{
     chatId: string;
     text: string;
@@ -154,6 +163,7 @@ class FakeTelegramApi implements TelegramBotApi {
     text: string,
     replyMarkup?: Record<string, unknown>,
   ): Promise<TelegramMessage> {
+    this.sendAttempts += 1;
     this.beforeSend?.(text);
     if (this.failNextMessageMatching?.(text)) {
       this.failNextMessageMatching = undefined;
@@ -326,6 +336,67 @@ function declineCallbackValue(binding: unknown): string {
 }
 
 describe("Bander Telegram service", () => {
+  it("rejects_delivery_to_revoked_contact", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current); await pairFamilyContact(current);
+    await current.service.handleUpdate(messageUpdate({ updateId: 90, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" }));
+    await expect(current.service.deliverFamilyNotification({ requestId: "family-send-0001", document: familyNotificationDocument })).rejects.toThrow("No active family contact");
+    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(0);
+  });
+
+  it("delivery_request_content_mismatch_and_confirmed_replay_send_nothing", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current); await pairFamilyContact(current);
+    const first = await current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: familyNotificationDocument });
+    const replay = await current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: familyNotificationDocument });
+    expect(first).toEqual({ status: "delivered" }); expect(replay).toEqual(first);
+    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    await expect(current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: { ...familyNotificationDocument, eventTitle: "Changed" } })).rejects.toThrow("different content");
+  });
+
+  it("concurrent_replay_attempts_one_send_and_ambiguous_transport_is_not_retried", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current); await pairFamilyContact(current);
+    const calls = await Promise.all(Array.from({ length: 3 }, () => current.service.deliverFamilyNotification({ requestId: "family-send-0003", document: familyNotificationDocument })));
+    expect(calls).toEqual([{ status: "delivered" }, { status: "delivered" }, { status: "delivered" }]);
+    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    const attemptsBeforeAmbiguous = current.api.sendAttempts;
+    current.api.failNextMessageMatching = (text) => text.startsWith("Bander update");
+    expect(await current.service.deliverFamilyNotification({ requestId: "family-send-0004", document: familyNotificationDocument })).toEqual({ status: "ambiguous" });
+    expect(await current.service.deliverFamilyNotification({ requestId: "family-send-0004", document: familyNotificationDocument })).toEqual({ status: "ambiguous" });
+    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    expect(current.api.sendAttempts - attemptsBeforeAmbiguous).toBe(1);
+  });
+
+  it("restart_after_delivery_sends_nothing_and_leaks_no_details", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current); await pairFamilyContact(current);
+    const result = await current.service.deliverFamilyNotification({ requestId: "family-send-0005", document: familyNotificationDocument });
+    const attempts = current.api.sendAttempts;
+    const restarted = new TelegramService({ api: current.api, engine: current.engine, store: current.store, mode: "real" });
+    expect(await restarted.deliverFamilyNotification({ requestId: "family-send-0005", document: familyNotificationDocument })).toEqual(result);
+    expect(current.api.sendAttempts).toBe(attempts);
+    expect(result).toEqual({ status: "delivered" });
+    expect(JSON.stringify(result)).not.toMatch(/Gil|202|Calendar|messageId|contactId/i);
+  });
+
+  it("revocation_linearizes_before_or_after_delivery_dispatch", async () => {
+    const first = setup("real", familyRandomValues);
+    await pairOwner(first); await pairFamilyContact(first);
+    await first.service.handleUpdate(messageUpdate({ updateId: 91, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" }));
+    const attempts = first.api.sendAttempts;
+    await expect(first.service.deliverFamilyNotification({ requestId: "family-send-0006", document: familyNotificationDocument })).rejects.toThrow("No active family contact");
+    expect(first.api.sendAttempts).toBe(attempts);
+
+    const second = setup("real", familyRandomValues);
+    await pairOwner(second); await pairFamilyContact(second);
+    let revoke: Promise<void> | undefined;
+    second.api.beforeSend = (text) => { if (text.startsWith("Bander update")) revoke = second.service.handleUpdate(messageUpdate({ updateId: 92, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" })); };
+    expect(await second.service.deliverFamilyNotification({ requestId: "family-send-0007", document: familyNotificationDocument })).toEqual({ status: "delivered" });
+    await revoke;
+    expect(second.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    expect(second.store.read().familyContact).toBeUndefined();
+  });
   it("rejects a family contact who is still in the protected owner group", async () => {
     const current = setup("real", familyRandomValues);
     await pairOwner(current);

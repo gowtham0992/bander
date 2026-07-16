@@ -142,8 +142,8 @@ When Telegram says **“Bander is ready. Only you can approve what I'm allowed t
 
 ### 7. Optionally pair one family contact for a future approved update
 
-This optional setup creates one revocable, authenticated Telegram destination. It
-does **not** enable notifications, Calendar sharing, or another approver.
+This optional setup creates one revocable, authenticated Telegram destination.
+It does not create another approver or expose Calendar access to the contact.
 
 Stop `npm run real`, then run the local operator-only command:
 
@@ -160,13 +160,22 @@ The contact explicitly accepts a limited role in a private Bander chat.
 The contact cannot approve or decline requests, see the owner's Calendar or
 conversations, call OpenClaw, add another contact, or change their label or
 aliases. The owner can disconnect the contact from Bander's group confirmation;
-the contact can send `/disconnect` privately. Either action immediately erases
+the contact can send `/disconnect` privately, and the local operator can run
+`npm run revoke:family` while the product is stopped. Either action immediately erases
 the routable destination. A revoked contact requires a new operator-created
 link. If Telegram cannot verify the contact is outside the protected group,
 Bander refuses the pairing or startup check.
 
-This checkpoint deliberately does not send any family notification. It only
-prepares a future route that a separately approved deal may use.
+Bander's delivery boundary can send a deterministic structured update to this
+route, but OpenClaw and MCP cannot invoke it, choose its destination, or author
+its text. The local `npm run verify:family-notification` command exists only for
+the empirical delivery check. A real Calendar-plus-notification deal is not yet
+implemented.
+
+Telegram has no client idempotency key. Bander persists dispatch before calling
+Telegram, records a confirmed response durably, and never retries an ambiguous
+transport outcome. A confirmed Telegram response means Telegram accepted the
+message; it does not prove the contact read it.
 
 ### 8. Stage one eligible fictional event
 

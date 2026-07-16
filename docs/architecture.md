@@ -89,7 +89,7 @@ Downstream execution is idempotent. Human Telegram notification is at least once
 
 Changed-world refusal follows the same delivery rule. A failed refusal send stays pending; retry sends the same deterministic human explanation while OpenClaw retains only minimal `conflict` status.
 
-## ADR-011: One family contact is a Bander-owned routing setup, not authority
+## ADR-012: One family contact is a Bander-owned routing setup, not authority
 
 **Status:** accepted for the current prototype
 
@@ -119,8 +119,34 @@ Either the contact's private `/disconnect` or the owner's Bander-owned group
 control revokes the relationship idempotently. Revocation removes the raw
 Telegram destination and invalidates pending links, retaining only opaque audit
 hashes needed to recognize replay. Startup removes any stale local link file.
-This slice does not deliver family notifications, Calendar facts, Cards,
-Receipts, or compound actions; it establishes only a future routing boundary.
+This relationship itself delivers no Calendar facts, Cards, Receipts, or
+compound actions. Delivery is governed by the separate boundary below.
+
+## ADR-013: Family notification delivery is durable but not exactly once
+
+**Status:** accepted after live Telegram verification
+
+Only Bander resolves the active contact's private destination. A structured
+Calendar-transition document contains a sanitized title, complete new interval,
+and timezone; it has no destination or free-form body field. Bander renders
+plain Telegram text without Markdown, HTML, links, mentions, attachments,
+callbacks, or buttons. OpenClaw and MCP cannot invoke delivery and receive no
+content or routing details.
+
+Each caller-generated request ID is durably bound to the installation, opaque
+contact ID, exact pairing revision, and canonical content digest before
+transport. Identical confirmed replays return the same minimal status without a
+send. Changed content fails closed. Revocation and dispatch share the Telegram
+state critical section through the send boundary, so revocation first means no
+send, while dispatch first targets only the original pairing before revocation
+completes.
+
+Telegram `sendMessage` has no client idempotency key, so Bander does not claim
+exactly-once delivery. It persists `dispatching` before the call. A confirmed
+response stores Telegram's message ID privately and yields `delivered`. A lost,
+failed, or restart-interrupted response becomes permanently `ambiguous`; replay
+does not send again and must not claim the contact was notified. Telegram's
+confirmed acceptance is not proof that the human read the message.
 
 ## ADR-008: Standing autonomy remains sandbox-only in the current product claim
 

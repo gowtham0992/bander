@@ -29,6 +29,15 @@ import {
   type ProtectedGroupMemberStatus,
   type RevokedFamilyContactAudit,
 } from "./family-contact.js";
+import {
+  deliveryResult,
+  notificationDigest,
+  pairingRevision,
+  parseFamilyNotificationDocument,
+  renderFamilyNotification,
+  type FamilyNotificationDocument,
+  type FamilyNotificationOperation,
+} from "./family-notification.js";
 
 export interface TelegramUser {
   id: number;
@@ -259,6 +268,7 @@ export interface TelegramServiceState {
   familyPairing?: FamilyContactPairingChallenge;
   familyContact?: ActiveFamilyContact;
   familyContactAudit?: RevokedFamilyContactAudit;
+  familyNotifications?: FamilyNotificationOperation[];
 }
 
 export interface TelegramServiceStore {
@@ -272,6 +282,7 @@ function emptyState(): TelegramServiceState {
     proposals: [],
     standingCandidates: [],
     standingOutcomes: [],
+    familyNotifications: [],
   };
 }
 
@@ -312,7 +323,8 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
     const state = parsed as TelegramServiceState;
     if (
       !Array.isArray(state.standingCandidates ?? []) ||
-      !Array.isArray(state.standingOutcomes ?? [])
+      !Array.isArray(state.standingOutcomes ?? []) ||
+      !Array.isArray(state.familyNotifications ?? [])
     ) {
       throw new Error("Unsupported Telegram service state");
     }
@@ -328,6 +340,7 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
       ...state,
       standingCandidates: state.standingCandidates ?? [],
       standingOutcomes: state.standingOutcomes ?? [],
+      familyNotifications: state.familyNotifications ?? [],
     });
   }
 
@@ -765,6 +778,13 @@ export class TelegramService {
   async prepareForStart(): Promise<void> {
     await this.#stateLock.run("telegram-state", async () => {
       const state = this.#store.read();
+      for (const operation of state.familyNotifications ?? []) {
+        if (operation.status === "dispatching") {
+          operation.status = "ambiguous";
+          operation.ambiguousAt = this.#now().toISOString();
+          this.#store.write(state);
+        }
+      }
       const now = this.#now();
       if (!state.familyPairing) {
         this.#removeFamilyPairingLink();
@@ -800,6 +820,44 @@ export class TelegramService {
         return;
       }
       await this.#deliverFamilyContactConfirmations(state);
+    });
+  }
+
+  async deliverFamilyNotification(input: { requestId: string; document: unknown }): Promise<{ status: "delivered" | "ambiguous" }> {
+    return this.#stateLock.run("telegram-state", async () => {
+      if (!/^[A-Za-z0-9_-]{8,100}$/.test(input.requestId)) throw new FamilyContactError("invalid_delivery_request", "A valid delivery request ID is required");
+      const document = parseFamilyNotificationDocument(input.document);
+      const digest = notificationDigest(document);
+      const state = this.#store.read();
+      state.familyNotifications ??= [];
+      const existing = state.familyNotifications.find((item) => item.requestId === input.requestId);
+      if (existing) {
+        if (existing.contentDigest !== digest) throw new FamilyContactError("delivery_request_content_mismatch", "This delivery request ID has different content");
+        if (existing.status === "dispatching") { existing.status = "ambiguous"; existing.ambiguousAt = this.#now().toISOString(); this.#store.write(state); }
+        return deliveryResult(existing);
+      }
+      const installation = state.installation;
+      const contact = state.familyContact;
+      if (!installation || !contact || contact.installationId !== installation.id || contact.status !== "active") throw new FamilyContactError("family_contact_unavailable", "No active family contact is available");
+      const operation: FamilyNotificationOperation = { requestId: input.requestId, installationId: installation.id, contactId: contact.contactId, pairingRevision: pairingRevision(contact), contentDigest: digest, document, status: "prepared", createdAt: this.#now().toISOString() };
+      state.familyNotifications.push(operation);
+      this.#store.write(state);
+      if (!state.familyContact || state.familyContact.contactId !== operation.contactId || pairingRevision(state.familyContact) !== operation.pairingRevision) throw new FamilyContactError("family_contact_changed", "The family contact changed before delivery");
+      operation.status = "dispatching";
+      operation.dispatchStartedAt = this.#now().toISOString();
+      this.#store.write(state);
+      try {
+        const sent = await this.#api.sendMessage(contact.privateChatId, renderFamilyNotification(document));
+        operation.status = "delivered";
+        operation.telegramMessageId = sent.message_id;
+        operation.deliveredAt = this.#now().toISOString();
+        this.#store.write(state);
+      } catch {
+        operation.status = "ambiguous";
+        operation.ambiguousAt = this.#now().toISOString();
+        this.#store.write(state);
+      }
+      return deliveryResult(operation);
     });
   }
 

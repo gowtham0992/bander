@@ -1774,3 +1774,49 @@ The family-contact relationship is currently revoked after the empirical test.
 Creating a new route requires a fresh explicit operator command and consent.
 Both transcripts remain ignored, untracked and unchanged; `/feedback` remains
 deferred.
+
+## July 16, 2026 — replay-safe family notification delivery
+
+Checkpoint 4 adds only Bander-owned Telegram delivery to the active paired
+family contact. It does not add a compound action, change Calendar authority,
+add an MCP tool, or make delivery agent-callable. The exact real OpenClaw
+inventory remains four tools.
+
+The strict document accepts only a Calendar-transition title, new start/end and
+timezone. Unknown destination or free-form body fields are rejected. Bander
+sanitizes control and bidirectional characters, bounds the title, formats the
+complete interval deterministically, and sends plain text without parse mode,
+links, mentions, attachments, callbacks or buttons. Destination resolution is
+exclusively from active contact state; the operation binds installation, opaque
+contact ID, exact pairing revision, request ID and canonical content digest.
+
+Operations persist `prepared` and then `dispatching` before Telegram transport.
+A confirmed response stores the Telegram message ID privately; replay returns
+only `{status:"delivered"}` without another send. Changed content fails closed.
+Transport failure or restart from `dispatching` becomes permanently ambiguous
+and is never blindly retried. Telegram acceptance is not proof that the contact
+read the message, and Bander does not claim exactly-once delivery.
+
+Revocation and dispatch use the same Telegram-state lock through the send. Tests
+prove revocation first produces zero attempts, while delivery first produces
+one attempt to the original pairing before revocation completes. A deliberate
+mutation disabling the replay guard made the replay test send twice and the
+concurrent test send three times; restoring the guard returned both green.
+
+The live invited account was explicitly re-paired. One deterministic Checkpoint
+4 update received a confirmed Telegram response and appeared once. Immediate
+and fresh-process replay returned the same durable result with one operation and
+no second phone message. Proposal count remained six; no Calendar mutation,
+Draft, Card, Band, Permit, standing authority or MCP action was created. The
+local operator then ran `npm run revoke:family`; the active route is absent,
+opaque revocation audit and confirmed delivery record remain, and no raw
+destination remains routable.
+
+Final verification: focused notification/service tests 70 passed; typecheck;
+functional suite 22 files/261 tests; attack suite 20 tests; all six demo
+outcomes; both recovery verifiers; real OpenClaw with four real tools; live
+read-Sol 7/7; production build; dependency audit with zero vulnerabilities; and
+secret scan with zero matches. Transcript hashes remain
+`920eb1a862a20debe214af9915401facc23aeb6b` and
+`3c30cae54d4efba1a7a6aa025199d68435dab348`. The family contact is revoked.
+`/feedback` remains deferred.
