@@ -289,7 +289,7 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
   }
 }
 
-type TelegramCopyMode = "verification" | "hero";
+type TelegramCopyMode = "verification" | "hero" | "real";
 
 interface TelegramServiceOptions {
   api: TelegramBotApi;
@@ -380,7 +380,9 @@ function cardText(
     ...effects,
     "",
     "Not included:",
-    "• Any other events, messages or payments",
+    mode === "real"
+      ? "• Any other calendar events or actions"
+      : "• Any other events, messages or payments",
     "",
     `Closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
   ].join("\n");
@@ -438,7 +440,11 @@ function receiptText(
           `Sent ${firstName(receipt.message.recipientDisplayName)}:`,
           `“${safeDisplayText(receipt.message.body)}”`,
         ]
-      : ["No messages were sent."]),
+      : [
+          mode === "real"
+            ? "No one was messaged through Bander."
+            : "No messages were sent.",
+        ]),
     "Nothing else changed through Bander.",
   ].join("\n");
 }
@@ -470,6 +476,13 @@ function refusalText(
       "Stopped — nothing changed through Bander",
       "I couldn’t safely complete that request.",
       "Ask OpenClaw to prepare it again.",
+    ].join("\n");
+  }
+  if (mode === "real") {
+    return [
+      "I stopped—your calendar changed since you asked.",
+      "Nothing was moved.",
+      "Ask OpenClaw to check again.",
     ].join("\n");
   }
   const includesMessage = card.effectPreviews.some(

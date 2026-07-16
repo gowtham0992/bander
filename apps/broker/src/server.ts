@@ -71,6 +71,7 @@ const telegramService =
         api: new TelegramHttpApi(telegramToken),
         engine,
         store: telegramStore,
+        ...(configuration.mode === "real" ? { mode: "real" as const } : {}),
       })
     : undefined;
 const app = buildBrokerApp({

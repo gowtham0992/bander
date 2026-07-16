@@ -1064,3 +1064,87 @@ moderate dependency audit with zero vulnerabilities. A high-confidence scan
 of all 95 tracked and checkpoint files found zero OpenAI keys, Telegram bot
 tokens, Google client secrets or Google refresh tokens. The untracked
 `transcription_day2.md` remains untouched.
+
+## Checkpoint 25 — real changed-world refusal and filming copy
+
+**Status:** live real-Calendar success and conflict journeys verified; final
+combined OpenClaw filming run remains external
+
+The focused real Telegram test was observed red before implementation. Real
+mode still rendered the sandbox “other events, messages or payments” boundary
+and did not have the required real changed-world wording. The restored focused
+tests prove a Calendar-only Card, human local times, no internal engine nouns,
+an exact human-only refusal, no success outcome on conflict, and a Calendar-only
+success outcome with no raw timestamp or identifier.
+
+Real mode now renders this deterministic conflict copy after the existing
+idempotent approval path reports a stale Google precondition:
+
+```text
+I stopped—your calendar changed since you asked.
+Nothing was moved.
+Ask OpenClaw to check again.
+```
+
+The copy is Bander-authored plain text. Agent-supplied hearsay remains confined
+to the labelled request field and passes through the existing control-character
+normalization. Telegram callback ownership, chat/message/callback binding,
+delivery retry semantics, and authority-engine execution are unchanged.
+
+For the live journey, only the previously authenticated owner/group
+installation was deliberately copied from Hero into isolated real state. No
+proposal, callback, pairing token, standing candidate, standing outcome or
+authority was copied. The real service then received one production Streamable
+HTTP `propose_action` call using the configured off-script request. Live
+`gpt-5.6-sol` compiled the bounded hints, Bander resolved the real event and
+ETag, and Telegram received the genuine Calendar-only Card. MCP returned only
+`draftId` and `status: proposed`.
+
+For the changed-world proof, the owner independently changed the fictional
+Google event before tapping the genuine Bander approval. The live result was:
+
+```text
+agent status: conflict
+agent fields: draftId, status
+Telegram lifecycle: conflict
+exact human refusal matched: true
+human refusal delivered: true
+success Receipt created: false
+Google event still resolvable: true
+authoritative timezone: America/Denver
+current event equals approved target: false
+verification mutation performed: false
+```
+
+A fresh real proposal was then created from the changed event's new
+authoritative interval and ETag. With no further world change, the owner tapped
+the genuine approval. The live reconciled result was:
+
+```text
+agent status: executed
+agent fields: draftId, status
+Telegram lifecycle: executed
+human outcome delivered: true
+one Receipt present: true
+Messages effect present: false
+duration preserved: true
+Google at approved target: true
+Google matches truthful human outcome: true
+authoritative timezone: America/Denver
+private values printed: false
+```
+
+The live production MCP calls above used a reference MCP client so the two
+Google journeys could be verified without claiming a filmed OpenClaw turn. The
+separate real OpenClaw process verifier remains green with exactly the three
+Bander tools. The final combined OpenClaw → real Bander → real Google journey
+is intentionally reserved for the filming pass. No private event title,
+interval, ID, ETag, account identifier or credential is recorded here.
+
+The final restored matrix passed: typecheck, 142 functional tests, 20 attack
+tests, the six-outcome demo verifier, one-time recovery, standing recovery, the
+real OpenClaw verifier with exactly the three Bander tools, production build,
+and a moderate dependency audit with zero vulnerabilities. A high-confidence
+scan of all 95 tracked and checkpoint files found zero OpenAI keys, Telegram
+bot tokens, Google client secrets or Google refresh tokens.
+`transcription_day2.md` remains untracked and untouched.

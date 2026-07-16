@@ -175,7 +175,7 @@ function messageUpdate(input: {
   };
 }
 
-function setup(mode: "verification" | "hero" = "verification") {
+function setup(mode: "verification" | "hero" | "real" = "verification") {
   let currentTime = new Date("2026-07-14T18:00:00.000Z");
   const adapter = new FakeAdapter();
   const authorityStore = new AuthorityStore();
@@ -253,6 +253,89 @@ function declineCallbackValue(binding: unknown): string {
 }
 
 describe("Bander Telegram service", () => {
+  it("renders a Calendar-only real Card and exact changed-world refusal", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(
+      standingFixture,
+      "openclaw-reference",
+    );
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+    const approvalText = current.api.messages.at(-1)?.text ?? "";
+
+    expect(approvalText).toContain("OpenClaw says you asked:");
+    expect(approvalText).toContain("Through Bander, this will:");
+    expect(approvalText).toContain("Any other calendar events or actions");
+    expect(approvalText).not.toMatch(
+      /messages|payments|\bDraft\b|\bPermit\b|\bBand\b|\bReceipt\b|ETag|MCP/i,
+    );
+
+    current.adapter.conflict = true;
+    await current.service.handleUpdate({
+      update_id: 900,
+      callback_query: {
+        id: "real-owner-conflict",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+
+    expect(current.engine.getAgentReceipt(card.draftId)).toEqual({
+      draftId: card.draftId,
+      status: "conflict",
+    });
+    expect(current.api.messages.at(-1)?.text).toBe(
+      [
+        "I stopped—your calendar changed since you asked.",
+        "Nothing was moved.",
+        "Ask OpenClaw to check again.",
+      ].join("\n"),
+    );
+    expect(current.api.messages.some((message) => message.text.startsWith("Done"))).toBe(false);
+    expect(current.store.read().proposals[0]).not.toHaveProperty("receiptId");
+  });
+
+  it("renders a human-time Calendar-only real success outcome", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(
+      standingFixture,
+      "openclaw-reference",
+    );
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+
+    await current.service.handleUpdate({
+      update_id: 901,
+      callback_query: {
+        id: "real-owner-success",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+    const outcome = current.api.messages.at(-1)?.text ?? "";
+
+    expect(outcome).toContain("Done ✓");
+    expect(outcome).toContain(
+      "Wed, Jul 15, 9:30–10:30 AM MDT → Wed, Jul 15, 10:30–11:30 AM MDT",
+    );
+    expect(outcome).toContain("No one was messaged through Bander.");
+    expect(outcome).toContain("Nothing else changed through Bander.");
+    expect(outcome).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+    expect(outcome).not.toMatch(
+      /\bDraft\b|\bPermit\b|\bBand\b|\bReceipt\b|ETag|MCP/i,
+    );
+  });
+
   it("uses compact exact consumer copy in Hero mode without changing verification copy", async () => {
     const hero = setup("hero");
     await pairOwner(hero);
