@@ -6,6 +6,7 @@ import type { ApprovalCard, CalendarEvent, DraftDocument, ObservedExecutionResul
 import {
   AuthorityEngine,
   AuthorityStore,
+  ExecutionAmbiguousError,
   ExecutionConflictError,
   type DraftFixture,
   type ExecutionAdapter,
@@ -56,6 +57,7 @@ const familyNotificationDocument = {
 
 class FakeAdapter implements ExecutionAdapter {
   executions = 0;
+  ambiguous = false;
   conflict = false;
   focusEvent: CalendarEvent = {
     id: "event-focus-block",
@@ -104,6 +106,7 @@ class FakeAdapter implements ExecutionAdapter {
     document: DraftDocument;
   }): Promise<void | ObservedExecutionResult> {
     this.executions += 1;
+    if (this.ambiguous) throw new ExecutionAmbiguousError();
     if (this.conflict) throw new ExecutionConflictError();
     const calendar = input.document.effects.find(
       (effect) => effect.type === "calendar.reschedule_event",
@@ -358,6 +361,51 @@ async function activateStandingBand(setupResult: ReturnType<typeof setup>) {
 
 function declineCallbackValue(binding: unknown): string {
   return (binding as { declineCallbackValue?: string }).declineCallbackValue ?? "";
+}
+
+async function ambiguousProposal(compound: boolean) {
+  const current = setup("real", familyRandomValues);
+  await pairOwner(current);
+  const family = compound
+    ? await (async () => {
+        await pairFamilyContact(current);
+        const binding = current.service.resolveFamilyContactAlias("my son")!;
+        return {
+          ...binding,
+          document: {
+            kind: "calendar_transition" as const,
+            eventTitle: "Dinner with Sarah",
+            newStartTime: "2026-07-15T01:30:00.000Z",
+            newEndTime: "2026-07-15T03:00:00.000Z",
+            timeZone: "America/Denver",
+          },
+        };
+      })()
+    : undefined;
+  const card = await current.engine.proposeFixture({
+    id: compound ? "ambiguous-compound" : "ambiguous-calendar-only",
+    claimedUserRequest: compound
+      ? "Move dinner and let my son know."
+      : "Move dinner.",
+    calendar: fixture.calendar,
+    ...(family ? { familyNotification: family } : {}),
+  });
+  await current.service.deliverProposal(card);
+  const binding = current.store.read().proposals.at(-1)!;
+  current.adapter.ambiguous = true;
+  const callback = {
+    update_id: 501,
+    callback_query: {
+      id: "ambiguous-owner-approval",
+      from: { id: 101, is_bot: false },
+      data: binding.callbackValue,
+      message: {
+        message_id: binding.messageId,
+        chat: { id: -500, type: "supergroup" },
+      },
+    },
+  } satisfies TelegramUpdate;
+  return { ...current, callback };
 }
 
 describe("Bander Telegram service", () => {
@@ -623,7 +671,19 @@ describe("Bander Telegram service", () => {
       message.text.includes("You’re connected as Gil."),
     )).toBe(true);
     expect(current.api.messages.some((message) =>
-      message.text.includes("Gil is connected."),
+      message.text.includes("Gil is connected for approved appointment updates."),
+    )).toBe(true);
+    expect(current.api.messages.some((message) => message.text.includes(
+      "Bander may send you a short appointment update only after the person who invited you approves its exact text.",
+    ))).toBe(true);
+    expect(current.api.messages.some((message) => message.text.includes(
+      "Bander can send only the exact update shown on your approval Card.",
+    ))).toBe(true);
+    expect(current.api.messages.filter((message) =>
+      message.text.startsWith("You’re connected as Gil.") ||
+      message.text.startsWith("Gil is connected for approved appointment updates."),
+    ).every((message) =>
+      !message.text.includes("No notifications are enabled yet."),
     )).toBe(true);
     await expect(
       current.service.createFamilyContactPairing({
@@ -862,7 +922,10 @@ describe("Bander Telegram service", () => {
     });
 
     expect(current.api.messages.at(-1)?.text).toContain(
-      "You cannot approve requests, see a calendar, or send requests to OpenClaw",
+      "You cannot approve anything or see their calendar or conversations.",
+    );
+    expect(current.api.messages.at(-1)?.text).toContain(
+      "Bander may send you a short appointment update only after the person who invited you approves its exact text.",
     );
     expect(current.engine.getAgentReceipt(card.draftId)).toEqual({
       draftId: card.draftId,
@@ -991,6 +1054,38 @@ describe("Bander Telegram service", () => {
       { mode: 0o600 },
     );
     expect(() => store.read()).toThrow();
+  });
+
+  it("fails closed on an unsupported persisted proposal failure classification", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bander-proposal-state-"));
+    const statePath = path.join(root, "state.json");
+    const store = new FileTelegramServiceStore(statePath);
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        proposals: [{
+          installationId: "installation-id",
+          ownerTelegramId: "101",
+          chatId: "-500",
+          messageId: 43,
+          callbackValue: "bander:callback-value",
+          declineCallbackValue: "bander-decline:callback-value",
+          draftId: "draft-id",
+          draftHash: "a".repeat(64),
+          expiresAt: "2026-07-14T18:10:00.000Z",
+          lifecycle: "conflict",
+          terminalFailureCode: "invented_failure",
+        }],
+        standingCandidates: [],
+        standingOutcomes: [],
+        familyNotifications: [],
+      }),
+      { mode: 0o600 },
+    );
+    expect(() => store.read()).toThrow(
+      "Unsupported Telegram proposal failure classification",
+    );
   });
 
   it("delivers a deterministic clarification through Bander as plain text", async () => {
@@ -2085,6 +2180,98 @@ describe("Bander Telegram service", () => {
       "I didn’t move the event or send the message.",
       "Ask OpenClaw to check again.",
     ].join("\n"))).toHaveLength(1);
+  });
+
+  it("google_may_have_committed_never_says_nothing_changed", async () => {
+    const current = await ambiguousProposal(true);
+    await current.service.handleUpdate(current.callback);
+    const humanOutcome = current.api.messages.at(-1)?.text ?? "";
+    expect(humanOutcome).toContain("I couldn’t confirm whether your calendar changed.");
+    expect(humanOutcome).not.toMatch(
+      /nothing changed|I didn’t act|stopped safely|already stopped/i,
+    );
+  });
+
+  it("ambiguous_compound_outcome_says_no_family_update_was_sent", async () => {
+    const current = await ambiguousProposal(true);
+    await current.service.handleUpdate(current.callback);
+    expect(current.api.messages.at(-1)?.text).toBe([
+      "I couldn’t confirm whether your calendar changed.",
+      "No family update was sent.",
+      "I won’t try this request again automatically.",
+      "Please check your calendar before asking OpenClaw again.",
+    ].join("\n"));
+    expect(current.store.read().familyNotifications).toHaveLength(0);
+  });
+
+  it("ambiguous_calendar_only_outcome_omits_family_copy", async () => {
+    const current = await ambiguousProposal(false);
+    await current.service.handleUpdate(current.callback);
+    const humanOutcome = current.api.messages.at(-1)?.text ?? "";
+    expect(humanOutcome).toBe([
+      "I couldn’t confirm whether your calendar changed.",
+      "I won’t try this request again automatically.",
+      "Please check your calendar before asking OpenClaw again.",
+    ].join("\n"));
+    expect(humanOutcome).not.toMatch(/family update/i);
+  });
+
+  it("ambiguous_callback_toast_is_truthful", async () => {
+    const current = await ambiguousProposal(true);
+    await current.service.handleUpdate(current.callback);
+    expect(current.api.callbackAnswers.at(-1)?.text).toBe(
+      "Calendar result unconfirmed. No family update was sent.",
+    );
+  });
+
+  it("ambiguous_callback_replay_executes_nothing", async () => {
+    const current = await ambiguousProposal(true);
+    await current.service.handleUpdate(current.callback);
+    await current.service.handleUpdate({
+      ...current.callback,
+      update_id: 502,
+      callback_query: {
+        ...current.callback.callback_query,
+        id: "ambiguous-owner-replay",
+      },
+    });
+    expect(current.adapter.executions).toBe(1);
+    expect(current.store.read().familyNotifications).toHaveLength(0);
+    expect(current.api.messages.filter((message) =>
+      message.text.startsWith("I couldn’t confirm whether your calendar changed."),
+    )).toHaveLength(1);
+  });
+
+  it("ambiguous_callback_replay_preserves_terminal_classification", async () => {
+    const current = await ambiguousProposal(true);
+    await current.service.handleUpdate(current.callback);
+    await current.service.handleUpdate({
+      ...current.callback,
+      update_id: 503,
+      callback_query: {
+        ...current.callback.callback_query,
+        id: "ambiguous-owner-replay-classification",
+      },
+    });
+    expect(current.store.read().proposals.at(-1)).toMatchObject({
+      lifecycle: "conflict",
+      terminalFailureCode: "calendar_outcome_ambiguous",
+    });
+    expect(current.api.callbackAnswers.at(-1)?.text).toBe(
+      "Calendar result unconfirmed. No family update was sent.",
+    );
+  });
+
+  it("ordinary_etag_conflict_still_says_nothing_was_changed_or_sent", async () => {
+    const current = await ambiguousProposal(true);
+    current.adapter.ambiguous = false;
+    current.adapter.conflict = true;
+    await current.service.handleUpdate(current.callback);
+    expect(current.api.messages.at(-1)?.text).toBe([
+      "I stopped—your calendar changed since you asked.",
+      "Nothing was moved, and no family update was sent.",
+      "Ask OpenClaw to check again.",
+    ].join("\n"));
   });
 
   it("retries one autonomous standing outcome without repeating execution or its counter", async () => {

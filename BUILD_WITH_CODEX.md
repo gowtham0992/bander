@@ -1894,3 +1894,51 @@ tools; live compound Sol 18/18 with zero false accepts and zero invalid outputs;
 live read Sol 7/7; production build; dependency audit with zero vulnerabilities;
 and tracked/proposed-file secret scan with zero matches. Both transcript files
 remain ignored and untracked and were not modified by this checkpoint.
+
+## July 16, 2026 — Checkpoint 5 ambiguous-Calendar truthfulness follow-up
+
+The follow-up review found one blocking false-certainty path. When Google could
+have committed a Calendar patch but its response was unconfirmable, the engine
+raised `calendar_outcome_ambiguous` and correctly made zero family-delivery
+attempts. Telegram nevertheless collapsed that typed error into the generic
+message and toast “nothing changed through Bander.” A repeated tap then called
+the engine again, encountered a non-resumable terminal Draft, and had no stored
+classification from which to recover the truth.
+
+Seven focused assertions were added before the production change. The initial
+run observed seven failures: the compound and Calendar-only human messages made
+false claims, the callback toast said “Stopped safely,” replay lacked a typed
+terminal classification, and active family-contact copy still said
+notifications were a future capability. The ordinary ETag-conflict control
+remained green.
+
+Each proposal may now persist a validated `terminalFailureCode`. The file-backed
+state loader rejects unknown classifications and invalid lifecycle/code pairs.
+`calendar_outcome_ambiguous` renders a dedicated human outcome that says the
+Calendar result is unconfirmed, confirms that no family update was sent only
+when the approved deal included that effect, refuses automatic retry, and asks
+the person to check Calendar. Its callback toast is equally bounded. Replay
+short-circuits before engine or Calendar execution, preserves the same typed
+classification, attempts no family delivery, and does not resend an already
+delivered human outcome. Legacy terminal records without a code fall back to an
+unconfirmed outcome rather than inferring certainty from rendered text.
+
+The active family-contact confirmation and bounded private-help copy now state
+the implemented product: Bander may send only the exact appointment update the
+inviter approved, while the contact has no approval or Calendar access. The
+pre-consent screen retains “No notifications are enabled yet” because no active
+relationship exists at that point.
+
+The requested deliberate mutation replaced only the dedicated ambiguous branch
+with the old generic refusal. `google_may_have_committed_never_says_nothing_changed`
+failed with the exact false “Stopped — nothing changed through Bander” output.
+Restoring the branch returned all 67 Telegram service tests green.
+
+Final restored-green matrix: typecheck; 23 functional files with 302 tests;
+20 adversarial tests; all six demo outcomes; one-time and standing recovery
+verifiers; real OpenClaw verifier with exactly four real tools; live compound
+Sol 18/18 with zero false accepts or invalid outputs; live read Sol 7/7;
+production build; dependency audit with zero vulnerabilities; and tracked plus
+proposed-file secret scan with zero matches. No real Calendar mutation was
+needed for this callback-only correction. Both transcript files remain ignored,
+untracked, and untouched. `/feedback` remains deferred.

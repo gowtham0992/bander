@@ -211,9 +211,16 @@ export interface TelegramProposalBinding {
   receiptId?: string;
   receiptDeliveredAt?: string;
   declineDeliveredAt?: string;
+  terminalFailureCode?: TelegramProposalTerminalFailureCode;
   conflictMessage?: string;
   conflictDeliveredAt?: string;
 }
+
+export type TelegramProposalTerminalFailureCode =
+  | "calendar_outcome_ambiguous"
+  | "conflict"
+  | "draft_expired"
+  | "other";
 
 export interface TelegramStandingBandBinding {
   installationId: string;
@@ -289,6 +296,31 @@ function emptyState(): TelegramServiceState {
   };
 }
 
+const terminalFailureCodes = new Set<TelegramProposalTerminalFailureCode>([
+  "calendar_outcome_ambiguous",
+  "conflict",
+  "draft_expired",
+  "other",
+]);
+
+function validateProposalTerminalState(
+  proposals: readonly TelegramProposalBinding[],
+): void {
+  for (const proposal of proposals) {
+    const code = proposal.terminalFailureCode;
+    if (code === undefined) continue;
+    if (!terminalFailureCodes.has(code)) {
+      throw new Error("Unsupported Telegram proposal failure classification");
+    }
+    if (
+      (code === "draft_expired" && proposal.lifecycle !== "expired") ||
+      (code !== "draft_expired" && proposal.lifecycle !== "conflict")
+    ) {
+      throw new Error("Invalid Telegram proposal failure classification");
+    }
+  }
+}
+
 function copy<T>(value: T): T {
   return structuredClone(value);
 }
@@ -331,6 +363,7 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
     ) {
       throw new Error("Unsupported Telegram service state");
     }
+    validateProposalTerminalState(state.proposals);
     validateFamilyContactState({
       ...(state.installation ? { installation: state.installation } : {}),
       ...(state.familyPairing ? { familyPairing: state.familyPairing } : {}),
@@ -624,11 +657,21 @@ function refusalText(
       ? "That request timed out, so I did nothing.\nAsk OpenClaw again if you still want it."
       : "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again.";
   }
+  if (code === "calendar_outcome_ambiguous") {
+    const includesFamily = card.effectPreviews.some(
+      (effect) => effect.kind === "family.telegram_notification",
+    );
+    return [
+      "I couldn’t confirm whether your calendar changed.",
+      ...(includesFamily ? ["No family update was sent."] : []),
+      "I won’t try this request again automatically.",
+      "Please check your calendar before asking OpenClaw again.",
+    ].join("\n");
+  }
   if (code !== "conflict") {
     return [
-      "Stopped — nothing changed through Bander",
-      "I couldn’t safely complete that request.",
-      "Ask OpenClaw to prepare it again.",
+      "I couldn’t confirm whether that request completed.",
+      "Please check the affected service before asking OpenClaw again.",
     ].join("\n");
   }
   if (mode === "real") {
@@ -653,6 +696,34 @@ function refusalText(
       : "I didn’t move the event.",
     "Ask OpenClaw to check again.",
   ].join("\n");
+}
+
+function terminalFailureCode(code: string): TelegramProposalTerminalFailureCode {
+  if (code === "calendar_outcome_ambiguous") return code;
+  if (code === "conflict") return code;
+  if (code === "draft_expired") return code;
+  return "other";
+}
+
+function terminalCallbackText(
+  code: TelegramProposalTerminalFailureCode,
+  card: ApprovalCard,
+): string {
+  if (code === "calendar_outcome_ambiguous") {
+    const includesFamily = card.effectPreviews.some(
+      (effect) => effect.kind === "family.telegram_notification",
+    );
+    return includesFamily
+      ? "Calendar result unconfirmed. No family update was sent."
+      : "Calendar result unconfirmed.";
+  }
+  if (code === "draft_expired") {
+    return "That request expired. Nothing happened.";
+  }
+  if (code === "conflict") {
+    return "Stopped safely. Nothing changed through Bander.";
+  }
+  return "Bander could not confirm the outcome. Please check before trying again.";
 }
 
 function declineText(mode: TelegramCopyMode): string {
@@ -1018,8 +1089,7 @@ export class TelegramService {
         contact.privateChatId,
         [
           `You’re connected as ${safeDisplayText(contact.displayLabel)}.`,
-          "In a future update, Bander may send you a short update only after the person who invited you approves it.",
-          "No notifications are enabled yet.",
+          "Bander may send you a short appointment update only after the person who invited you approves its exact text.",
           "You cannot approve anything or see their calendar or conversations.",
           "You can disconnect anytime.",
         ].join("\n"),
@@ -1046,9 +1116,9 @@ export class TelegramService {
       const sent = await this.#api.sendMessage(
         installation.chatId,
         [
-          `${safeDisplayText(contact.displayLabel)} is connected.`,
-          "No notifications are enabled yet.",
-          "A future approved deal may include a short update to this contact.",
+          `${safeDisplayText(contact.displayLabel)} is connected for approved appointment updates.`,
+          "Bander can send only the exact update shown on your approval Card.",
+          `${safeDisplayText(contact.displayLabel)} cannot approve anything or see your calendar or conversations.`,
         ].join("\n"),
         {
           inline_keyboard: [
@@ -1594,9 +1664,9 @@ export class TelegramService {
         String(message.chat.id),
         [
           `You’re connected as ${safeDisplayText(contact.displayLabel)}.`,
-          "No notifications are enabled yet.",
-          "You cannot approve requests, see a calendar, or send requests to OpenClaw here.",
-          "Use /disconnect if you want to disconnect.",
+          "Bander may send you a short appointment update only after the person who invited you approves its exact text.",
+          "You cannot approve anything or see their calendar or conversations.",
+          "You can disconnect anytime with /disconnect.",
         ].join("\n"),
       );
       return;
@@ -1956,13 +2026,26 @@ export class TelegramService {
         binding.lifecycle === "pending" &&
         this.#now().getTime() >= new Date(binding.expiresAt).getTime()
       ) {
-        state.proposals[index] = { ...binding, lifecycle: "expired" };
-        this.#store.write(state);
+        try {
+          await this.#engine.approveAndExecute(binding.draftId, binding.draftHash);
+          throw new Error("Expired Telegram proposal unexpectedly executed");
+        } catch (error) {
+          if (!(error instanceof AuthorityError) || error.code !== "draft_expired") {
+            throw error;
+          }
+        }
         const text = refusalText(
           "draft_expired",
           this.#engine.getCard(binding.draftId),
           this.#mode,
         );
+        state.proposals[index] = {
+          ...binding,
+          lifecycle: "expired",
+          terminalFailureCode: "draft_expired",
+          conflictMessage: text,
+        };
+        this.#store.write(state);
         try {
           await this.#api.sendMessage(binding.chatId, text);
           const delivered = this.#store.read();
@@ -2010,6 +2093,46 @@ export class TelegramService {
             "You already chose Not now. Nothing happened.",
           );
         }
+        return;
+      }
+      if (
+        !isDecline &&
+        (binding.lifecycle === "conflict" || binding.lifecycle === "expired")
+      ) {
+        const card = this.#engine.getCard(binding.draftId);
+        const code =
+          binding.terminalFailureCode ??
+          (binding.lifecycle === "expired" ? "draft_expired" : "other");
+        const message = binding.conflictMessage ?? refusalText(code, card, this.#mode);
+        if (!binding.conflictDeliveredAt) {
+          try {
+            await this.#api.sendMessage(binding.chatId, message);
+            const deliveredState = this.#store.read();
+            const deliveredIndex = deliveredState.proposals.findIndex(
+              (proposal) => proposal.callbackValue === callback.data,
+            );
+            const deliveredBinding = deliveredState.proposals[deliveredIndex];
+            if (deliveredBinding && !deliveredBinding.conflictDeliveredAt) {
+              deliveredState.proposals[deliveredIndex] = {
+                ...deliveredBinding,
+                terminalFailureCode: code,
+                conflictMessage: message,
+                conflictDeliveredAt: this.#now().toISOString(),
+              };
+              this.#store.write(deliveredState);
+            }
+          } catch {
+            await this.#api.answerCallback(
+              callback.id,
+              "Bander could not deliver the human outcome. Tap again to retry safely.",
+            );
+            return;
+          }
+        }
+        await this.#api.answerCallback(
+          callback.id,
+          terminalCallbackText(code, card),
+        );
         return;
       }
       if (isDecline) {
@@ -2096,17 +2219,16 @@ export class TelegramService {
           );
           const conflictBinding = conflictState.proposals[conflictIndex];
           if (conflictBinding) {
+            const code = terminalFailureCode(error.code);
+            const card = this.#engine.getCard(binding.draftId);
             const conflictMessage =
               conflictBinding.conflictMessage ??
-              refusalText(
-                error.code,
-                this.#engine.getCard(binding.draftId),
-                this.#mode,
-              );
+              refusalText(code, card, this.#mode);
             const deliveryPending = !conflictBinding.conflictDeliveredAt;
             conflictState.proposals[conflictIndex] = {
               ...conflictBinding,
-              lifecycle: error.code === "draft_expired" ? "expired" : "conflict",
+              lifecycle: code === "draft_expired" ? "expired" : "conflict",
+              terminalFailureCode: code,
               conflictMessage,
             };
             this.#store.write(conflictState);
@@ -2136,9 +2258,10 @@ export class TelegramService {
           }
           await this.#api.answerCallback(
             callback.id,
-            error.code === "draft_expired"
-              ? "That request expired. Nothing happened."
-              : "Stopped safely. Nothing changed through Bander.",
+            terminalCallbackText(
+              terminalFailureCode(error.code),
+              this.#engine.getCard(binding.draftId),
+            ),
           );
           return;
         }
