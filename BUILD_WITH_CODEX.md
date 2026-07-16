@@ -1482,3 +1482,94 @@ was added.
 Post-push public-scope correction: `docs/recording-plan.md` was removed from
 the repository index and added to `.gitignore` while its local working copy was
 preserved. The public README now links only to the submission checklist.
+
+## July 15, 2026 — two-lane load-bearing assumption checkpoint
+
+This checkpoint is deliberately limited to two isolated probes. It does not
+implement the read lane, a production family-contact pairing product, a
+Messages adapter, compound authority or notification content. Neither probe
+imports or calls the authority engine or Google Calendar adapter.
+
+Red-first focused tests were added before either reusable boundary existed.
+The first run failed at module import for both `family-contact-spike` and
+`compound-intent`. After the bounded implementations were added, the focused
+suite passed 30 assertions. The family-contact boundary always creates its own
+256-bit random challenge, accepts only a human private-chat `/start` update
+whose chat and sender are identical, rejects the owner/bots/groups/wrong token,
+locks the first claimant, exposes only `receive_canary`, and revokes only from
+the exact paired private surface. Evidence rendering contains no Telegram
+identifier.
+
+The live family-contact probe ran with the real product stack stopped so two
+pollers could not race on the Bander bot. The first canary delivery was rejected
+as privacy evidence after the operator confirmed that the second account was
+still a member of the Mum/OpenClaw group at delivery time. Although the canary
+itself contained no private details, that topology could not prove separation
+from Mum's Cards or conversation. No code or authority boundary was widened to
+rationalize the result.
+
+The second account then exited the group and the complete experiment was rerun
+with a fresh single-use challenge. A new temporary deep link was written only
+to an ignored owner-readable path. The now-separated human account explicitly
+started the Bander bot in private; the destination came from that authenticated
+Telegram update, not a request or model value. Telegram returned a real bot
+message confirmation for one labelled canary, and the second phone replied
+`/received`. The contact route was then revoked and the deep link and transient
+state were deleted. The ignored evidence confirms that the production Telegram
+state digest did not change, the canary contained no Calendar, conversation,
+OAuth, owner or approval details, and no Calendar mutation or authority was
+created. Existing Telegram service tests independently prove that a non-owner
+cannot approve or decline and that forged user/chat/message/callback surfaces
+create no authority. The operator confirmed the second account was outside the
+Mum/OpenClaw group for this restored-green run.
+
+The first 18-case live `gpt-5.6-sol` strict-output run failed the reliability
+gate safely: intended extraction was 1/5, clarification/unsupported handling
+was 12/13, and there were zero false accepts and zero invalid outputs. Sol was
+over-clarifying bare daytime hours, generic appointment title hints and family
+relationships. A prompt-only correction made the bounded acceptance convention
+explicit, and deterministic Bander code—not Sol—was made authoritative for
+resolving a supplied alias against the local paired-contact directory. The
+intermediate run improved to 3/5 and 13/13 with zero false accepts. The restored
+live run passed:
+
+```text
+exact model: gpt-5.6-sol
+strict live Responses calls: 18
+intended compound extraction: 5/5
+clarification and unsupported handling: 13/13
+false accepts: 0
+invalid model outputs: 0
+model-authored routing, message content or authority accepted: false
+Calendar mutation, Telegram delivery or authority from this probe: none
+```
+
+The live matrix covered ordinary parent phrasing, capitalization, punctuation,
+filler, names and relationships; missing event/date/time; unresolved pronouns;
+multiple people; ambiguous relative dates; arbitrary free-form notification
+content; unpaired people; cancellation, purchase, reservation, door lock and
+multiple-event requests. Malformed output and model unavailability also fail
+closed in injected tests. No supported wording requires model-authored message
+content: the future notification remains deterministically derived from an
+authoritative approved Calendar transition and is not implemented here.
+
+Restored-green verification:
+
+```text
+typecheck: passed
+functional suite: 18 files, 193 tests passed
+attack suite: 2 files, 20 tests passed
+demo verifier: all 6 outcomes passed
+one-time HTTP recovery: one mutation, authority and truthful outcome
+standing HTTP recovery: one Draft, Permit, mutation, Receipt and counter entry
+real OpenClaw verifier: exactly 3 Bander tools; execution not started
+production build: passed
+dependency audit: 0 vulnerabilities
+tracked and proposed-file token-shaped secret scan: 0 matches
+```
+
+The first sandboxed recovery invocation hit the known tsx local-IPC `EPERM`
+before product code started; the unchanged verifier passed with permission.
+Both transcript blob hashes remain exactly equal to the starting checkpoint,
+and both transcript files remain local, ignored and untracked. No public
+capability claim was changed and `/feedback` remains deferred.
