@@ -1821,6 +1821,90 @@ secret scan with zero matches. Transcript hashes remain
 `3c30cae54d4efba1a7a6aa025199d68435dab348`. The family contact is revoked.
 `/feedback` remains deferred.
 
+## July 16, 2026 — Checkpoint 6B technical-owner onboarding and cold-clone proof
+
+The checkpoint began with the requested focused red state. The unified doctor
+module and package command did not exist, the clean-clone contract had no
+implementation, and the browser still displayed the clinical provenance labels
+and unexplained `Request 1 of 5`. The initial focused run failed both clean-clone
+contract tests and could not import `doctor-lib`. Two microcopy assertions then
+failed against the old labels/window. After the doctor first passed, a deliberate
+mutation printed the configured OpenAI test secret in the real-mode row;
+`doctor_never_prints_secret_values` failed on the exact leaked value. Restoring
+the fixed status copy returned the redaction suite green.
+
+`npm run doctor` is now a read-only, sanitized offline report that works without
+`.env`; `--json` uses the same safe DTO, and `--live` adds only Telegram identity,
+protected-group/owner membership, primary-Calendar timezone and MCP inventory
+reads. Fixed output never includes token values, raw provider errors, Telegram or
+Calendar identifiers, OAuth contents, callbacks, or private paths. Missing family
+setup is a warning because Calendar-only use remains available. BotFather privacy
+always reports the exact warning `BotFather privacy requires the documented
+empirical check.` and points to `npm run verify:telegram-privacy`. Unknown flags
+fail with one usage line. Focused coverage passed 11 doctor cases, including
+injected sentinels proving no Telegram send, Calendar write, authority creation,
+or persisted-state mutation. Hashing the real ignored Telegram state before and
+after both offline and live doctor runs also showed byte-for-byte equality.
+
+The live read-only doctor empirically reached the Bander bot, protected group and
+bound owner and read the primary Google Calendar timezone as `America/Denver`.
+With the product intentionally stopped, its MCP row truthfully failed and told
+the operator to start `npm run real`; it did not attach to a stale service. The
+separate real OpenClaw verifier proved the configured four-tool inventory. The
+OpenAI doctor row delegates its non-authoritative evidence call to the existing
+Sol verifier; the fresh compound and read verifiers passed 18/18 and 7/7.
+
+The isolated clean-clone work exposed three verifier defects before the gate
+passed: the install subprocess initially inherited the parent environment,
+sequential ephemeral-port reservations could collide, and `verify:demo` rejected
+a safe custom loopback port. The final verifier copies only tracked/proposed
+non-ignored files into its own `/private/tmp/bander-clean-clone-*` directory,
+removes every product credential before `npm ci`, blocks Google/Telegram/OpenAI
+product endpoints for all product checks, accepts only a matching loopback demo
+URL/port, and restricts cleanup to its generated prefix. The final run proved no
+credentials, `.bander`, OAuth files, transcripts, screenshots or generated
+OpenClaw state; MIT license and local docs links; lockfile install; typecheck and
+build; actionable no-account doctor; zero-account demo startup; all nine demo
+outcomes; the full seeded/non-live disclosure in the served app; and a clean
+isolated Git tree.
+
+Final browser copy retains the quoted/contained provenance quarantine while using
+`Calendar`, `Family member`, and `Exact update from Bander`. The proposal footer
+now reads `1 of 5 requests in 10 minutes` from the actual Card count, limit and
+window. Fresh 1440×1100 desktop and 500×900 phone captures of the compound Card
+show complete intervals, exact update text and the full proposal window with no
+horizontal overflow. A 390px macOS-headless capture was correctly rejected as a
+Chrome minimum-layout-viewport crop artifact, not used as visual evidence.
+
+Stopping visual QA exposed one additional load-bearing sandbox defect: `npm run
+demo` loaded a populated local `.env`, causing an unnecessary Bander Telegram
+pairing poller. `demo_never_projects_real_credentials_even_when_env_exists` was
+observed failing before `runLocal` gained explicit demo isolation. Demo now strips
+OpenAI, both Telegram tokens, Google OAuth paths and Calendar timezone even in a
+configured checkout. Hero and real modes retain their existing wiring.
+
+The new root [setup guide](SETUP.md) separates the setup computer, parent phone and
+family-contact phone; documents BotFather settings and re-add behavior, narrow
+Desktop OAuth, remote family invitation, both doctor modes, recovery and the
+accepted limitations. README remains the short entry point, architecture records
+the read-only diagnosis boundary, and the submission checklist retains the human
+test as unfinished. No production authority, Google execution, compound ordering,
+Sol schema, contact authorization, delivery guarantee, or four-tool contract file
+changed.
+
+Final restored-green matrix: 28 functional files with 327 runtime cases; 20
+adversarial tests; all nine deterministic demo outcomes; one-time recovery with
+one mutation, Band, Permit and Receipt; standing recovery with one Draft, Permit,
+mutation, Receipt and counter entry; real OpenClaw verification with exactly four
+real tools; live compound Sol 18/18 with zero false accepts or invalid outputs;
+live read Sol 7/7; production build; dependency audit with zero vulnerabilities;
+tracked/proposed-file token-shaped secret scan with zero matches; and the complete
+cold-clone acceptance pass. No real Calendar write or family notification was
+performed. Both transcripts remain ignored and untracked with unchanged SHA-256
+values `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
+and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`.
+The unmoderated parent/proxy test and `/feedback` remain explicitly deferred.
+
 ## July 16, 2026 — one approved Calendar move plus one family update
 
 Checkpoint 5 adds the real compound deal without adding an MCP tool. The real

@@ -422,7 +422,7 @@ export function EffectAllowance({ preview }: { preview: ApprovalEffectPreview })
     return (
       <span className="effect-copy">
         Reschedule Calendar event{" "}
-        <QuotedData source="Calendar event title">{preview.eventTitle}</QuotedData>{" "}
+        <QuotedData source="Calendar">{preview.eventTitle}</QuotedData>{" "}
         from {preview.previousInterval} to {preview.resultingInterval}
       </span>
     );
@@ -430,8 +430,8 @@ export function EffectAllowance({ preview }: { preview: ApprovalEffectPreview })
   if (preview.kind === "family.telegram_notification") {
     return (
       <span className="effect-copy message-effect">
-        <span>Send the exact family update to <QuotedData source="Family contact">{preview.recipientDisplayName}</QuotedData></span>
-        <QuotedData source="Bander-rendered update">{preview.body}</QuotedData>
+        <span>Send the exact family update to <QuotedData source="Family member">{preview.recipientDisplayName}</QuotedData></span>
+        <QuotedData source="Exact update from Bander">{preview.body}</QuotedData>
       </span>
     );
   }
@@ -515,7 +515,7 @@ function DealCard({
           </time>
           {card.proposalActivity && (
             <span>
-              Request {card.proposalActivity.count} of {card.proposalActivity.limit}
+              {card.proposalActivity.count} of {card.proposalActivity.limit} requests in {card.proposalActivity.windowMinutes} minutes
             </span>
           )}
         </footer>
@@ -550,7 +550,7 @@ function Receipt({
       <h1>{receipt.title}</h1>
       <p className="result-summary">
         <span>Rescheduled Calendar event </span>
-        <QuotedData source="Calendar event title">{receipt.calendar.title}</QuotedData>
+        <QuotedData source="Calendar">{receipt.calendar.title}</QuotedData>
         <span>
           {" "}from {formatReceiptInterval(receipt.calendar.previous, receipt.calendar.timeZone)}
           {" "}to {formatReceiptInterval(receipt.calendar.completed, receipt.calendar.timeZone)}.

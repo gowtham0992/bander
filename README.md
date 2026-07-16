@@ -77,7 +77,19 @@ The sandbox paths never claim to touch Google.
 
 ## Real-product setup
 
-This is the complete fresh-clone path tested for the current Build Week build.
+The technical owner should follow [SETUP.md](SETUP.md) for the complete adult-child setup, privacy checks, remote family invitation, doctor, and recovery guide. The concise happy path is:
+
+```bash
+npm ci
+cp .env.example .env
+# Complete Telegram, OpenAI, and Google Desktop OAuth setup in SETUP.md.
+npm run pair:real
+npm run doctor
+npm run doctor -- --live
+npm run real
+```
+
+The detailed reference below records the current Build Week configuration. `npm run doctor` is read-only and works before `.env` exists; expected setup gaps are actionable `FAIL` rows, not crashes. `npm run doctor -- --live` adds read-only Telegram, primary-Calendar timezone, and exact four-tool probes. It never verifies BotFather privacy by inference—use the empirical procedure in [SETUP.md](SETUP.md).
 
 ### 1. Install the supported runtime
 
@@ -235,7 +247,9 @@ The deterministic core is designed to be independently reproducible:
 npm run check
 npm run attack
 npm run build
+npm run doctor
 npm run verify:demo
+npm run verify:clean-clone
 npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
@@ -260,7 +274,7 @@ npm run verify:gpt-sol
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-The current fresh matrix passes **311 runtime functional cases plus 20 adversarial tests** and all nine deterministic demo outcomes. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+The current fresh matrix passes **327 runtime functional cases plus 20 adversarial tests** and all nine deterministic demo outcomes. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 

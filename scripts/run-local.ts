@@ -2,6 +2,26 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import { createRuntimeEnvironments } from "./process-env.js";
 
+const realCredentialNames = [
+  "OPENAI_API_KEY",
+  "BANDER_TELEGRAM_BOT_TOKEN",
+  "OPENCLAW_TELEGRAM_BOT_TOKEN",
+  "GOOGLE_OAUTH_CLIENT_PATH",
+  "GOOGLE_OAUTH_TOKEN_PATH",
+  "BANDER_CALENDAR_TIME_ZONE",
+] as const;
+
+export function sourceForLocalMode(
+  mode: "development" | "demo" | "real",
+  source: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): NodeJS.ProcessEnv {
+  const isolated: NodeJS.ProcessEnv = { ...source };
+  if (mode === "demo") {
+    for (const name of realCredentialNames) delete isolated[name];
+  }
+  return isolated;
+}
+
 export async function runLocal(
   mode: "development" | "demo" | "real",
 ): Promise<void> {
@@ -9,7 +29,7 @@ export async function runLocal(
   const runtimeMode = mode === "real" ? "real" : "sandbox";
   const environments = createRuntimeEnvironments(
     {
-      ...process.env,
+      ...sourceForLocalMode(mode, process.env),
       NODE_ENV: mode === "real" ? "production" : mode,
     },
     runtimeMode,

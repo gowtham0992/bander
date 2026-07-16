@@ -222,3 +222,31 @@ same bytes displayed on the Card. Its ambiguous Calendar scenario deliberately
 records an unknowable external result, sends no family update, and never claims
 that nothing changed. The sandbox never loads real Google, Telegram, or OpenAI
 credentials.
+
+## ADR-015: Setup diagnosis is read-only and sanitized
+
+**Status:** accepted for the current prototype
+
+`npm run doctor` performs offline configuration, dependency, file-permission,
+ignore-rule, port, and persisted-state validation without requiring `.env` to
+exist. Missing setup is a reported result, not an exception. `--live` adds only
+read operations: Bander bot/group/owner reachability, the connected primary
+Calendar timezone, and the running MCP tool inventory. It does not send a
+Telegram message, patch Calendar data, call an action tool, create authority,
+or change persisted pairing state. The bounded OpenAI evidence call remains in
+the dedicated Sol verifier so the doctor does not spend or compile intent.
+
+Human and JSON output contain fixed explanations, environment-variable names,
+safe software versions, status, and the authoritative timezone. They omit
+secret values, raw provider errors, Telegram/Calendar identifiers, callback
+values, OAuth content, and private file paths. Telegram's API cannot prove all
+BotFather privacy settings, so the doctor always reports that boundary as an
+empirical-check warning instead of inferring a pass.
+
+`npm run verify:clean-clone` copies only tracked and proposed non-ignored files
+into a generated directory under `/private/tmp`, installs from the lockfile,
+and proves the no-account doctor and nine-outcome deterministic sandbox. Product
+credentials are removed from the verifier subprocess environment, and outbound
+Google, Telegram, and OpenAI product endpoints are blocked while local loopback
+services remain available. Cleanup is restricted to the verifier's own
+generated prefix.

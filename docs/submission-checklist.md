@@ -42,6 +42,8 @@ Current required form fields also include submitter type, country of residence, 
 - [x] Current capability and exact security boundary
 - [x] Architecture, builder plan, submission checklist, and evidence ledger synchronized
 - [x] No tracked `.env`, `.bander/`, OAuth client/token, bot token, personal screenshot, or current transcript
+- [ ] Run `npm run verify:clean-clone` on the final public checkpoint
+- [ ] Complete the unmoderated protocol in [parent-test.md](parent-test.md) with an actual parent or honestly labelled non-builder adult proxy
 - [ ] Make `gowtham0992/bander` public, or keep private and share with both judge addresses
 - [ ] Verify repository rendering and links on GitHub after push
 - [ ] Add one separately sanitized real-product screenshot
@@ -80,7 +82,9 @@ Deterministic and local-process matrix:
 npm run check
 npm run attack
 npm run build
+npm run doctor
 npm run verify:demo
+npm run verify:clean-clone
 npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw

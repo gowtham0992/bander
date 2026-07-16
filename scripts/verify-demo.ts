@@ -14,7 +14,16 @@ async function brokerIsReady(): Promise<boolean> {
 
 async function ensureLocalServices(): Promise<void> {
   if (await brokerIsReady()) return;
-  if (baseUrl !== "http://127.0.0.1:4310") {
+  const parsedBase = new URL(baseUrl);
+  const localPort = process.env.BANDER_PORT ?? "4310";
+  if (
+    parsedBase.protocol !== "http:" ||
+    parsedBase.hostname !== "127.0.0.1" ||
+    parsedBase.port !== localPort ||
+    (parsedBase.pathname !== "/" && parsedBase.pathname !== "") ||
+    parsedBase.search ||
+    parsedBase.hash
+  ) {
     throw new Error(`Bander is not reachable at configured BANDER_URL ${baseUrl}`);
   }
   const environments = createRuntimeEnvironments({
