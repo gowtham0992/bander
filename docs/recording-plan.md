@@ -1,63 +1,77 @@
 # Bander recording plan
 
-Target: 2:40–2:50, one continuous voiceover, public YouTube upload under three minutes.
+Target: 2:35–2:50, one continuous narrated public YouTube video. Devpost requires less than three minutes and audio explaining both Codex and GPT-5.6.
+
+The canonical film uses the real product path. Hero remains off camera unless a brief closing note identifies it explicitly as the deterministic judge sandbox.
 
 ## Before recording
 
-1. Run `npm install`, then `npm run demo`.
-2. In a second terminal, run `npm run verify:demo` and keep the green summary available.
-3. Run `npm run openclaw -- mcp probe bander --json` and keep its three-tool result available.
-4. If demonstrating the optional compiler, export `OPENAI_API_KEY` before starting the demo and verify the “use your own wording” field appears.
-5. Reset to the welcome screen. Record at 1440×900 or larger with browser zoom at 100%.
+1. Use the dedicated fictional Google account and primary Calendar. Confirm one eligible attendee-free, owner-organized, timed, non-recurring event exists in the upcoming window.
+2. Restore the event to the planned starting interval and verify its authoritative timezone is `America/Denver`.
+3. Rename the Telegram group and OpenClaw bot presentation to remove “Test.” Keep OpenClaw's assistant identity and Bander's teal guardian identity visually distinct.
+4. Clear unrelated Telegram messages and notifications. Do not show personal names, emails, bot tokens, OAuth files, account IDs, or private Calendar content.
+5. Run the final verification matrix in [submission-checklist.md](submission-checklist.md).
+6. Stop every previous broker/OpenClaw gateway, then start only:
+
+   ```bash
+   npm run real
+   ```
+
+7. Confirm the terminal reports the real product ready, live OpenClaw, Google backend, and no mock/fixture path. Keep sensitive environment output off screen.
+8. Prepare a second Google Calendar tab for the changed-world beat. Crop it to the fictional event only.
 
 ## Shot and voiceover outline
 
-### 0:00–0:18 — the consumer promise
+### 0:00–0:18 — the parent promise
 
-Show the welcome screen.
+Show the branded title, then the private Telegram group with the two distinct bot identities.
 
-> Personal agents can prepare useful real-world work, but the credentials should not live with the agent. Bander holds the keys, shows the person the exact deal, and carries out only what they approve.
+> OpenClaw is useful because my parents can speak naturally. Bander is what makes me comfortable giving it real keys: OpenClaw helps, while Bander independently shows and enforces the exact deal.
 
-### 0:18–0:35 — the actual boundary
+### 0:18–0:40 — ordinary conversation
 
-Show the OpenClaw probe result with exactly three tools.
+Send `Hi` and show a normal OpenClaw answer with no Bander message.
 
-> OpenClaw is the reference agent. It can list Bander’s capabilities, propose an action, and read a minimal receipt. It has no Calendar, Messages, browser, shell, generic outbound-action tool, or downstream credential.
+> This is a real conversational OpenClaw turn using GPT-5.6 Sol—not a phrase router. Greetings stay conversation. OpenClaw decides when a clear action request should be proposed, but that decision grants no authority.
 
-### 0:35–1:03 — one-time exact consent
+### 0:40–1:18 — natural real Calendar move
 
-Return to Bander, choose “See the deal,” pause on the Card, then click “Ready” and show the Receipt.
+Send a natural cross-day request such as `Could you move Bander Demo Appointment to July 17 at 2 PM?` Pause on Bander's Card so both dates, complete intervals, timezone, **Do exactly this**, and **Not now** are legible. Approve, then pause on the Bander outcome.
 
-> The agent’s claim is labelled as hearsay. The Card is rendered from one canonical Draft: move this event, send this exact message, and nothing else through Bander. Ready creates one-time authority for that stored Draft, not a fresh set of agent parameters.
+> Bander makes its own bounded Sol call, finds exactly one eligible event in the real primary Google Calendar, and constructs the action deterministically. The Card comes from Bander, not the model. Approval executes only the stored start-and-end change with the event's approved ETag, preserving the exact duration. The outcome is Bander's independent report of what Google now shows.
 
-### 1:03–1:28 — changed world, no partial action
+### 1:18–1:52 — changed world, stopped
 
-Choose the changed-calendar scenario, click “Ready,” and show the refusal.
+Ask for another move and pause on the new Bander Card. Before approving, use the Google tab to change the fictional event independently. Return to Telegram and approve. Show Bander's refusal.
 
-> Approval is not enough if the world changes. Here the Calendar revision changes after approval. The conditional write fails closed, no message is sent, and the agent learns only that the Draft conflicted—not the private new calendar state.
+> Approval is not a blank check. I changed the real event after Bander prepared the Card, so Google's ETag no longer matches. Bander does not refetch and execute a new plan. It stops, performs no Bander write, and tells the person that nothing was moved through Bander.
 
-### 1:28–2:05 — bounded standing autonomy
+### 1:52–2:18 — the boundary
 
-Open the standing-Band Card, pause on its clauses, turn it on, show the focus-block Receipt, then choose “Try a request outside this Band” and show the fallback Card.
+Show the README Mermaid diagram or a sanitized terminal proof of exactly three tools.
 
-> A standing Band is a hashed structural predicate, not model prose: only my solo events, only start time, weekdays in work hours, three per rolling day, no messages or purchases, and revocable anytime. The focus block matches and runs. Dinner has another attendee, so it comes back for one-time review.
+> Inside this protected OpenClaw profile, the model has exactly three Bander tools. It never receives the Google credential, cannot press its own approval button, and cannot author Bander's Card or outcome. Details stay on Bander's separate Telegram identity; OpenClaw receives only a minimal status.
 
-### 2:05–2:28 — GPT-5.6’s bounded role
+### 2:18–2:42 — Codex and Sol
 
-When a key is configured, return home, enter the supported dinner request in the GPT-5.6 field, and show the resulting Card.
+Show a short, preselected section of [BUILD_WITH_CODEX.md](../BUILD_WITH_CODEX.md), then the final green command summary.
 
-> GPT-5.6 uses strict Structured Outputs to select a versioned candidate from natural wording. It cannot author effects, approve, or execute. If it refuses, is ambiguous, times out, or has no key, the deterministic judge flow still works.
+> I built Bander with Codex in red-first slices. The ledger records failures we observed before each recovery, replay, privacy, and changed-world fix. GPT-5.6 Sol handles conversation and bounded intent extraction; deterministic Bander code owns identity, matching, duration, preconditions, authority, execution, and the human truth.
 
-### 2:28–2:48 — Codex evidence and close
+### 2:42–2:50 — close
 
-Show the verifier summary, then briefly show `BUILD_WITH_CODEX.md`.
+Return to the Bander mark.
 
-> I built Bander with Codex in verified slices. This ledger records the human decisions, tests, attack mutations that were observed failing, OpenClaw probe, and exact commands. Bander does not judge what an agent wants; it ensures nothing happens through Bander beyond the deal the person saw and agreed to.
+> The OpenClaw I'd actually give my parents: helpful conversation, with the keys and final truth held somewhere else.
 
 ## Recording guardrails
 
-- Do not claim that OpenClaw has zero network access; it may reach its model provider and Bander’s MCP endpoint.
-- Do not call Bander a prompt-injection detector or imply it controls tools that bypass it.
-- Keep the OpenAI key, mock-service token, environment output, and personal OpenClaw state off screen.
-- Use the deterministic fixture flow as the canonical demonstration even if the GPT-5.6 compiler is also shown.
-- End before 2:50 to leave upload/transcoding margin under the three-minute limit.
+- Film only the real `npm run real` journey as product proof.
+- Do not imply the Hero sandbox touched Google.
+- Do not show the real event title if it contains personal data; use the fictional demo event.
+- Do not claim email, messaging, standing autonomy, general schedule reading, purchases, reservations, smart-home control, an installer, or restart-durable production authority.
+- Do not claim OpenClaw has zero network access; it reaches its model provider and Bander's loopback MCP endpoint.
+- Do not claim Bander protects a compromised host or tools/credentials outside the protected profile.
+- Keep the OpenAI key, bot tokens, OAuth client/token files, generated OpenClaw config, and personal Telegram data off screen.
+- Capture human dates/times only—no fixture IDs, hashes, ETags, OAuth details, or internal engine nouns.
+- End by 2:50 to leave a ten-second safety margin under Devpost's limit.

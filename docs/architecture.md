@@ -1,76 +1,111 @@
 # Architecture decisions
 
-## ADR-001: Local modular system with an explicit credential boundary
+This document describes the implemented Build Week architecture as of July 15, 2026. Parent-facing copy avoids the internal authority terms used here.
 
-**Status:** accepted, July 13, 2026
+## ADR-001: Real and sandbox are separate fail-closed runtimes
 
-The judge experience runs locally from one command. The repository contains a Bander broker/executor, a React user interface, versioned deterministic fixtures, and seeded Calendar/Messages mock services.
+**Status:** accepted
 
-The mock services run in a separate process and accept only an internal credential. The Bander broker/executor receives that credential; the OpenClaw process does not. OpenClaw connects only to Bander's narrow Streamable HTTP MCP endpoint.
+The repository has two deliberately distinct product paths:
 
-This boundary is separated because it is expensive to fake convincingly later. The rest remains a modular local system because the hackathon scope has one fictional owner, modest data, and no independent scaling or deployment requirement.
+- **Real:** live conversational OpenClaw, exact model `gpt-5.6-sol`, Bander's Google Calendar adapter, one bound Telegram owner/group, and no fixture or mock-service routes.
+- **Sandbox:** deterministic provider, versioned fixtures, seeded credential-protected mock services, and no claim of Google access.
 
-### Failure behavior
+`npm run real` supervises a fresh broker and OpenClaw gateway. Before printing ready, it verifies `runtimeMode: real`, the Google backend, real compiler, paired Telegram installation, exact three-tool inventory, live model configuration, credential separation, and missing fixture/standing demo routes. It refuses an existing broker rather than attaching to a possibly stale sandbox.
 
-- Missing or wrong internal credentials fail closed with no downstream data.
-- Stale resource versions fail conditional writes with no mutation.
-- Bander records dispatch before every downstream operation and reconciles an idempotent operation record after an ambiguous response loss.
-- Permit expiry blocks a missing operation from being dispatched, but does not hide or misreport an operation that already committed.
-- Human Telegram outcomes are marked delivered only after Telegram confirms `sendMessage`. Delivery is at least once; an ambiguous crash after Telegram accepted a message can produce a duplicate truthful notification on retry.
-- The optional GPT-5.6 compiler can be unavailable without affecting deterministic Draft execution or tests.
+## ADR-002: The protected OpenClaw profile has exactly three Bander tools
 
-## ADR-002: Standing authority is a hashed structural predicate
+**Status:** accepted
 
-**Status:** accepted, July 13, 2026
+The dedicated profile can call:
 
-A standing Band is not a prompt and does not use model judgment at execution time. It stores a versioned predicate, hashes the predicate together with its expiry, renders the review clauses from that same structure, and evaluates each canonical Draft structurally before issuing a short-lived Permit.
+- `bander__list_capabilities`
+- `bander__propose_action`
+- `bander__get_receipt`
 
-The first predicate is intentionally narrow: one duration-preserving Calendar reschedule; owner as organizer and sole attendee; the complete resulting interval starts and finishes on the same weekday between 09:00 and 17:00 America/Denver; three actions per rolling 24 hours; no recipients or spending. Any mismatch becomes a normal one-time Card. Revocation and execution share the Band lock so whichever operation acquires it first determines the result.
+The OpenClaw model may converse normally and decide whether to propose a clear Calendar action. It cannot approve, mint authority, author a Card or outcome, or call Google directly. Its environment contains the OpenAI key and OpenClaw Telegram token needed for its own work, but not Google OAuth paths, the Bander Telegram token, mock-service credentials, Calendar tools, browser, shell, or generic outbound-action tools.
 
-## ADR-003: GPT-5.6 selects candidates but never authors authority
+The strong route property applies only inside this profile. Bander does not restrict other OpenClaw profiles or a host compromised at the operating-system/user-account level.
 
-**Status:** accepted, July 13, 2026
+## ADR-003: Bander owns Google OAuth and the conditional write
 
-The optional model path maps an agent's claimed request to one versioned local fixture ID using strict Structured Outputs. The model cannot return Calendar IDs, recipients, payloads, preconditions, Bands, or Permits. Deterministic code owns those fields and the complete authority lifecycle.
+**Status:** accepted after real Google risk spike
 
-This deliberately makes the hackathon claim smaller than a general natural-language action compiler. It gives the demo a real GPT-5.6 path while ensuring model unavailability, refusal, ambiguity, or drift cannot block or enlarge the canonical fixture path.
+Bander uses desktop OAuth with PKCE S256 and a loopback callback. It requests only `https://www.googleapis.com/auth/calendar.events.owned`, fixes the Calendar ID to `primary`, and keeps the OAuth client/token files under ignored local storage with private permissions.
 
-## ADR-004: Every execution shape uses one idempotent operation record
+Real event eligibility is narrow: timed, non-recurring, owner-organized, no attendees. Bander reads the canonical ID, title, complete start/end interval, timezone, organizer, attendees, and ETag. Execution sends only the approved start/end fields, preserves exact duration, sets `sendUpdates: "none"`, and uses the approved ETag in `If-Match`.
 
-**Status:** accepted, July 13, 2026
+A 412 is a changed-world conflict, not permission to re-plan. Bander performs no automatic refetch-and-write. Concurrent empirical tests show that two writes using the same approved ETag allow one commit and make the other fail precondition. Timeout reconciliation may describe only the Calendar state Bander later observes; it must not claim causality it cannot prove.
 
-The Permit nonce is the downstream operation key. Bander stores `dispatchedAt` before the call, and the credential-holding mock service binds that key to the Draft hash and committed result. Calendar-only and combined Calendar/Messages execution use the same endpoint and recovery protocol.
+## ADR-004: GPT-5.6 Sol compiles intent but cannot author authority
 
-After an ambiguous failure, Bander first asks whether that exact operation committed. A committed result is finalized into one consumed Permit and one truthful Receipt even if the Permit has since expired. If no operation exists and the Permit is expired, Bander does not dispatch it.
+**Status:** accepted after live Responses API evidence
 
-## ADR-005: Natural agent requests select bounded candidates outside authority
+Real mode uses a separate strict Structured Output call with exact model ID `gpt-5.6-sol`. The output contract contains:
 
-**Status:** accepted, July 13, 2026
+- event-title hint;
+- optional source-local-date hint;
+- required target local date; and
+- required target local start.
 
-The MCP proposal tool accepts the person's natural request verbatim, not an internal fixture ID. In no-key mode, deterministic code matches only the discoverable versioned requests returned by `list_capabilities`; adjacent wording requests clarification. When configured, GPT-5.6 may replace only this selection step. Both paths produce the same versioned candidate and cannot approve, mint authority, or supply execution parameters.
+If no source date is supplied, deterministic code searches a bounded upcoming 31-day window and requires exactly one eligible normalized title match. Date resolution uses the configured connected-Calendar timezone; the selected authoritative event supplies the complete interval and timezone.
 
-## ADR-006: Telegram privacy is an empirical release gate
+The model cannot select the Calendar ID, event ID, ETag, final end, effects, authority, or execution parameters. Invalid, missing, ambiguous, broadened, or malformed output fails closed. Clarification text is deterministically mapped and delivered by Bander; model-authored Calendar details do not cross the MCP boundary.
 
-**Status:** accepted after empirical Telegram spike, July 14, 2026
+## ADR-005: Authority binds approval to one immutable action
 
-The intended consumer flow uses separate OpenClaw and Bander Telegram bots in one test group. Bander must own its messages, callbacks, identity checks, and approval surface. OpenClaw must receive only the owner's natural request and Bander's minimal MCP status—not Bander's Card, Receipt, conflict details, callback payloads, or canary.
+**Status:** accepted
 
-This boundary cannot be accepted from documentation or configuration review alone. Telegram's current Bot-to-Bot Communication Mode can deliver other-bot messages to a bot whose group privacy is disabled, and the installed OpenClaw Telegram handler does not categorically discard every other bot. The release gate therefore requires Bot-to-Bot Communication Mode to be disabled, an owner-only OpenClaw group sender allowlist, and inspection of OpenClaw's exported model trajectory after real messages and callbacks in the target group.
+Internally, Bander uses Draft → Card → Band → Permit → Receipt:
 
-The empirical spike passed, and the accepted one-time implementation now lives in the Bander broker process as a Bander-owned Telegram service. Pairing begins with an expiring single-use token in a private Bander-bot chat. Telegram's private `request_chat` picker then returns the selected group to Bander through `chat_shared`. The token and destination selection never enter the shared group or OpenClaw.
+- the Draft contains the canonical effect and precondition snapshot;
+- the Card renders only that stored Draft;
+- approval creates a one-time Band and internal Permit for the Draft hash;
+- execution uses no new agent parameters; and
+- the Receipt records the observed committed result.
 
-The service persists one installation and per-proposal bindings containing the installation, owner, group, Bander-authored message, opaque callback value, Draft, expiry, and lifecycle. Every exact legitimate callback and replay calls the authority engine's idempotent `approveAndExecute` method. Callback authorization has no test-ordering state. OpenClaw and Bander bot credentials are projected into separate process environments; only Bander holds downstream credentials.
+Every execution shape has one idempotent downstream operation identity. Bander records dispatch before the call. A retry with the same Draft hash reuses existing authority and reconciles the operation; it does not mint another Band or Permit. A different hash, terminal decline, conflict, revocation, or expired-undispatched Permit fails closed.
 
-The first valid private pairing claim fixes the claimant identity for that attempt. The same claimant may finish private group selection; another holder of the still-unconsumed token cannot replace the owner. The token is consumed only after the selected group is bound.
+The sandbox mock service can truthfully reconcile an operation after a lost response. The current real Google adapter uses observed Google state and ETag behavior; it does not overclaim that Bander caused a state merely because the state matches.
 
-The local Streamable HTTP MCP endpoint remains deliberately unauthenticated in the hackathon reference build. It binds to `127.0.0.1`, accepts no agent-controlled owner identity, and is limited to 30 POST requests per source address per 60-second fixed window. This is a local demonstration boundary, not a deployable network authentication design.
+## ADR-006: Telegram is a separate human authority surface
 
-## ADR-007: Standing Telegram outcomes reuse engine authority
+**Status:** accepted after empirical privacy verification
 
-**Status:** accepted after real-service verification, July 14, 2026
+Bander does not ambient-listen to the group. The Bander-owned service holds its bot credential, installation, Card delivery, callback ingestion and authorization, engine execution, refusal delivery, and outcome delivery. OpenClaw and Bander use visibly distinct Telegram identities.
 
-The Telegram service stores one active standing-Band binding for the single-owner installation and one outcome binding per Band and client request ID. The request ID and normalized request digest remain enforced by the authority engine. Telegram does not create a Draft, Permit, Receipt or counter entry itself.
+Pairing uses an expiring high-entropy private-chat deep link and Telegram's group picker. The first valid claimant is locked to the attempt; the token is consumed after the group is bound. The agent never receives or selects the token, owner, or destination.
 
-An eligible request enters `runStandingBand`, which serializes execution under the Band lock and returns the existing Receipt on replay. Bander persists the human outcome before attempting Telegram delivery and records delivery only after `sendMessage` succeeds. Therefore real-world execution is exactly once and the Telegram outcome is at least once. A crash after Telegram accepted the message but before the delivered write may produce a duplicate truthful outcome on recovery.
+Each proposal callback binds the installation, owner Telegram ID, chat ID, Bander-authored message ID, opaque callback value, Draft, expiry, and lifecycle. Approval and replay always enter the engine's idempotent approval method. Decline is terminal and idempotent. Wrong owner, chat, message, bot, callback, expiry, or changed content fails closed.
 
-The outcome includes the rolling action count and an opaque **Turn off** callback bound to the installation, owner, chat and Bander-authored message. Revocation calls the public idempotent `revokeBand` method directly; it does not call it while holding the engine Band lock. Execution and revocation therefore acquire that lock exactly once and are serialized by the engine. OpenClaw receives only Draft ID and lifecycle status, including the minimal `conflict` status when standing execution encounters a changed-world precondition.
+The accepted bot policy is: Bot-to-Bot Communication off for both bots, OpenClaw Group Privacy off, Bander Group Privacy on, owner-only sender allowlist, bound group only, `requireMention: false`, `historyLimit: 0`, and restricted context visibility. Exported OpenClaw trajectories must contain no human Card, callback, Calendar/refusal detail, or Bander outcome.
+
+## ADR-007: Execution and human notification have different retry guarantees
+
+**Status:** accepted
+
+Downstream execution is idempotent. Human Telegram notification is at least once. Bander attempts the Telegram send before persisting delivered state, so a failed send remains retryable. A crash after Telegram accepted a message but before the delivered-state write can produce a duplicate truthful notification; silent execution is considered worse.
+
+Changed-world refusal follows the same delivery rule. A failed refusal send stays pending; retry sends the same deterministic human explanation while OpenClaw retains only minimal `conflict` status.
+
+## ADR-008: Standing autonomy remains sandbox-only in the current product claim
+
+**Status:** accepted scope boundary
+
+The engine and Telegram service contain a fully verified narrow standing predicate: solo owner events, duration preserved, weekdays within work hours, three moves per rolling day, no messages or spending, and serialized idempotent revocation. The explanation is rendered from the enforced predicate, not model prose.
+
+That path remains part of Hero and the deterministic verification matrix. It is not presented as a current real-Google product capability and is not part of the canonical Build Week film.
+
+## ADR-009: Persistence is intentionally incomplete for the prototype
+
+**Status:** accepted limitation
+
+Telegram installation and delivery/callback bindings are file-backed under ignored `.bander/` storage. Core authority state in the running real broker remains in memory and is not restart-durable. The sandbox exercises ambiguous-response recovery, but the public product does not claim durable production authority across a broker restart.
+
+A future production version needs transactional durable authority storage, migrations, and startup reconciliation. This checkpoint does not add them.
+
+## ADR-010: The local MCP endpoint is not a network deployment boundary
+
+**Status:** accepted limitation
+
+The Streamable HTTP MCP endpoint binds to `127.0.0.1`, accepts no agent-controlled owner identity, and rate-limits proposal traffic. It has no application-level authentication and must not be exposed to a LAN or public network. The prototype's trust boundary assumes the local OS/user account is not already compromised.

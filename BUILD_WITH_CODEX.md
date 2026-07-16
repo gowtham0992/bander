@@ -1388,3 +1388,93 @@ product path. `transcription_day2.md` remains untracked and untouched. This
 checkpoint's canonical parent/product command is `npm run real`; it owns both
 processes and fails closed rather than attaching to a stale broker or mock
 gateway.
+
+## Checkpoint 29 — public-repository documentation and fresh-clone setup
+
+**Status:** complete — separate documentation checkpoint, no authority/runtime behavior change
+
+The public materials were audited against the implemented real product, the
+official Build Week page, live Devpost key dates/announcement/submission
+requirements, current Google Calendar/OpenClaw documentation, and the proven
+local commands. Devpost reported submissions open until July 21, 2026 at 5:00
+PM Pacific Time, with a public narrated video under three minutes, repository,
+README, explanation of Codex and GPT-5.6 use, and `/feedback` Session ID
+required. `/feedback` remains deliberately deferred until final submission.
+
+The README now leads with the canonical real journey—live conversational
+OpenClaw, exact `gpt-5.6-sol`, real primary Google Calendar, genuine Bander
+Telegram Card/approval and independent outcome—and labels Hero as a seeded
+deterministic sandbox that does not touch Google. Capability and limitation
+language was synchronized across the builder plan, architecture decisions,
+recording plan, submission checklist and `.env.example`. The exact protected-
+profile boundary is published without implying control of other OpenClaw
+profiles, protection of a compromised host, real Messages, general schedule
+reading, an installer, or restart-durable production authority.
+
+The selected production assets were copied to stable `docs/assets/` paths:
+the standalone red/teal protected-claw mark, light and dark wordmarks, and a
+self-contained dark-teal banner derived from that identity. The rendered
+README was visually inspected at GitHub content width; the banner copy fit,
+the mark remained legible, all nine relative references resolved, and all 16
+referenced npm scripts existed. An MIT license was added for Bander only.
+
+The first banner preview used a simplified claw redraw and was rejected during
+visual review because it did not match the production mark. The redraw was
+removed. The README now displays the exact copied
+`production/bander_mark_transparent.svg` above a typographic teal/red banner;
+the final local GitHub-width render shows the exact mark and complete copy with
+no nested-image dependency.
+
+Fresh-clone review exposed one setup gap before commit. `npm run real`
+correctly requires an existing owner/group binding, but there was no named
+command to create it. The first `pair:real` attempt was then observed failing
+because the existing local `.env` declared sandbox mode:
+
+```text
+Error: MOCK_SERVICE_TOKEN is required in sandbox mode
+```
+
+The setup command now forces real mode while loading the ignored `.env`.
+An isolated rerun using temporary Telegram state passed without printing a
+credential:
+
+```text
+Bander broker listening on http://127.0.0.1:4310
+Bander Telegram pairing link written to an isolated private path
+Bander Telegram service started
+```
+
+The pairing process was stopped without claiming the temporary token. The
+normal existing owner/group binding and product state were not modified.
+
+Restored-green documentation checkpoint evidence:
+
+```text
+README visual render: passed
+README relative references: 9 valid
+README npm scripts: 16 valid
+fresh isolated pair:real startup: passed
+typecheck: passed
+functional suite: 16 files, 163 tests passed
+attack suite: 2 files, 20 tests passed
+demo verifier: all 6 outcomes passed
+one-time HTTP recovery: one mutation, authority and Receipt
+standing HTTP recovery: one Draft, Permit, mutation, Receipt and counter entry
+real OpenClaw verifier: exactly 3 Bander tools; execution not started
+production build: passed
+dependency audit: 0 vulnerabilities
+clean-index npm ci: 588 packages installed; 0 vulnerabilities
+clean-index production build: passed
+clean-index typecheck and functional suite: 163 tests passed
+```
+
+The clean-index install was run from a temporary export containing only the
+staged repository. The host shell's Node 25.6.0 produced OpenClaw's expected
+engine warning; the repository pins and actually launches OpenClaw with its
+supported Node 24.15.0 child runtime.
+
+The tracked day-one transcript was removed from the repository index while its
+local file was preserved and ignored. `transcription_day2.md` remains local,
+ignored, untouched and absent from this checkpoint. No `.env`, `.bander/`,
+OAuth client/token, bot token, personal screenshot or private account detail
+was added.

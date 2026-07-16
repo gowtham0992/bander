@@ -1,52 +1,109 @@
 # Build Week submission checklist
 
-Current deadline: Tuesday, July 21, 2026 at 5:00 PM Pacific Time.
+Live Devpost check: submissions close **July 21, 2026 at 5:00 PM Pacific Time** (6:00 PM Mountain Time). The official OpenAI page also lists July 21 as the deadline. Recheck Devpost announcements and fields immediately before final submission.
 
 ## Product proof
 
-- [x] One-command local app without an OpenAI API key
-- [x] One-time Draft → Card → Band → Permit → Receipt flow
-- [x] Changed-world refusal with no partial Calendar/Messages commit
-- [x] Authority attack suite and deliberately invalidated test evidence
-- [x] Narrow standing Band, adjacent fallback Card, action cap, and visible revocation
-- [x] Real OpenClaw Streamable HTTP probe with exactly three tools
-- [x] Isolated OpenClaw environment with no downstream credentials
-- [x] Optional GPT-5.6 Structured Outputs compiler behind `OPENAI_API_KEY`
-- [x] Consumer desktop and responsive visual QA
-- [ ] Live GPT-5.6 request with the recording key
-- [ ] Final full-suite run on the recording machine
+- [x] Canonical `npm run real` supervises live OpenClaw and the real Bander broker
+- [x] Ordinary conversation uses live `gpt-5.6-sol` with zero Bander call
+- [x] Natural cross-day request uses live Sol intent compilation and real Google discovery
+- [x] Primary Calendar, timed/non-recurring/owner-organized/attendee-free event gate
+- [x] Complete source/destination Card, owner approval and decline, duration preservation
+- [x] One real conditional Google mutation and truthful Bander outcome
+- [x] Real stale-ETag changed-world refusal with zero Bander mutation
+- [x] Exactly three Bander tools and OpenClaw credential isolation
+- [x] Human Card, callback, Calendar detail, refusal, and outcome absent from OpenClaw trajectory
+- [x] Deterministic Hero and browser sandbox preserved for judges
+- [x] Functional, attack, recovery, OpenClaw, Telegram, Google, Sol, build, audit, and secret checks recorded
+- [ ] Final clean recording-machine run immediately before filming
 
-## Required artifacts
+## Required Devpost deliverables
 
-- [x] Source-of-truth builder plan
-- [x] Public-facing README with setup and boundary claim
-- [x] `BUILD_WITH_CODEX.md` evidence ledger
-- [x] Private GitHub repository connected as `gowtham0992/bander`
-- [ ] Make the repository public for judging
-- [ ] Public YouTube video under three minutes with voiceover
-- [ ] Explain both Codex and GPT-5.6 use in the video
-- [ ] Add the public repository and video URLs to Devpost
-- [ ] Run `/feedback` in the build task and save the Session ID
-- [ ] Put the `/feedback` Session ID in the required submission field
+Devpost currently requires:
+
+- [ ] A working project
+- [ ] Category: **Apps for Your Life**
+- [ ] Final project description
+- [ ] Public YouTube demo, **under three minutes**
+- [ ] Video voiceover explaining what was built, how Codex was used, and how GPT-5.6 was used
+- [ ] Repository URL with relevant license, README, setup instructions, and testing guidance
+- [ ] If the repository remains private, share it with `testing@devpost.com` and `build-week-event@openai.com`
+- [ ] `/feedback` Codex Session ID from the task where most core functionality was built
+
+Current required form fields also include submitter type, country of residence, category, repository URL, and `/feedback` Session ID. A judge-testing URL/instructions field is optional. Re-fetch the live form before entering final values.
+
+## Repository readiness
+
+- [x] MIT license
+- [x] README leads with the real product and separates Real from Hero sandbox
+- [x] Fresh-clone macOS/Node/OpenClaw/Telegram/OpenAI/Google/pairing instructions
+- [x] Current capability and exact security boundary
+- [x] Architecture, recording plan, builder plan, and evidence ledger synchronized
+- [x] No tracked `.env`, `.bander/`, OAuth client/token, bot token, personal screenshot, or current transcript
+- [ ] Make `gowtham0992/bander` public, or keep private and share with both judge addresses
+- [ ] Verify repository rendering and links on GitHub after push
+- [ ] Add one separately sanitized real-product screenshot
+
+## Video preparation
+
+- [ ] Remove “Test” from OpenClaw bot and Telegram group presentation
+- [ ] Use only the fictional dedicated Google account/event
+- [ ] Restore the staged event and confirm `America/Denver` before filming
+- [ ] Stop all stale gateways, then start only `npm run real`
+- [ ] Capture `Hi` → ordinary conversation with no Bander call
+- [ ] Capture natural request → real Card → approval → one real Google move → truthful outcome
+- [ ] Capture independent Google change → approval → human refusal → zero Bander mutation
+- [ ] Show exactly three Bander tools and the credential boundary briefly
+- [ ] Show selected red/green Codex evidence briefly
+- [ ] Keep secrets, account identifiers, OAuth details, generated config, and personal content off screen
+- [ ] Export, watch end to end, confirm narration and duration under three minutes
+- [ ] Upload public to YouTube and verify playback without signing in
 
 ## Devpost polish
 
-- [ ] Replace the current draft tagline with the final consumer promise
-- [ ] Write the final project story: problem, experience, architecture, exact claim, limitations, and next steps
-- [ ] Add product screenshots with no secrets or personal data
-- [ ] Confirm the project is entered in “Apps for Your Life”
-- [ ] Re-read every live submission field and announcement before publishing
-- [ ] Submit early enough to verify the public project page, repository, and video
+- [ ] Tagline uses the final consumer promise
+- [ ] Project story covers problem, parent experience, architecture, exact claim, evidence, and limitations
+- [ ] Built-with list includes Codex, GPT-5.6 Sol, OpenClaw, TypeScript, Telegram, Google Calendar API, MCP
+- [ ] Repository and video links open in a signed-out browser
+- [ ] `/feedback` Session ID entered only when the final core build is ready
+- [ ] Submit early, then reopen the public project page and verify every artifact
 
-## Final command pass
+## Final verification pass
+
+Deterministic and local-process matrix:
 
 ```bash
 npm run check
 npm run attack
 npm run build
-npm audit --audit-level=high
-npm run demo
-# second terminal
 npm run verify:demo
-npm run openclaw -- mcp doctor bander --probe
+npm run verify:recovery
+npm run verify:standing-recovery
+npm run verify:openclaw
+npm audit
 ```
+
+Credentialed empirical checks, run only with the dedicated test accounts and staged event:
+
+```bash
+npm run verify:gpt-sol
+npm run verify:google-calendar
+npm run verify:telegram-privacy
+npm run verify:telegram-conflict
+npm run verify:telegram-standing
+```
+
+Then stop all verification listeners and run the canonical manual product journey:
+
+```bash
+npm run real
+```
+
+## Final external checks
+
+- [ ] Official Build Week page checked: <https://openai.com/build-week/>
+- [ ] Live Devpost key dates, announcements, requirements, and project status checked
+- [ ] Public GitHub README and SVGs checked in light and dark themes
+- [ ] Public YouTube video checked signed out
+- [ ] Devpost submission checked signed out
+- [ ] `/feedback` Session ID saved outside the repository

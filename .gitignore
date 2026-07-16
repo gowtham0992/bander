@@ -7,3 +7,4 @@ dist/
 coverage/
 .bander/
 *.log
+transcription*.md
