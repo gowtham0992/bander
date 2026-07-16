@@ -24,6 +24,8 @@ function selector(value: unknown): CalendarIntentSelector {
     select: async () =>
       value && typeof value === "object" && !Array.isArray(value)
         ? {
+            actionKind: "reschedule_event",
+            durationMinutes: null,
             familyNotificationRequested: false,
             familyContactAlias: null,
             ...value,
@@ -199,6 +201,7 @@ describe("real Calendar intent compiler", () => {
       sourceLocalDateHint: null,
     });
     expect(fixture.calendar).toEqual({
+      kind: "reschedule",
       eventId: event.id,
       expectedEtag: event.etag,
       newStartTime: "2026-07-17T20:00:00.000Z",
@@ -233,11 +236,13 @@ describe("real Calendar intent compiler", () => {
       claimedUserRequest:
         "Could you put my fictional planning block after my morning walk on Monday, at quarter past eleven?",
       calendar: {
+        kind: "reschedule",
         eventId: event.id,
         expectedEtag: event.etag,
         newStartTime: "2026-07-20T17:15:00.000Z",
       },
     });
+    if (fixture.calendar.kind !== "reschedule") throw new Error("expected reschedule");
     expect(
       Date.parse(fixture.calendar.newStartTime) - Date.parse(event.startTime),
     ).not.toBe(0);
@@ -398,7 +403,7 @@ describe("real Calendar intent compiler", () => {
 
     await expect(compiler.compile("Cancel the planning block")).rejects.toMatchObject({
       humanMessage:
-        "I can safely prepare an eligible Calendar reschedule here, but not that kind of action yet.\nNothing happened.",
+        "I can add one timed Calendar event or move one eligible event, but I can’t make reservations, invite people, or create recurring events.\nNothing happened.",
     });
     expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });

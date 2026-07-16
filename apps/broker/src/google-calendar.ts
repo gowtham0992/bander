@@ -1,5 +1,6 @@
 import type {
   CalendarEvent,
+  CalendarCreateEffect,
   CalendarRescheduleEffect,
   DraftDocument,
   Person,
@@ -27,6 +28,12 @@ export interface GoogleEventResource {
   status?: string | null;
   recurringEventId?: string | null;
   recurrence?: string[] | null;
+  eventType?: string | null;
+  location?: string | null;
+  description?: string | null;
+  conferenceData?: unknown;
+  attachments?: unknown[] | null;
+  reminders?: { useDefault?: boolean | null; overrides?: unknown[] | null } | null;
   sequence?: number | null;
   organizer?: { self?: boolean | null; email?: string | null } | null;
   attendees?: Array<{ self?: boolean | null; email?: string | null }> | null;
@@ -65,6 +72,19 @@ export interface GoogleCalendarBoundary {
       end: { dateTime: string; timeZone: string };
     };
     ifMatch: string;
+  }): Promise<GoogleEventResource>;
+  insertEvent(input: {
+    calendarId: "primary";
+    sendUpdates: "none";
+    conferenceDataVersion: 0;
+    supportsAttachments: false;
+    requestBody: {
+      id: string;
+      summary: string;
+      eventType: "default";
+      start: { dateTime: string; timeZone: string };
+      end: { dateTime: string; timeZone: string };
+    };
   }): Promise<GoogleEventResource>;
 }
 
@@ -251,6 +271,32 @@ function sameInstant(left: string | null | undefined, right: string): boolean {
   return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs === rightMs;
 }
 
+function exactCreatedEvent(
+  resource: GoogleEventResource,
+  effect: CalendarCreateEffect,
+): boolean {
+  return (
+    resource.id === effect.eventId &&
+    resource.summary === effect.title &&
+    resource.status !== "cancelled" &&
+    (resource.eventType ?? "default") === "default" &&
+    sameInstant(resource.start?.dateTime, effect.startTime) &&
+    sameInstant(resource.end?.dateTime, effect.endTime) &&
+    resource.start?.timeZone === effect.timeZone &&
+    resource.end?.timeZone === effect.timeZone &&
+    !resource.start?.date &&
+    !resource.end?.date &&
+    !resource.attendees?.length &&
+    !resource.recurrence?.length &&
+    !resource.recurringEventId &&
+    !resource.location &&
+    !resource.description &&
+    !resource.conferenceData &&
+    !resource.attachments?.length &&
+    !resource.reminders?.overrides?.length
+  );
+}
+
 function scheduleLocalParts(instant: string, timeZone: string) {
   if (!Number.isFinite(Date.parse(instant))) {
     throw new GoogleCalendarError(
@@ -317,6 +363,7 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     string,
     { draftHash: string; result: ObservedExecutionResult }
   >();
+  readonly #createDispatches = new Map<string, string>();
   #primaryTimeZone: string | undefined;
 
   constructor(
@@ -497,6 +544,23 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     permitNonce: string;
     document: DraftDocument;
   }): Promise<ObservedExecutionResult> {
+    const existing = this.#executions.get(input.permitNonce);
+    if (existing) {
+      if (existing.draftHash !== input.draftHash) {
+        throw new GoogleCalendarError(
+          "google_execution_identity_mismatch",
+          "The Calendar execution identity does not match the approved deal",
+        );
+      }
+      return structuredClone(existing.result);
+    }
+    const created = input.document.effects.find(
+      (effect): effect is CalendarCreateEffect =>
+        effect.type === "calendar.create_event",
+    );
+    if (created) {
+      return this.#executeCreate(input, created);
+    }
     const calendar = input.document.effects.find(
       (effect): effect is CalendarRescheduleEffect =>
         effect.type === "calendar.reschedule_event",
@@ -601,6 +665,129 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     }
   }
 
+  async #executeCreate(
+    input: { draftHash: string; permitNonce: string; document: DraftDocument },
+    created: CalendarCreateEffect,
+  ): Promise<ObservedExecutionResult> {
+    if (
+      input.document.effects.length !== 1 ||
+      created.calendarId !== "primary" ||
+      created.eventType !== "default" ||
+      !/^[0-9a-v]{5,1024}$/.test(created.eventId) ||
+      !created.title ||
+      Date.parse(created.endTime) <= Date.parse(created.startTime) ||
+      Date.parse(created.endTime) - Date.parse(created.startTime) < 15 * 60_000 ||
+      Date.parse(created.endTime) - Date.parse(created.startTime) > 12 * 60 * 60_000
+    ) {
+      throw new GoogleCalendarError(
+        "unsupported_real_execution_shape",
+        "Real mode accepts one bounded Calendar creation",
+      );
+    }
+    const priorDispatch = this.#createDispatches.get(input.permitNonce);
+    if (priorDispatch) {
+      if (priorDispatch !== input.draftHash) {
+        throw new GoogleCalendarError(
+          "google_execution_identity_mismatch",
+          "The Calendar execution identity does not match the approved deal",
+        );
+      }
+      return this.#reconcileCreate(created, input, false);
+    }
+    this.#createDispatches.set(input.permitNonce, input.draftHash);
+    try {
+      const response = await this.boundary.insertEvent({
+        calendarId: "primary",
+        sendUpdates: "none",
+        conferenceDataVersion: 0,
+        supportsAttachments: false,
+        requestBody: {
+          id: created.eventId,
+          summary: created.title,
+          eventType: "default",
+          start: { dateTime: created.startTime, timeZone: created.timeZone },
+          end: { dateTime: created.endTime, timeZone: created.timeZone },
+        },
+      });
+      if (!exactCreatedEvent(response, created)) {
+        throw new GoogleCalendarError(
+          "google_calendar_response_mismatch",
+          "Google Calendar did not return the exact approved event",
+        );
+      }
+      return this.#recordCreateResult(input, created, "committed");
+    } catch (error) {
+      const status = responseStatus(error);
+      if (status === 409) {
+        return this.#reconcileCreate(created, input, true);
+      }
+      if (status && status >= 400 && status < 500 && ![408, 429].includes(status)) {
+        throw new GoogleCalendarError(
+          "google_calendar_unavailable",
+          "Google Calendar rejected the approved event",
+        );
+      }
+      return this.#reconcileCreate(created, input, false);
+    }
+  }
+
+  async #reconcileCreate(
+    created: CalendarCreateEffect,
+    input: { draftHash: string; permitNonce: string },
+    duplicateId: boolean,
+  ): Promise<ObservedExecutionResult> {
+    try {
+      const resource = await this.boundary.getEvent({
+        calendarId: "primary",
+        eventId: created.eventId,
+      });
+      if (!exactCreatedEvent(resource, created)) {
+        throw new GoogleCalendarError(
+          "google_event_identity_collision",
+          "The approved Calendar event identity exists with different content",
+        );
+      }
+      return this.#recordCreateResult(input, created, "observed_target");
+    } catch (error) {
+      if (
+        error instanceof GoogleCalendarError &&
+        error.code === "google_event_identity_collision"
+      ) {
+        throw error;
+      }
+      if (duplicateId) {
+        throw new GoogleCalendarError(
+          "google_event_identity_collision",
+          "Google reported a duplicate event identity that Bander could not validate",
+        );
+      }
+      throw new ExecutionAmbiguousError();
+    }
+  }
+
+  #recordCreateResult(
+    input: { draftHash: string; permitNonce: string },
+    created: CalendarCreateEffect,
+    status: "committed" | "observed_target",
+  ): ObservedExecutionResult {
+    const result: ObservedExecutionResult = {
+      calendar: {
+        action: "created",
+        status,
+        completed: {
+          startTime: created.startTime,
+          endTime: created.endTime,
+          timeZone: created.timeZone,
+        },
+      },
+    };
+    this.#executions.set(input.permitNonce, {
+      draftHash: input.draftHash,
+      result,
+    });
+    return structuredClone(result);
+  }
+
   async getExecution(_input: {
     draftHash: string;
     permitNonce: string;
@@ -609,6 +796,20 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     const execution = this.#executions.get(_input.permitNonce);
     if (execution?.draftHash === _input.draftHash) {
       return structuredClone(execution.result);
+    }
+    const created = _input.document.effects.find(
+      (effect): effect is CalendarCreateEffect => effect.type === "calendar.create_event",
+    );
+    if (created && _input.document.effects.length === 1) {
+      if (this.#createDispatches.get(_input.permitNonce) !== _input.draftHash) {
+        return false;
+      }
+      try {
+        return await this.#reconcileCreate(created, _input, false);
+      } catch (error) {
+        if (error instanceof ExecutionAmbiguousError) return false;
+        throw error;
+      }
     }
     const calendar = _input.document.effects.find(
       (effect): effect is CalendarRescheduleEffect =>
@@ -731,6 +932,16 @@ export function createGoogleCalendarBoundary(
         },
         { headers: { "If-Match": input.ifMatch } },
       );
+      return response.data;
+    },
+    async insertEvent(input) {
+      const response = await calendar.events.insert({
+        calendarId: input.calendarId,
+        sendUpdates: input.sendUpdates,
+        conferenceDataVersion: input.conferenceDataVersion,
+        supportsAttachments: input.supportsAttachments,
+        requestBody: input.requestBody,
+      });
       return response.data;
     },
   };

@@ -14,6 +14,7 @@ This guide is for the person setting up Bander on a computer for a parent or fam
 
 - The parent can ask what is coming up on their connected primary Calendar.
 - The parent may approve a real move of one narrowly eligible Calendar event.
+- The parent may approve one timed Calendar event after seeing its exact title and complete interval; Bander uses a disclosed 60-minute default unless the parent states a duration.
 - One connected family member may receive only the deterministic appointment update shown on the same approval Card.
 
 Bander does not provide arbitrary messaging, email, purchases, reservations, payments, smart-home control, or general Calendar editing.
@@ -197,7 +198,7 @@ Use `Ctrl-C` once in the terminal running `npm run real`, wait for both supervis
 
 ## Honest current limitations
 
-- Real writes are limited to one timed, non-recurring, owner-organized, attendee-free event in the connected primary Calendar; exact duration is preserved.
+- Real writes are limited to adding one timed default event or moving one timed, non-recurring, owner-organized, attendee-free event in the connected primary Calendar. Creation has no attendees, recurrence, location, description, conferencing, attachments, custom reminders, or reservation; rescheduling preserves exact duration.
 - Schedule reads are capped at 31 days and 50 sanitized events. Calendar titles remain untrusted model input; sanitization and prompting reduce but do not eliminate prompt-injection or mis-summary risk.
 - Exactly one family contact is supported. Bander can send only the deterministic appointment update shown on the approved compound Card.
 - Telegram delivery is not exactly once. A confirmed response is replay-safe; an ambiguous response is reported as unconfirmed and never retried automatically. Acceptance is not proof of reading.

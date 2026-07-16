@@ -460,6 +460,12 @@ function cardText(
         `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
       ];
     }
+    if (effect.kind === "calendar.create_event") {
+      return [
+        `${mode === "real" ? "📅 Add to Calendar" : "• Add"} “${safeDisplayText(effect.eventTitle)}”`,
+        safeDisplayText(effect.resultingInterval),
+      ];
+    }
     return effect.kind === "family.telegram_notification"
       ? [
           `${mode === "real" ? "👤 Family update" : "• Send"} ${firstName(effect.recipientDisplayName)}:`,
@@ -474,6 +480,9 @@ function cardText(
     1,
     Math.ceil((new Date(card.expiresAt).getTime() - now.getTime()) / 60_000),
   );
+  const includesCreate = card.effectPreviews.some(
+    (effect) => effect.kind === "calendar.create_event",
+  );
   if (mode === "hero") {
     const approvedBoundary =
       card.effectPreviews.length === 1
@@ -486,6 +495,12 @@ function cardText(
         return [
           `📅 Move “${safeDisplayText(effect.eventTitle)}”`,
           `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
+        ];
+      }
+      if (effect.kind === "calendar.create_event") {
+        return [
+          `📅 Add “${safeDisplayText(effect.eventTitle)}”`,
+          safeDisplayText(effect.resultingInterval),
         ];
       }
       return effect.kind === "family.telegram_notification"
@@ -518,7 +533,12 @@ function cardText(
     ...effects,
     "",
     ...(mode === "real"
-      ? ["Nothing else will change."]
+      ? includesCreate
+        ? [
+            "Not included:",
+            "No one will be invited. No recurring event or reservation will be created.",
+          ]
+        : ["Nothing else will change."]
       : ["Not included:", "• Any other events, messages or payments"]),
     "",
     `Closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
@@ -583,6 +603,21 @@ function receiptText(
         `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected, so no family update was sent.`,
       ].join("\n");
     }
+    if ("created" in receipt.calendar) {
+      return [
+        receipt.calendar.executionStatus === "observed_target"
+          ? "Your calendar now shows the approved event ✓"
+          : "Done ✓",
+        `“${safeDisplayText(receipt.calendar.title)}”`,
+        formatCalendarIntervalWithContext(
+          receipt.calendar.completed.startTime,
+          receipt.calendar.completed.endTime,
+          receipt.calendar.timeZone,
+        ),
+        `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
+        "Nothing else changed through Bander.",
+      ].join("\n");
+    }
     return [
       receipt.calendar.executionStatus === "observed_target"
         ? "Calendar confirmed at the approved time ✓"
@@ -598,6 +633,21 @@ function receiptText(
         receipt.calendar.timeZone,
       )}`,
       `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
+      "Nothing else changed through Bander.",
+    ].join("\n");
+  }
+  if ("created" in receipt.calendar) {
+    return [
+      receipt.calendar.executionStatus === "observed_target"
+        ? "Your calendar now shows the approved event ✓"
+        : "Done ✓",
+      `“${safeDisplayText(receipt.calendar.title)}”`,
+      formatCalendarIntervalWithContext(
+        receipt.calendar.completed.startTime,
+        receipt.calendar.completed.endTime,
+        receipt.calendar.timeZone,
+      ),
+      "No one was invited or messaged through Bander.",
       "Nothing else changed through Bander.",
     ].join("\n");
   }
@@ -663,11 +713,20 @@ function refusalText(
     const includesFamily = card.effectPreviews.some(
       (effect) => effect.kind === "family.telegram_notification",
     );
+    const includesCreate = card.effectPreviews.some(
+      (effect) => effect.kind === "calendar.create_event",
+    );
     return [
-      "I couldn’t confirm whether your calendar changed.",
+      includesCreate
+        ? "I couldn’t confirm whether the event was added."
+        : "I couldn’t confirm whether your calendar changed.",
       ...(includesFamily ? ["No family update was sent."] : []),
-      "I won’t try this request again automatically.",
-      "Please check your calendar before asking OpenClaw again.",
+      includesCreate
+        ? "I won’t try to add it again automatically."
+        : "I won’t try this request again automatically.",
+      includesCreate
+        ? "Please check your calendar before asking again."
+        : "Please check your calendar before asking OpenClaw again.",
     ].join("\n");
   }
   if (code !== "conflict") {
@@ -739,6 +798,9 @@ function standingOutcomeText(
   actionsUsed: number,
   maxActions: number,
 ): string {
+  if ("created" in receipt.calendar) {
+    throw new Error("Standing Calendar creation is unsupported");
+  }
   return [
     "Handled automatically ✓",
     "",

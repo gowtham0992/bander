@@ -1,5 +1,6 @@
 import type {
   ApprovalCard,
+  CalendarCreateEffect,
   CalendarRescheduleEffect,
   DraftDocument,
   FamilyNotificationDocument,
@@ -85,13 +86,21 @@ function messageLine(effect: MessageSendEffect): string {
 export function renderFamilyNotificationDocument(
   document: FamilyNotificationDocument,
 ): string {
+  const interval =
+    document.kind === "calendar_creation"
+      ? formatCalendarIntervalWithContext(
+          document.startTime,
+          document.endTime,
+          document.timeZone,
+        )
+      : formatCalendarIntervalWithContext(
+          document.newStartTime,
+          document.newEndTime,
+          document.timeZone,
+        );
   return [
     "Bander update",
-    `“${document.eventTitle}” is now ${formatCalendarIntervalWithContext(
-      document.newStartTime,
-      document.newEndTime,
-      document.timeZone,
-    )}.`,
+    `“${document.eventTitle}” ${document.kind === "calendar_creation" ? "was added for" : "is now"} ${interval}.`,
     "This is the exact update your family approved Bander to send.",
   ].join("\n");
 }
@@ -105,29 +114,51 @@ export function sanitizeFamilyNotificationTitle(value: string): string {
     .slice(0, 120);
 }
 
-export function createFamilyNotificationDocument(input: {
-  eventTitle: string;
-  newStartTime: string;
-  newEndTime: string;
-  timeZone: string;
-}): FamilyNotificationDocument {
-  const document: FamilyNotificationDocument = {
-    kind: "calendar_transition",
-    eventTitle: sanitizeFamilyNotificationTitle(input.eventTitle),
-    newStartTime: new Date(input.newStartTime).toISOString(),
-    newEndTime: new Date(input.newEndTime).toISOString(),
-    timeZone: input.timeZone,
-  };
+export function createFamilyNotificationDocument(
+  input:
+    | {
+        kind?: "calendar_transition";
+        eventTitle: string;
+        newStartTime: string;
+        newEndTime: string;
+        timeZone: string;
+      }
+    | {
+        kind: "calendar_creation";
+        eventTitle: string;
+        startTime: string;
+        endTime: string;
+        timeZone: string;
+      },
+): FamilyNotificationDocument {
+  const document: FamilyNotificationDocument =
+    input.kind === "calendar_creation"
+      ? {
+          kind: "calendar_creation",
+          eventTitle: sanitizeFamilyNotificationTitle(input.eventTitle),
+          startTime: new Date(input.startTime).toISOString(),
+          endTime: new Date(input.endTime).toISOString(),
+          timeZone: input.timeZone,
+        }
+      : {
+          kind: "calendar_transition",
+          eventTitle: sanitizeFamilyNotificationTitle(input.eventTitle),
+          newStartTime: new Date(input.newStartTime).toISOString(),
+          newEndTime: new Date(input.newEndTime).toISOString(),
+          timeZone: input.timeZone,
+        };
+  const start = document.kind === "calendar_creation" ? document.startTime : document.newStartTime;
+  const end = document.kind === "calendar_creation" ? document.endTime : document.newEndTime;
   if (
     !document.eventTitle ||
-    !Number.isFinite(Date.parse(document.newStartTime)) ||
-    !Number.isFinite(Date.parse(document.newEndTime)) ||
-    Date.parse(document.newEndTime) <= Date.parse(document.newStartTime)
+    !Number.isFinite(Date.parse(start)) ||
+    !Number.isFinite(Date.parse(end)) ||
+    Date.parse(end) <= Date.parse(start)
   ) {
     throw new Error("Invalid family notification document");
   }
   new Intl.DateTimeFormat("en-US", { timeZone: document.timeZone }).format(
-    new Date(document.newStartTime),
+    new Date(start),
   );
   return document;
 }
@@ -143,6 +174,9 @@ export function renderApprovalCard(
 ): ApprovalCard {
   const allows = document.effects.map((effect) => {
     if (effect.type === "calendar.reschedule_event") return calendarLine(effect);
+    if (effect.type === "calendar.create_event") {
+      return `add “${effect.title}” to Calendar for ${formatCalendarIntervalWithContext(effect.startTime, effect.endTime, effect.timeZone)}`;
+    }
     if (effect.type === "messages.send") return messageLine(effect);
     return familyNotificationLine(effect);
   });
@@ -151,6 +185,8 @@ export function renderApprovalCard(
       document.effects.map((effect) =>
         effect.type === "calendar.reschedule_event"
           ? "Calendar"
+          : effect.type === "calendar.create_event"
+            ? "Calendar"
           : effect.type === "messages.send"
             ? "Messages"
             : "Family Telegram",
@@ -181,6 +217,16 @@ export function renderApprovalCard(
             ),
           };
         })()
+      : effect.type === "calendar.create_event"
+        ? {
+            kind: effect.type,
+            eventTitle: effect.title,
+            resultingInterval: formatCalendarIntervalWithContext(
+              effect.startTime,
+              effect.endTime,
+              effect.timeZone,
+            ),
+          }
       : effect.type === "messages.send"
         ? {
           kind: effect.type,
@@ -221,6 +267,10 @@ export function renderHumanReceipt(
     (effect): effect is CalendarRescheduleEffect =>
       effect.type === "calendar.reschedule_event",
   );
+  const createdCalendar = document.effects.find(
+    (effect): effect is CalendarCreateEffect =>
+      effect.type === "calendar.create_event",
+  );
   const message = document.effects.find(
     (effect): effect is MessageSendEffect => effect.type === "messages.send",
   );
@@ -228,18 +278,30 @@ export function renderHumanReceipt(
     (effect): effect is FamilyTelegramNotificationEffect =>
       effect.type === "family.telegram_notification",
   );
-  if (!calendar) throw new Error("Draft cannot be rendered as a receipt");
-  const completed = observed?.calendar.completed ?? {
+  if ((!calendar && !createdCalendar) || (calendar && createdCalendar)) {
+    throw new Error("Draft cannot be rendered as a receipt");
+  }
+  const completed = observed?.calendar.completed ?? (calendar ? {
     startTime: calendar.changes.startTime,
     endTime: calendar.changes.endTime,
     timeZone: calendar.expected.timeZone,
-  };
+  } : {
+    startTime: createdCalendar!.startTime,
+    endTime: createdCalendar!.endTime,
+    timeZone: createdCalendar!.timeZone,
+  });
+  const title = calendar?.expected.title ?? createdCalendar!.title;
+  const timeZone = calendar?.expected.timeZone ?? createdCalendar!.timeZone;
 
   return {
     id,
     draftId,
     title: "Done",
-    summary: `Completed as agreed: “${calendar.expected.title}” moved from ${formatInterval(calendar.expected.startTime, calendar.expected.endTime, calendar.expected.timeZone)} to ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`,
+    summary: calendar
+      ? `Completed as agreed: “${calendar.expected.title}” moved from ${formatInterval(calendar.expected.startTime, calendar.expected.endTime, calendar.expected.timeZone)} to ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
+      : observed?.calendar.status === "observed_target"
+        ? `Your calendar now shows the approved event: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
+        : `Added as agreed: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`,
     detail: familyNotification
       ? observed?.familyNotification?.status === "delivered"
         ? `The approved update was sent to ${familyNotification.binding.displayLabel}.`
@@ -249,21 +311,32 @@ export function renderHumanReceipt(
       : message
         ? `${message.expected.displayName.split(" ")[0]} was notified.`
         : "No messages were sent.",
-    calendar: {
-      title: calendar.expected.title,
-      previous: {
-        startTime: calendar.expected.startTime,
-        endTime: calendar.expected.endTime,
-      },
-      completed: {
-        startTime: completed.startTime,
-        endTime: completed.endTime,
-      },
-      timeZone: calendar.expected.timeZone,
-      ...(observed?.calendar.status
-        ? { executionStatus: observed.calendar.status }
-        : {}),
-    },
+    calendar: calendar
+      ? {
+          title,
+          previous: {
+            startTime: calendar.expected.startTime,
+            endTime: calendar.expected.endTime,
+          },
+          completed: {
+            startTime: completed.startTime,
+            endTime: completed.endTime,
+          },
+          timeZone,
+          ...(observed?.calendar.status
+            ? { executionStatus: observed.calendar.status }
+            : {}),
+        }
+      : {
+          created: true,
+          title,
+          completed: {
+            startTime: completed.startTime,
+            endTime: completed.endTime,
+          },
+          timeZone,
+          executionStatus: observed?.calendar.status ?? "committed",
+        },
     ...(message
       ? {
           message: {

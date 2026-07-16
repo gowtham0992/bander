@@ -17,6 +17,7 @@ const fixture: DraftFixture = {
   id: "fixture",
   claimedUserRequest: "Move dinner and message Sarah.",
   calendar: {
+    kind: "reschedule",
     eventId: "event-dinner-sarah",
     expectedEtag: "event-dinner-sarah-r1",
     newStartTime: "2026-07-14T19:30:00-06:00",
@@ -546,6 +547,7 @@ describe("broker approval boundary", () => {
       id: "compound-private",
       claimedUserRequest: "Move dinner and let my son know.",
       calendar: {
+        kind: "reschedule",
         eventId: "event-dinner-sarah",
         expectedEtag: "event-dinner-sarah-r1",
         newStartTime: "2026-07-15T01:30:00.000Z",
@@ -593,6 +595,56 @@ describe("broker approval boundary", () => {
       expect(JSON.parse(text)).toMatchObject({ status: "proposed" });
       expect(text).not.toMatch(/Gil|son|Bander update|Dinner|contact|pairing|Calendar/i);
       expect(JSON.stringify(humanCard)).toContain("Gil");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("openclaw_receives_only_minimal_create_status", async () => {
+    const setup = createApp();
+    const createFixture: DraftFixture = {
+      id: "create-private",
+      claimedUserRequest: "Add lunch with Ruth next Tuesday at noon.",
+      calendar: {
+        kind: "create",
+        eventId: "b0123456789abcdefghijklmnopqrstuv",
+        title: "Lunch with Ruth",
+        startTime: "2026-07-21T18:00:00.000Z",
+        endTime: "2026-07-21T19:00:00.000Z",
+        timeZone: "America/Denver",
+      },
+    };
+    let humanCard: unknown;
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: new Map(),
+      runtimeMode: "real",
+      agentCompiler: { compile: async () => structuredClone(createFixture) },
+      deliverAgentProposal: async (card) => { humanCard = card; },
+      readSchedule: async () => ({
+        requestedRange: { startLocalDate: "2026-07-18", endLocalDateExclusive: "2026-07-19" },
+        timeZone: "America/Denver",
+        events: [],
+        empty: true,
+        truncated: false,
+        maxEvents: 50,
+      }),
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "create-privacy", version: "1" });
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: { request: createFixture.claimedUserRequest },
+      });
+      const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "";
+      expect(JSON.parse(text)).toMatchObject({ status: "proposed" });
+      expect(text).not.toMatch(/Lunch|Ruth|b012345|Calendar|eventId|startTime/i);
+      expect(JSON.stringify(humanCard)).toContain("Lunch with Ruth");
+      expect(setup.adapter.executions).toBe(0);
     } finally {
       await client.close();
       await server.close();

@@ -32,11 +32,21 @@ import { AuthorityStore } from "./store.js";
 export interface DraftFixture {
   id: string;
   claimedUserRequest: string;
-  calendar: {
-    eventId: string;
-    expectedEtag: string;
-    newStartTime: string;
-  };
+  calendar:
+    | {
+        kind: "reschedule";
+        eventId: string;
+        expectedEtag: string;
+        newStartTime: string;
+      }
+    | {
+        kind: "create";
+        eventId: string;
+        title: string;
+        startTime: string;
+        endTime: string;
+        timeZone: string;
+      };
   message?: {
     recipientId: string;
     expectedRecipientRevision: number;
@@ -110,6 +120,13 @@ export interface StandingBandSummary {
 }
 
 export function digestStandingRequest(fixture: DraftFixture): string {
+  if (fixture.calendar.kind === "create") {
+    throw new AuthorityError(
+      "standing_create_unsupported",
+      "Calendar creation requires one-time review",
+      422,
+    );
+  }
   return hashCanonical({
     version: 1,
     request: {
@@ -820,12 +837,43 @@ export class AuthorityEngine {
     fixture: DraftFixture,
     bindToCurrentState = false,
   ): Promise<StoredDraft> {
-    const event = await this.#adapter.resolveEvent(fixture.calendar.eventId);
+    const creating = fixture.calendar.kind === "create";
+    const createFixture = creating
+      ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "create" }>)
+      : undefined;
+    const rescheduleFixture = !creating
+      ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "reschedule" }>)
+      : undefined;
+    if (creating) {
+      const duration = Date.parse(createFixture!.endTime) - Date.parse(createFixture!.startTime);
+      const sanitizedTitle = createFamilyNotificationDocument({
+        kind: "calendar_creation",
+        eventTitle: createFixture!.title,
+        startTime: createFixture!.startTime,
+        endTime: createFixture!.endTime,
+        timeZone: createFixture!.timeZone,
+      }).eventTitle;
+      if (
+        !/^[0-9a-v]{5,1024}$/.test(createFixture!.eventId) ||
+        sanitizedTitle !== createFixture!.title ||
+        duration < 15 * 60_000 ||
+        duration > 12 * 60 * 60_000
+      ) {
+        throw new AuthorityError(
+          "invalid_calendar_create",
+          "The Calendar creation request is outside Bander’s supported shape",
+          422,
+        );
+      }
+    }
+    const event = creating
+      ? undefined
+      : await this.#adapter.resolveEvent(rescheduleFixture!.eventId);
     const person = fixture.message
       ? await this.#adapter.resolvePerson(fixture.message.recipientId)
       : undefined;
 
-    if (!bindToCurrentState && event.etag !== fixture.calendar.expectedEtag) {
+    if (!creating && !bindToCurrentState && event!.etag !== rescheduleFixture!.expectedEtag) {
       throw new AuthorityError(
         "fixture_precondition_mismatch",
         "The seeded calendar no longer matches this proposal",
@@ -844,25 +892,38 @@ export class AuthorityEngine {
       );
     }
 
-    const effects: DraftEffect[] = [
+    const effects: DraftEffect[] = creating
+      ? [
+          {
+            type: "calendar.create_event",
+            calendarId: "primary",
+            eventId: createFixture!.eventId,
+            title: createFixture!.title,
+            startTime: createFixture!.startTime,
+            endTime: createFixture!.endTime,
+            timeZone: createFixture!.timeZone,
+            eventType: "default",
+          },
+        ]
+      : [
       {
         type: "calendar.reschedule_event",
-        eventId: event.id,
+        eventId: event!.id,
         expected: {
-          etag: event.etag,
-          title: event.title,
-          startTime: event.startTime,
-          endTime: event.endTime,
-          timeZone: event.timeZone,
-          organizerId: event.organizerId,
-          attendeeIds: event.attendeeIds,
+          etag: event!.etag,
+          title: event!.title,
+          startTime: event!.startTime,
+          endTime: event!.endTime,
+          timeZone: event!.timeZone,
+          organizerId: event!.organizerId,
+          attendeeIds: event!.attendeeIds,
         },
         changes: {
-          startTime: fixture.calendar.newStartTime,
+          startTime: rescheduleFixture!.newStartTime,
           endTime: deriveRescheduledEnd(
-            event.startTime,
-            event.endTime,
-            fixture.calendar.newStartTime,
+            event!.startTime,
+            event!.endTime,
+            rescheduleFixture!.newStartTime,
           ),
         },
       },
@@ -889,16 +950,25 @@ export class AuthorityEngine {
           422,
         );
       }
-      const canonicalDocument = createFamilyNotificationDocument({
-        eventTitle: event.title,
-        newStartTime: fixture.calendar.newStartTime,
-        newEndTime: deriveRescheduledEnd(
-          event.startTime,
-          event.endTime,
-          fixture.calendar.newStartTime,
-        ),
-        timeZone: event.timeZone,
-      });
+      const canonicalDocument = creating
+        ? createFamilyNotificationDocument({
+            kind: "calendar_creation",
+            eventTitle: createFixture!.title,
+            startTime: createFixture!.startTime,
+            endTime: createFixture!.endTime,
+            timeZone: createFixture!.timeZone,
+          })
+        : createFamilyNotificationDocument({
+            kind: "calendar_transition",
+            eventTitle: event!.title,
+            newStartTime: rescheduleFixture!.newStartTime,
+            newEndTime: deriveRescheduledEnd(
+              event!.startTime,
+              event!.endTime,
+              rescheduleFixture!.newStartTime,
+            ),
+            timeZone: event!.timeZone,
+          });
       if (
         hashCanonical(canonicalDocument) !==
         hashCanonical(fixture.familyNotification.document)
@@ -1100,17 +1170,24 @@ export class AuthorityEngine {
     const calendar = draft.document.effects.find(
       (effect) => effect.type === "calendar.reschedule_event",
     );
+    const createdCalendar = draft.document.effects.find(
+      (effect) => effect.type === "calendar.create_event",
+    );
     const family = draft.document.effects.find(
       (effect) => effect.type === "family.telegram_notification",
     );
     if (
-      !calendar ||
+      (!calendar && !createdCalendar) ||
+      (calendar && createdCalendar) ||
+      (createdCalendar && !observed) ||
       (observed &&
         (Date.parse(observed.calendar.completed.startTime) !==
-          Date.parse(calendar.changes.startTime) ||
+          Date.parse(calendar ? calendar.changes.startTime : createdCalendar!.startTime) ||
           Date.parse(observed.calendar.completed.endTime) !==
-            Date.parse(calendar.changes.endTime) ||
-          observed.calendar.completed.timeZone !== calendar.expected.timeZone)) ||
+            Date.parse(calendar ? calendar.changes.endTime : createdCalendar!.endTime) ||
+          observed.calendar.completed.timeZone !==
+            (calendar ? calendar.expected.timeZone : createdCalendar!.timeZone) ||
+          (createdCalendar && observed.calendar.action !== "created"))) ||
       (family && !observed?.familyNotification) ||
       (!family && observed?.familyNotification)
     ) {

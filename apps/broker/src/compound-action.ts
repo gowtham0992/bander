@@ -28,7 +28,9 @@ export function compoundDeliveryRequestId(
 
 function compoundEffects(document: DraftDocument) {
   const calendar = document.effects.find(
-    (effect) => effect.type === "calendar.reschedule_event",
+    (effect) =>
+      effect.type === "calendar.reschedule_event" ||
+      effect.type === "calendar.create_event",
   );
   const family = document.effects.find(
     (effect): effect is FamilyTelegramNotificationEffect =>
@@ -73,6 +75,7 @@ export class CompoundExecutionAdapter implements ExecutionAdapter {
       input.document.effects.some(
         (effect) =>
           effect.type !== "calendar.reschedule_event" &&
+          effect.type !== "calendar.create_event" &&
           effect.type !== "family.telegram_notification",
       ) ||
       input.document.effects.length !== (family ? 2 : 1)

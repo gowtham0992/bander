@@ -34,7 +34,9 @@ The strong route property applies only inside this profile. Bander does not rest
 
 Bander uses desktop OAuth with PKCE S256 and a loopback callback. It requests only `https://www.googleapis.com/auth/calendar.events.owned`, fixes the Calendar ID to `primary`, and keeps the OAuth client/token files under ignored local storage with private permissions.
 
-Real event eligibility is narrow: timed, non-recurring, owner-organized, no attendees. Bander reads the canonical ID, title, complete start/end interval, timezone, organizer, attendees, and ETag. Execution sends only the approved start/end fields, preserves exact duration, sets `sendUpdates: "none"`, and uses the approved ETag in `If-Match`.
+Real reschedule eligibility is narrow: timed, non-recurring, owner-organized, no attendees. Bander reads the canonical ID, title, complete start/end interval, timezone, organizer, attendees, and ETag. Execution sends only the approved start/end fields, preserves exact duration, sets `sendUpdates: "none"`, and uses the approved ETag in `If-Match`.
+
+Real creation is a separate action shape: one timed `default` event on `primary`, no attendees, recurrence, location, description, conferencing, attachments, custom reminders, booking, or reservation. Bander generates a cryptographically random lowercase base32hex-compatible client event ID once per proposal and commits it with the sanitized title, exact start/end, and configured IANA timezone. After dispatch it never issues another insert automatically. A lost response or duplicate-ID result is reconciled only with `events.get` for that exact stored ID; exact content is reported as observed, different content fails closed, and a missing event remains unconfirmed.
 
 A 412 is a changed-world conflict, not permission to re-plan. Bander performs no automatic refetch-and-write. Concurrent empirical tests show that two writes using the same approved ETag allow one commit and make the other fail precondition. Timeout reconciliation may describe only the Calendar state Bander later observes; it must not claim causality it cannot prove.
 
@@ -44,16 +46,18 @@ A 412 is a changed-world conflict, not permission to re-plan. Bander performs no
 
 Real mode uses a separate strict Structured Output call with exact model ID `gpt-5.6-sol`. The output contract contains:
 
+- action kind (`reschedule_event` or `create_event`);
 - event-title hint;
 - optional source-local-date hint;
 - required target local date;
 - required target local start;
+- optional duration minutes for creation;
 - whether a paired-family update was requested; and
 - the human alias used for that contact.
 
 If no source date is supplied, deterministic code searches a bounded upcoming 31-day window and requires exactly one eligible normalized title match. Date resolution uses the configured connected-Calendar timezone; the selected authoritative event supplies the complete interval and timezone.
 
-The model cannot select a recipient address, Telegram identifier, notification body, Calendar ID, event ID, ETag, final end, effects, authority, or execution parameters. Bander resolves an alias only against the one active, operator-configured contact and constructs the notification from the authoritative Calendar transition. Invalid, missing, ambiguous, broadened, or malformed output fails closed. Clarification text is deterministically mapped and delivered by Bander; model-authored Calendar details do not cross the MCP boundary.
+The model cannot select a recipient address, Telegram identifier, notification body, Calendar ID, event ID, ETag, timezone, final end, effects, authority, or execution parameters. Bander resolves an alias only against the one active, operator-configured contact, generates any create identity itself, and constructs the notification from the authoritative Calendar action. Invalid, missing, ambiguous, broadened, or malformed output fails closed. Clarification text is deterministically mapped and delivered by Bander; model-authored Calendar details do not cross the MCP boundary.
 
 ## ADR-005: Authority binds approval to one immutable action
 
@@ -72,7 +76,7 @@ Every execution shape has one idempotent downstream operation identity. Bander r
 The sandbox mock service can truthfully reconcile an operation after a lost response. The current real Google adapter uses observed Google state and ETag behavior; it does not overclaim that Bander caused a state merely because the state matches.
 
 For a compound deal, the immutable Draft contains both the complete Calendar
-transition and the exact opaque family-contact pairing revision plus canonical
+action and the exact opaque family-contact pairing revision plus canonical
 notification document. The Card and delivery use the same renderer. Execution
 is deliberately ordered: validate and conditionally update Calendar first,
 then attempt the bound family update. This is not an atomic distributed

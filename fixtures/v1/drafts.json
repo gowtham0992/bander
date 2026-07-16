@@ -5,6 +5,7 @@
       "id": "move-demo-appointment-and-notify-gil",
       "claimedUserRequest": "Move Bander Demo Appointment to July 18 at 4 PM and let my son know.",
       "calendar": {
+        "kind": "reschedule",
         "eventId": "event-demo-appointment",
         "expectedEtag": "event-demo-appointment-r1",
         "newStartTime": "2026-07-18T16:00:00-06:00"
@@ -27,6 +28,7 @@
       "id": "move-dinner-and-notify-sarah",
       "claimedUserRequest": "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.",
       "calendar": {
+        "kind": "reschedule",
         "eventId": "event-dinner-sarah",
         "expectedEtag": "event-dinner-sarah-r1",
         "newStartTime": "2026-07-14T19:30:00-06:00"
@@ -41,6 +43,7 @@
       "id": "move-my-focus-block",
       "claimedUserRequest": "Move my focus block to 10:30.",
       "calendar": {
+        "kind": "reschedule",
         "eventId": "event-focus-block",
         "expectedEtag": "event-focus-block-r1",
         "newStartTime": "2026-07-15T10:30:00-06:00"
@@ -50,6 +53,7 @@
       "id": "move-dinner-under-standing-band",
       "claimedUserRequest": "Move dinner with Sarah to 7:30.",
       "calendar": {
+        "kind": "reschedule",
         "eventId": "event-dinner-sarah",
         "expectedEtag": "event-dinner-sarah-r1",
         "newStartTime": "2026-07-14T19:30:00-06:00"

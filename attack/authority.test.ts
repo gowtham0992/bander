@@ -20,6 +20,7 @@ const fixture: DraftFixture = {
   id: "move-dinner-and-notify-sarah",
   claimedUserRequest: "Move dinner and message Sarah.",
   calendar: {
+    kind: "reschedule",
     eventId: "event-dinner-sarah",
     expectedEtag: "event-dinner-sarah-r1",
     newStartTime: "2026-07-14T19:30:00-06:00",
@@ -35,6 +36,7 @@ const standingFixture: DraftFixture = {
   id: "move-my-focus-block",
   claimedUserRequest: "Move my focus block to 10:30.",
   calendar: {
+    kind: "reschedule",
     eventId: "event-focus-block",
     expectedEtag: "event-focus-block-r1",
     newStartTime: "2026-07-15T10:30:00-06:00",

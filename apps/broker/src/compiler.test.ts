@@ -11,6 +11,7 @@ const fixture: DraftFixture = {
   id: "move-dinner-and-notify-sarah",
   claimedUserRequest: "Versioned fixture request",
   calendar: {
+    kind: "reschedule",
     eventId: "event-dinner-sarah",
     expectedEtag: "event-dinner-sarah-r1",
     newStartTime: "2026-07-14T19:30:00-06:00",

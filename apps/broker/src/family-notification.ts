@@ -41,13 +41,23 @@ export function parseFamilyNotificationDocument(value: unknown): FamilyNotificat
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new FamilyNotificationError("invalid_document", "A structured family notification is required");
   const input = value as Record<string, unknown>;
   const keys = Object.keys(input).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(["eventTitle", "kind", "newEndTime", "newStartTime", "timeZone"])) throw new FamilyNotificationError("invalid_document", "Family notifications cannot include a destination or message body");
-  if (input.kind !== "calendar_transition" || typeof input.eventTitle !== "string" || typeof input.newStartTime !== "string" || typeof input.newEndTime !== "string" || typeof input.timeZone !== "string") throw new FamilyNotificationError("invalid_document", "Invalid family notification document");
+  const transitionKeys = ["eventTitle", "kind", "newEndTime", "newStartTime", "timeZone"];
+  const creationKeys = ["endTime", "eventTitle", "kind", "startTime", "timeZone"];
+  if (
+    JSON.stringify(keys) !== JSON.stringify(transitionKeys) &&
+    JSON.stringify(keys) !== JSON.stringify(creationKeys)
+  ) throw new FamilyNotificationError("invalid_document", "Family notifications cannot include a destination or message body");
+  const creation = input.kind === "calendar_creation";
+  const start = creation ? input.startTime : input.newStartTime;
+  const end = creation ? input.endTime : input.newEndTime;
+  if ((input.kind !== "calendar_transition" && !creation) || typeof input.eventTitle !== "string" || typeof start !== "string" || typeof end !== "string" || typeof input.timeZone !== "string") throw new FamilyNotificationError("invalid_document", "Invalid family notification document");
   const eventTitle = clean(input.eventTitle, 120);
   const timeZone = clean(input.timeZone, 80);
-  if (!eventTitle || !timeZone || !Number.isFinite(Date.parse(input.newStartTime)) || !Number.isFinite(Date.parse(input.newEndTime)) || Date.parse(input.newEndTime) <= Date.parse(input.newStartTime)) throw new FamilyNotificationError("invalid_document", "Invalid family notification document");
-  try { new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date(input.newStartTime)); } catch { throw new FamilyNotificationError("invalid_document", "Invalid family notification timezone"); }
-  return { kind: "calendar_transition", eventTitle, newStartTime: new Date(input.newStartTime).toISOString(), newEndTime: new Date(input.newEndTime).toISOString(), timeZone };
+  if (!eventTitle || !timeZone || !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end)) || Date.parse(end) <= Date.parse(start)) throw new FamilyNotificationError("invalid_document", "Invalid family notification document");
+  try { new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date(start)); } catch { throw new FamilyNotificationError("invalid_document", "Invalid family notification timezone"); }
+  return creation
+    ? { kind: "calendar_creation", eventTitle, startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(), timeZone }
+    : { kind: "calendar_transition", eventTitle, newStartTime: new Date(start).toISOString(), newEndTime: new Date(end).toISOString(), timeZone };
 }
 
 export function notificationDigest(document: FamilyNotificationDocument): string { return digest(JSON.stringify(document)); }

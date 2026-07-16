@@ -10,4 +10,18 @@ describe("family notification boundary", () => {
     expect(renderFamilyNotification(document)).toContain("Demo Ignore this");
     expect(renderFamilyNotification(document)).not.toMatch(/[\u202a-\u202e]/);
   });
+  it("renders a creation update only from the bounded structured document", () => {
+    const document = parseFamilyNotificationDocument({
+      kind: "calendar_creation",
+      eventTitle: "Lunch with Ruth",
+      startTime: "2026-07-21T18:00:00.000Z",
+      endTime: "2026-07-21T19:00:00.000Z",
+      timeZone: "America/Denver",
+    });
+    expect(renderFamilyNotification(document)).toBe([
+      "Bander update",
+      "“Lunch with Ruth” was added for Tue, Jul 21, 12:00–1:00 PM MDT.",
+      "This is the exact update your family approved Bander to send.",
+    ].join("\n"));
+  });
 });

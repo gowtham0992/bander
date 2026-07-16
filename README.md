@@ -12,7 +12,7 @@ OpenClaw helps. Bander holds the keys and independently confirms what happened.
 
 ## What Bander is
 
-Bander is a confidence layer for personal AI agents. OpenClaw can understand a natural request and ask Bander to prepare an action. Bander independently looks up the real Calendar event, shows the person the exact before-and-after change, and acts only if that person approves that exact deal.
+Bander is a confidence layer for personal AI agents. OpenClaw can understand a natural request and ask Bander to prepare an action. Bander independently resolves the real Calendar action, shows the person the exact event details, and acts only if that person approves that exact deal.
 
 The claim is intentionally narrow: Bander does not decide whether an agent's goal is wise. For effects routed through Bander, it ensures nothing happens beyond the specific deal the person saw and approved.
 
@@ -31,10 +31,12 @@ The real product path currently provides:
 - ordinary OpenClaw conversation without invoking Bander for greetings or unrelated chat;
 - bounded read-only answers about the connected primary Calendar, including timed, all-day, and recurring occurrences, without an approval Card;
 - natural-language rescheduling of Google Calendar events on the connected primary calendar;
-- live `gpt-5.6-sol` compilation into a bounded title hint, optional source date, required destination date, and required destination time;
+- natural-language creation of one timed Google Calendar event with a disclosed 60-minute default or an explicit duration from 15 minutes through 12 hours;
+- live `gpt-5.6-sol` compilation into a bounded action kind, title hint, optional source date, required destination date/time, and optional create duration;
 - exact matching of one timed, non-recurring, owner-organized event with no attendees;
 - a human-readable Bander Card with complete source and destination intervals;
 - owner-bound approval and decline, exact duration preservation, cross-day moves, and timezone-aware display;
+- a stable cryptographically random client event ID committed inside each approved create action, with no blind insert retry after dispatch;
 - one immutable compound deal that binds an exact Calendar reschedule and exact paired-family update before approval;
 - Calendar-first execution and replay-safe family delivery through Bander's own Telegram identity;
 - Google ETag preconditions and a changed-world refusal with no retry against a changed plan; and
@@ -182,7 +184,7 @@ link. If Telegram cannot verify the contact is outside the protected group,
 Bander refuses the pairing or startup check.
 
 Bander can include one deterministic Calendar update to this route in the same
-approval Card as an eligible Calendar reschedule. OpenClaw and MCP cannot invoke
+approval Card as an eligible Calendar creation or reschedule. OpenClaw and MCP cannot invoke
 delivery directly, choose its destination, or author its text. The Card binds
 the exact opaque contact pairing and displays the same deterministically rendered
 text that Bander later sends. Revoking or replacing the contact before execution
@@ -204,6 +206,8 @@ In the connected primary Calendar, create a fictional event that is:
 - uniquely identifiable by title in the upcoming 31-day search window when the request omits a source date.
 
 Multiple eligible title matches fail closed and ask for the source date. Zero matches, missing destination details, cancellations, attendee-bearing events, recurring events, and all-day events create no authority.
+
+Creation does not require an existing staged event. It supports one timed default event on `primary`, with no attendees, recurrence, location, description, conferencing, attachments, custom reminders, or reservation. If no duration is stated, the Card discloses the 60-minute default before approval.
 
 ### 9. Start the complete real product
 
@@ -254,6 +258,7 @@ npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
 npm run verify:read-sol
+npm run verify:create-sol
 npm audit
 ```
 
@@ -270,11 +275,12 @@ The external evidence probes use the dedicated Google/OpenAI credentials in `.en
 ```bash
 npm run verify:google-calendar
 npm run verify:gpt-sol
+npm run verify:create-live -- --title='Fictional title' --date=2026-07-21
 ```
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-The current fresh matrix passes **335 runtime functional cases plus 20 adversarial tests** and all nine deterministic demo outcomes. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+The current fresh matrix passes **357 runtime functional cases plus 20 adversarial tests** and all nine deterministic demo outcomes. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 
@@ -284,7 +290,7 @@ The strong route claim applies only inside the dedicated protected OpenClaw prof
 
 Current limitations are material:
 
-- the real action path only reschedules the narrow Google Calendar event shape described above;
+- the real action path only creates one narrow timed default event or reschedules the narrow eligible Google Calendar event shape described above; it does not cancel events or provide full Calendar management;
 - schedule reads are limited to the connected primary Calendar, one explicit range of at most 31 days, and at most 50 sanitized events; locations, descriptions, conference links, attachments, attendees, identifiers, and ETags are omitted;
 - Calendar titles are untrusted text. Bander strips control and bidirectional-control characters and the OpenClaw prompt treats titles only as quoted data, but this reduces rather than eliminates model prompt-injection risk;
 - it can send only the exact deterministic Telegram family update displayed on an approved compound Card; it cannot send arbitrary messages or email, make reservations or purchases, control transportation, perform medical actions, or control locks or smart-home devices;
@@ -297,7 +303,7 @@ Current limitations are material:
 
 Codex was the primary builder and verification partner throughout Build Week. It helped turn the product claim into executable invariants, wrote red-first regressions for authority and recovery gaps, integrated the real OpenClaw/Telegram/Google path, ran the attack and privacy suites, and maintained [BUILD_WITH_CODEX.md](BUILD_WITH_CODEX.md) as an evidence ledger of decisions and observed failures.
 
-In the real product, `gpt-5.6-sol` plays three deliberately bounded roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander makes separate strict Responses API calls for action intent and read-range intent. The read compiler may select only a start local date, exclusive end local date, and a short clarification. The action compiler may select only the bounded rescheduling hints, whether a family update was requested, and the human alias used. It cannot choose a recipient address, message body, Calendar ID, event ID, ETag, credential, final end time, effects, authority, or execution parameters. Deterministic Bander code resolves the authoritative event and exact active contact pairing, constructs both effects, and fails closed on malformed, missing, ambiguous, or broadened output.
+In the real product, `gpt-5.6-sol` plays three deliberately bounded roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander makes separate strict Responses API calls for action intent and read-range intent. The read compiler may select only a start local date, exclusive end local date, and a short clarification. The action compiler may select only the bounded action kind, title/date/time hints, an optional create duration, whether a family update was requested, and the human alias used. It cannot choose a recipient address, message body, Calendar ID, event ID, ETag, credential, timezone, final end time, effects, authority, or execution parameters. Deterministic Bander code resolves an authoritative existing event or generates one stable opaque create identity, resolves the exact active contact pairing, constructs the effects, and fails closed on malformed, missing, ambiguous, or broadened output.
 
 ## Roadmap
 

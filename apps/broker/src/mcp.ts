@@ -86,8 +86,9 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
             capabilities: realMode
               ? [
                   "Tell you what is coming up on the connected primary Calendar",
+                  "Prepare one bounded Calendar event creation for human review",
                   "Prepare one bounded owner-only Calendar reschedule for human review",
-                  "Prepare one Calendar reschedule plus one deterministic update to the connected family contact on the same human review",
+                  "Prepare one Calendar creation or reschedule plus one deterministic update to the connected family contact on the same human review",
                   "Read only the minimal status of a previously proposed action",
                 ]
               : [
@@ -185,7 +186,7 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
       title: "Propose an action through Bander",
       description:
         realMode
-          ? "Pass the person's natural Calendar request verbatim. Bander can prepare one Calendar reschedule, optionally with one deterministic update to the connected family contact, for one-time human review; OpenClaw cannot choose routing, author the update, approve, or execute it."
+          ? "Pass the person's natural Calendar request verbatim. Bander can prepare one bounded Calendar event creation or eligible reschedule, optionally with one deterministic update to the connected family contact, for one-time human review; OpenClaw cannot choose Calendar identity, routing, author the update, approve, or execute it. Reservations, invitations, recurrence, and arbitrary messages are unsupported."
           : "Pass the person's natural request verbatim. Bander either creates a human review Card or, when the request fits an existing standing Band, executes only within that pre-approved authority. Reuse the same requestId when recovering an ambiguous standing result.",
       inputSchema: {
         request: z

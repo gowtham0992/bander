@@ -33,6 +33,8 @@
     "verify:google-calendar": "tsx scripts/verify-google-calendar.ts",
     "verify:gpt-sol": "tsx scripts/verify-gpt-sol.ts",
     "verify:compound-sol": "tsx scripts/verify-compound-sol.ts",
+    "verify:create-sol": "tsx scripts/verify-create-sol.ts",
+    "verify:create-live": "tsx scripts/verify-create-live.ts",
     "verify:read-sol": "tsx scripts/verify-read-sol.ts",
     "verify:family-notification": "tsx scripts/verify-family-notification.ts",
     "verify:clean-clone": "node --import tsx scripts/verify-clean-clone.ts",

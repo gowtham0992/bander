@@ -26,6 +26,7 @@ const fixture: DraftFixture = {
   id: "telegram-fixture",
   claimedUserRequest: "Move dinner and message Sarah.",
   calendar: {
+    kind: "reschedule",
     eventId: "event-dinner-sarah",
     expectedEtag: "event-dinner-sarah-r1",
     newStartTime: "2026-07-14T19:30:00-06:00",
@@ -41,6 +42,7 @@ const standingFixture: DraftFixture = {
   id: "telegram-standing-fixture",
   claimedUserRequest: "Move my focus block to 10:30.",
   calendar: {
+    kind: "reschedule",
     eventId: "event-focus-block",
     expectedEtag: "event-focus-block-r1",
     newStartTime: "2026-07-15T10:30:00-06:00",
@@ -409,6 +411,68 @@ async function ambiguousProposal(compound: boolean) {
 }
 
 describe("Bander Telegram service", () => {
+  it("renders one create Card with the exact bounded event and exclusions", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture({
+      id: "create-lunch",
+      claimedUserRequest: "Add lunch with Ruth next Tuesday at noon.",
+      calendar: {
+        kind: "create",
+        eventId: "b0123456789abcdefghijklmnopqrstuv",
+        title: "Lunch with Ruth",
+        startTime: "2026-07-21T18:00:00.000Z",
+        endTime: "2026-07-21T19:00:00.000Z",
+        timeZone: "America/Denver",
+      },
+    });
+    await current.service.deliverProposal(card);
+    const text = current.api.messages.at(-1)?.text ?? "";
+    expect(text).toContain("📅 Add to Calendar “Lunch with Ruth”");
+    expect(text).toContain("Tue, Jul 21, 12:00–1:00 PM MDT");
+    expect(text).toContain(
+      "No one will be invited. No recurring event or reservation will be created.",
+    );
+    expect(text).not.toContain("b0123456789");
+  });
+
+  it("lost create response uses truthful no-retry copy", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture({
+      id: "create-lunch-ambiguous",
+      claimedUserRequest: "Add lunch with Ruth next Tuesday at noon.",
+      calendar: {
+        kind: "create",
+        eventId: "b0123456789abcdefghijklmnopqrstuv",
+        title: "Lunch with Ruth",
+        startTime: "2026-07-21T18:00:00.000Z",
+        endTime: "2026-07-21T19:00:00.000Z",
+        timeZone: "America/Denver",
+      },
+    });
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals.at(-1)!;
+    current.adapter.ambiguous = true;
+    await current.service.handleUpdate({
+      update_id: 700,
+      callback_query: {
+        id: "create-ambiguous",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+    expect(current.api.messages.at(-1)?.text).toBe([
+      "I couldn’t confirm whether the event was added.",
+      "I won’t try to add it again automatically.",
+      "Please check your calendar before asking again.",
+    ].join("\n"));
+  });
+
   it("protected_group_receives_one_bander_introduction", async () => {
     const current = setup("real");
     await pairOwner(current);
@@ -462,6 +526,7 @@ describe("Bander Telegram service", () => {
       id: "compound-lock",
       claimedUserRequest: "Move dinner and let my son know.",
       calendar: {
+        kind: "reschedule",
         eventId: "event-dinner-sarah",
         expectedEtag: "event-dinner-sarah-r1",
         newStartTime: "2026-07-18T22:00:00.000Z",
@@ -506,6 +571,7 @@ describe("Bander Telegram service", () => {
       id: "compound-card",
       claimedUserRequest: "Move dinner and let my son know.",
       calendar: {
+        kind: "reschedule",
         eventId: "event-dinner-sarah",
         expectedEtag: "event-dinner-sarah-r1",
         newStartTime: "2026-07-18T22:00:00.000Z",
@@ -1205,7 +1271,9 @@ describe("Bander Telegram service", () => {
       id: "telegram-cross-day-fixture",
       claimedUserRequest: "Move my focus block to July 17 at 1 PM.",
       calendar: {
-        ...standingFixture.calendar,
+        kind: "reschedule",
+        eventId: "event-focus-block",
+        expectedEtag: "event-focus-block-r1",
         newStartTime: "2026-07-17T13:00:00-06:00",
       },
     };

@@ -34,6 +34,7 @@ function fixture(): DraftFixture {
     claimedUserRequest:
       "Move Bander Demo Appointment to July 18 at 4 PM and let my son know.",
     calendar: {
+      kind: "reschedule",
       eventId: event.id,
       expectedEtag: event.etag,
       newStartTime: document.newStartTime,

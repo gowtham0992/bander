@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { randomBytes } from "node:crypto";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod/v4";
 import type { DraftFixture } from "@bander/core";
@@ -8,7 +9,10 @@ import {
   GoogleCalendarError,
   resolveLocalStart,
 } from "./google-calendar.js";
-import { createFamilyNotificationDocument } from "@bander/core";
+import {
+  createFamilyNotificationDocument,
+  sanitizeFamilyNotificationTitle,
+} from "@bander/core";
 
 const fixtureIds = [
   "move-dinner-and-notify-sarah",
@@ -90,10 +94,12 @@ export class CompilerError extends Error {
 
 const CalendarIntentSchema = z
   .object({
+    actionKind: z.enum(["reschedule_event", "create_event"]),
     eventTitleHint: z.string().trim().max(160),
     sourceLocalDateHint: z.string().trim().max(10).nullable(),
     targetLocalDate: z.string().trim().max(10),
     targetLocalStart: z.string().trim().max(5),
+    durationMinutes: z.number().int().nullable(),
     needsClarification: z.boolean(),
     clarificationReason: z.enum([
       "none",
@@ -140,6 +146,8 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
     readonly calendar: RealCalendarResolver,
     readonly selector: CalendarIntentSelector,
     readonly familyContacts?: FamilyContactResolver,
+    readonly createEventId: () => string = () => `b${randomBytes(16).toString("hex")}`,
+    readonly calendarTimeZone = "America/Denver",
   ) {}
 
   async compile(agentClaimedRequest: string): Promise<DraftFixture> {
@@ -176,6 +184,14 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
         "The model did not return one complete local Calendar time.",
       );
     }
+    if (
+      intent.durationMinutes !== null &&
+      (intent.durationMinutes < 15 || intent.durationMinutes > 12 * 60)
+    ) {
+      const humanMessage =
+        "Please choose a duration between 15 minutes and 12 hours. Nothing happened.";
+      throw new CompilerError("clarification_required", humanMessage, humanMessage);
+    }
 
     let familyBinding: FamilyTelegramNotificationEffect["binding"] | undefined;
     if (intent.familyNotificationRequested) {
@@ -197,6 +213,68 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       throw new CompilerError(
         "invalid_model_output",
         "The model returned an inconsistent family notification intent.",
+      );
+    }
+
+    if (intent.actionKind === "create_event") {
+      if (intent.sourceLocalDateHint !== null) {
+        throw new CompilerError(
+          "invalid_model_output",
+          "A Calendar creation cannot contain a source event date.",
+        );
+      }
+      const title = sanitizeFamilyNotificationTitle(intent.eventTitleHint);
+      if (!title) {
+        const humanMessage = "What should I call the Calendar event? Nothing happened.";
+        throw new CompilerError("clarification_required", humanMessage, humanMessage);
+      }
+      const startTime = resolveLocalStart({
+        localDate: intent.targetLocalDate,
+        localTime: intent.targetLocalStart,
+        timeZone: this.calendarTimeZone,
+      });
+      const durationMinutes = intent.durationMinutes ?? 60;
+      const endTime = new Date(
+        Date.parse(startTime) + durationMinutes * 60_000,
+      ).toISOString();
+      const eventId = this.createEventId();
+      if (!/^[0-9a-v]{5,1024}$/.test(eventId)) {
+        throw new CompilerError(
+          "invalid_model_output",
+          "Bander could not generate a safe Calendar event identity.",
+        );
+      }
+      const compiled: DraftFixture = {
+        id: "real-google-calendar-create",
+        claimedUserRequest: agentClaimedRequest,
+        calendar: {
+          kind: "create",
+          eventId,
+          title,
+          startTime,
+          endTime,
+          timeZone: this.calendarTimeZone,
+        },
+      };
+      if (intent.familyNotificationRequested) {
+        compiled.familyNotification = {
+          ...familyBinding!,
+          document: createFamilyNotificationDocument({
+            kind: "calendar_creation",
+            eventTitle: title,
+            startTime,
+            endTime,
+            timeZone: this.calendarTimeZone,
+          }),
+        };
+      }
+      return compiled;
+    }
+
+    if (intent.durationMinutes !== null) {
+      throw new CompilerError(
+        "invalid_model_output",
+        "A Calendar reschedule cannot change the event duration.",
       );
     }
 
@@ -245,6 +323,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       id: "real-google-calendar-reschedule",
       claimedUserRequest: agentClaimedRequest,
       calendar: {
+        kind: "reschedule",
         eventId: event.id,
         expectedEtag: event.etag,
         newStartTime,
@@ -289,18 +368,19 @@ export class OpenAISolIntentSelector implements CalendarIntentSelector {
         reasoning: { effort: "low" },
         max_output_tokens: 300,
         instructions: [
-          "Extract one narrow Calendar reschedule intent for Bander.",
-          "Return only the event-title hint, optional current/source local date hint, required destination local date, and required destination local start.",
+          "Extract one narrow Calendar action for Bander: reschedule_event or create_event.",
+          "Return only the action kind, event-title hint, optional current/source local date hint, required destination local date, required destination local start, and optional duration minutes for creation.",
           "Also say whether the person requested a notification to one already-connected family contact and, if so, return only the human alias they used.",
           "Do not choose or emit a Calendar ID, event ID, ETag, end time, duration, recipient address, Telegram ID, chat ID, username, message body, effects, execution order, execution parameters, approval, authority, callback, permit, receipt, or idempotency value.",
           `The connected Calendar's authoritative timezone is ${this.#calendarTimeZone}; resolve dates in that timezone.`,
           `Today's date in that Calendar timezone is ${currentInstallationLocalDate(new Date(), this.#calendarTimeZone)}.`,
-          "sourceLocalDateHint identifies the event's current date only when the person actually supplied it; otherwise return null.",
+          "sourceLocalDateHint identifies an existing event's current date only for reschedule_event when the person actually supplied it; for create_event always return null.",
           "targetLocalDate and targetLocalStart describe where the person wants the event moved.",
           "Resolve a month and day without a year to its next unambiguous occurrence relative to today's local date.",
+          "For create_event, durationMinutes is the explicit duration when clearly requested, otherwise null so Bander applies its disclosed 60-minute default. Never infer a duration from the title.",
           "If the event title, target date, or target start time is missing or ambiguous, set needsClarification true and leave the missing target field empty.",
-          "Set clarificationReason to none for a complete reschedule; otherwise classify only as missing_event, missing_target_date, missing_target_time, missing_destination, unsupported_action, or ambiguous.",
-          "A reschedule plus a short deterministic Bander update to one connected family alias is supported. Arbitrary or free-form message content, pronoun-only contacts, multiple contacts, cancellation, deletion, invitations, spending, and every other action are unsupported_action or ambiguous.",
+          "Set clarificationReason to none for a complete supported action; otherwise classify only as missing_event, missing_target_date, missing_target_time, missing_destination, unsupported_action, or ambiguous.",
+          "A Calendar create or reschedule plus a short deterministic Bander update to one connected family alias is supported. Adding a meal as a Calendar event is creation; booking or reserving a table is unsupported. A medication item explicitly requested as a Calendar event is creation, but never present Bander as a medical reminder service. Recurrence, invitations or attendees, conferencing, locations, descriptions, custom reminder settings, arbitrary or free-form message content, pronoun-only contacts, multiple contacts, cancellation, deletion, spending, and every other action are unsupported_action or ambiguous.",
           "You are advisory extraction only. Deterministic Bander code resolves the event and constructs the action.",
         ].join(" "),
         input: agentClaimedRequest,
@@ -343,10 +423,12 @@ function deterministicIntentClarification(
 ): string {
   const title = safeIntentLabel(intent.eventTitleHint);
   if (!intent.eventTitleHint) {
-    return "Which Calendar event would you like to move?\nNothing happened.";
+    return intent.actionKind === "create_event"
+      ? "What should I call the Calendar event?\nNothing happened."
+      : "Which Calendar event would you like to move?\nNothing happened.";
   }
   if (intent.clarificationReason === "unsupported_action") {
-    return "I can safely prepare an eligible Calendar reschedule here, but not that kind of action yet.\nNothing happened.";
+    return "I can add one timed Calendar event or move one eligible event, but I can’t make reservations, invite people, or create recurring events.\nNothing happened.";
   }
   if (intent.clarificationReason === "missing_contact") {
     return "Who should I let know? Please use their name, like Gil.\nNothing happened.";
@@ -363,13 +445,19 @@ function deterministicIntentClarification(
     return "I can include Bander’s exact appointment update, but I can’t send a custom message.\nNothing happened.";
   }
   if (!intent.targetLocalDate && !intent.targetLocalStart) {
-    return `What date and time should I move “${title}” to?\nNothing happened.`;
+    return intent.actionKind === "create_event"
+      ? `What date and time should I add “${title}”?\nNothing happened.`
+      : `What date and time should I move “${title}” to?\nNothing happened.`;
   }
   if (!intent.targetLocalDate) {
-    return `What date should I move “${title}” to?\nNothing happened.`;
+    return intent.actionKind === "create_event"
+      ? `What date should I add “${title}”?\nNothing happened.`
+      : `What date should I move “${title}” to?\nNothing happened.`;
   }
   if (!intent.targetLocalStart) {
-    return `What time should I move “${title}” to?\nNothing happened.`;
+    return intent.actionKind === "create_event"
+      ? `What time should I add “${title}”?\nNothing happened.`
+      : `What time should I move “${title}” to?\nNothing happened.`;
   }
   return `I need one clear destination date and time for “${title}”.\nNothing happened.`;
 }
@@ -399,6 +487,8 @@ export function createRealCalendarDraftCompiler(input: {
     input.calendar,
     new OpenAISolIntentSelector(input.apiKey, input.calendarTimeZone),
     input.familyContacts,
+    undefined,
+    input.calendarTimeZone,
   );
 }
 

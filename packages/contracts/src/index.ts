@@ -99,6 +99,17 @@ export interface CalendarRescheduleEffect {
   };
 }
 
+export interface CalendarCreateEffect {
+  type: "calendar.create_event";
+  calendarId: "primary";
+  eventId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  timeZone: string;
+  eventType: "default";
+}
+
 export interface MessageSendEffect {
   type: "messages.send";
   recipientId: string;
@@ -109,13 +120,21 @@ export interface MessageSendEffect {
   body: string;
 }
 
-export interface FamilyNotificationDocument {
-  kind: "calendar_transition";
-  eventTitle: string;
-  newStartTime: string;
-  newEndTime: string;
-  timeZone: string;
-}
+export type FamilyNotificationDocument =
+  | {
+      kind: "calendar_transition";
+      eventTitle: string;
+      newStartTime: string;
+      newEndTime: string;
+      timeZone: string;
+    }
+  | {
+      kind: "calendar_creation";
+      eventTitle: string;
+      startTime: string;
+      endTime: string;
+      timeZone: string;
+    };
 
 export interface FamilyTelegramNotificationEffect {
   type: "family.telegram_notification";
@@ -130,6 +149,7 @@ export interface FamilyTelegramNotificationEffect {
 
 export type DraftEffect =
   | CalendarRescheduleEffect
+  | CalendarCreateEffect
   | MessageSendEffect
   | FamilyTelegramNotificationEffect;
 
@@ -179,6 +199,11 @@ export interface ApprovalCard {
 }
 
 export type ApprovalEffectPreview =
+  | {
+      kind: "calendar.create_event";
+      eventTitle: string;
+      resultingInterval: string;
+    }
   | {
       kind: "calendar.reschedule_event";
       eventTitle: string;
@@ -297,13 +322,21 @@ export interface HumanReceipt {
   title: "Done";
   summary: string;
   detail: string;
-  calendar: {
-    title: string;
-    previous: { startTime: string; endTime: string };
-    completed: { startTime: string; endTime: string };
-    timeZone: string;
-    executionStatus?: "committed" | "observed_target";
-  };
+  calendar:
+    | {
+        title: string;
+        previous: { startTime: string; endTime: string };
+        completed: { startTime: string; endTime: string };
+        timeZone: string;
+        executionStatus?: "committed" | "observed_target";
+      }
+    | {
+        created: true;
+        title: string;
+        completed: { startTime: string; endTime: string };
+        timeZone: string;
+        executionStatus: "committed" | "observed_target";
+      };
   message?: {
     recipientDisplayName: string;
     body: string;
@@ -319,6 +352,7 @@ export interface HumanReceipt {
 export interface ObservedExecutionResult {
   calendar: {
     status: "committed" | "observed_target";
+    action?: "created";
     completed: {
       startTime: string;
       endTime: string;

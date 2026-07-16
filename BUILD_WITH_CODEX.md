@@ -2157,3 +2157,65 @@ unchanged. Both transcripts remain ignored and untracked; their current SHA-256
 values are `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
 and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`.
 `/feedback` remains deferred.
+
+## July 16, 2026 — Checkpoint 7A retry-safe Calendar event creation
+
+The first focused creation run was deliberately red: all six initial cases
+failed because the live Sol contract rejected creation and the Google adapter
+implemented only conditional rescheduling. The focused suite was expanded to
+18 creation cases covering approval, stable identity, duration, strict shape,
+Google reconciliation, family ordering, replay, sanitization and minimal MCP
+status. Four restored-green properties were then deliberately broken one at a
+time: replacing the stored event ID caused identity-collision failure; allowing
+a second insert produced two insert attempts after a lost response; moving
+family delivery before Calendar confirmation produced an unsafe message
+attempt; and disabling exact Google-response validation accepted mismatched
+content. Each mutation made its load-bearing test fail and was reverted.
+
+Creation is a distinct immutable `calendar.create_event` action. Bander stores
+`primary`, one generated lowercase base32hex-compatible Google event ID, the
+sanitized title, exact RFC3339 start and end, configured IANA timezone and
+`default` event type before approval. IDs have the form `b` plus 32 random
+lowercase hexadecimal characters, are independently generated per proposal,
+remain private, and are reused for every recovery attempt. The Card discloses a
+60-minute default unless the request explicitly supplies a duration from 15
+minutes through 12 hours. Attendees, recurrence, location, description,
+conferencing, attachments, custom reminders and reservations are excluded.
+
+The adapter persists dispatch before `events.insert` and never issues another
+insert automatically. A lost response or duplicate-ID result is reconciled
+read-only with `events.get` for the exact stored ID. Exact content becomes an
+observation-safe result; different content fails closed; a missing event remains
+unconfirmed. Family delivery can begin only after a successful or exact observed
+Calendar result, and its deterministic creation document is shared byte-for-byte
+between Card and delivery.
+
+Live `gpt-5.6-sol` creation evidence passed 8/8 cases with zero false accepts:
+relative-date default duration, explicit 90-minute duration, an optional family
+update and a Calendar dinner entry were accepted; reservation, invitation,
+recurrence and free-form family-message requests failed closed. In the genuine
+Telegram/OpenClaw/Google path, three materially different parent phrasings
+produced correct Cards. Two were declined before effects. The approved fictional
+event `Bander Checkpoint Lunch with Ruth` appears exactly once on Tue, Jul 21,
+12:00–1:00 PM MDT. With the family contact revoked, there was no family delivery.
+An unsupported restaurant-booking request produced a specific conversational
+refusal, no Card and no authority.
+
+The explicit real lost-response probe inserted `Bander 7A Lost Response Probe`
+for Wed, Jul 22, 4:00–5:00 PM MDT, discarded the successful response, reconciled
+the exact event by its private client ID, and returned `observed_target` on both
+the original call and replay. It recorded one insert attempt and zero family
+attempts; a separate read confirmed exactly one matching timed event. Both
+fictional evidence events were intentionally left on the dedicated Calendar for
+the owner to remove manually; no account identifier or event ID was recorded.
+
+Final restored-green matrix: typecheck and production build; 30 functional
+files with 357 tests; 20 adversarial tests; all nine unchanged deterministic
+sandbox outcomes; one-time and standing recovery verifiers; real OpenClaw
+verification with exactly four tools; live compound Sol 18/18, read Sol 7/7 and
+create Sol 8/8 with zero create false accepts; dependency audit with zero
+vulnerabilities; read-only doctor; and tracked secret scan with zero matches.
+Transcript SHA-256 values remain
+`7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
+and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
+both files remain ignored and untracked. `/feedback` remains deferred.

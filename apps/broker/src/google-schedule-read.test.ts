@@ -17,6 +17,9 @@ class ReadBoundary implements GoogleCalendarBoundary {
   async patchEvent(): Promise<GoogleEventResource> {
     throw new Error("not used");
   }
+  async insertEvent(): Promise<GoogleEventResource> {
+    throw new Error("not used");
+  }
   async getPrimaryTimeZone(): Promise<string> {
     return "America/Denver";
   }

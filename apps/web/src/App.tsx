@@ -436,6 +436,14 @@ export function EffectAllowance({ preview }: { preview: ApprovalEffectPreview })
       </span>
     );
   }
+  if (preview.kind === "calendar.create_event") {
+    return (
+      <span className="effect-copy">
+        Add Calendar event <QuotedData source="Calendar">{preview.eventTitle}</QuotedData>{" "}
+        for {preview.resultingInterval}
+      </span>
+    );
+  }
   return (
     <span className="effect-copy message-effect">
       <span>
@@ -544,17 +552,19 @@ function Receipt({
   onTryOutside?: () => void;
   onRevoke?: () => void;
 }) {
+  const created = "created" in receipt.calendar;
   return (
     <main className="result-shell" aria-live="polite">
       <div className="result-mark" aria-hidden="true">✓</div>
       <span className="deal-kicker">Completed as agreed</span>
       <h1>{receipt.title}</h1>
       <p className="result-summary">
-        <span>Rescheduled Calendar event </span>
+        <span>{created ? "Added Calendar event " : "Rescheduled Calendar event "}</span>
         <QuotedData source="Calendar">{receipt.calendar.title}</QuotedData>
         <span>
-          {" "}from {formatReceiptInterval(receipt.calendar.previous, receipt.calendar.timeZone)}
-          {" "}to {formatReceiptInterval(receipt.calendar.completed, receipt.calendar.timeZone)}.
+          {"created" in receipt.calendar
+            ? ` for ${formatReceiptInterval(receipt.calendar.completed, receipt.calendar.timeZone)}.`
+            : ` from ${formatReceiptInterval(receipt.calendar.previous, receipt.calendar.timeZone)} to ${formatReceiptInterval(receipt.calendar.completed, receipt.calendar.timeZone)}.`}
         </span>
       </p>
       <p className="result-detail">

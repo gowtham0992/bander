@@ -68,6 +68,10 @@ class FakeBoundary implements GoogleCalendarBoundary {
     };
   }
 
+  async insertEvent(): Promise<GoogleEventResource> {
+    throw new Error("unused");
+  }
+
 }
 
 function calendarOnlyDraft(): DraftDocument {
