@@ -42,6 +42,8 @@ interface McpRoutesOptions {
 
 const MCP_RATE_LIMIT_MAX_REQUESTS = 30;
 const MCP_RATE_LIMIT_WINDOW_MS = 60_000;
+const MODEL_UNAVAILABLE_MESSAGE =
+  "I couldn’t prepare that safely just now. Nothing happened. Please try again in a moment.";
 
 interface McpRateWindow {
   count: number;
@@ -231,8 +233,12 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
         };
       } catch (error) {
         if (error instanceof CompilerError) {
-          if (error.humanMessage) {
-            await options.deliverAgentClarification?.(error.humanMessage);
+          const humanMessage =
+            error.code === "model_unavailable"
+              ? MODEL_UNAVAILABLE_MESSAGE
+              : error.humanMessage;
+          if (humanMessage) {
+            await options.deliverAgentClarification?.(humanMessage);
           }
           return {
             content: [
@@ -240,7 +246,9 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
                 type: "text",
                 text: JSON.stringify({
                   status:
-                    error.code === "clarification_required"
+                    error.code === "model_unavailable"
+                      ? "temporarily_unavailable"
+                      : error.code === "clarification_required"
                       ? "clarification_required"
                       : "unsupported",
                 }),

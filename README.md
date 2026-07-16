@@ -20,7 +20,7 @@ The claim is intentionally narrow: Bander does not decide whether an agent's goa
 
 1. A parent writes in Telegram: “Move Bander Demo Appointment to July 18 at 4 PM and let my son know.”
 2. Conversational OpenClaw uses Bander's bounded proposal tool. Nothing has happened yet.
-3. Bander—not OpenClaw—finds one eligible event and the exact paired family contact, then posts one Card with the complete Calendar transition and deterministic family update.
+3. Bander—not OpenClaw—finds one eligible event and the exact paired family contact, then posts one Card with the complete Calendar change and deterministic family update.
 4. The bound owner chooses **Do exactly this** or **Not now** on Bander's message.
 5. On approval, Bander conditionally updates the same event with its approved Google ETag and only then sends the exact displayed update through its own Telegram bot. If the event changed first, Bander stops and sends neither effect.
 
@@ -274,7 +274,7 @@ npm run verify:gpt-sol
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-The current fresh matrix passes **327 runtime functional cases plus 20 adversarial tests** and all nine deterministic demo outcomes. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+The current fresh matrix passes **335 runtime functional cases plus 20 adversarial tests** and all nine deterministic demo outcomes. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 

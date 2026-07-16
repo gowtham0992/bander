@@ -456,7 +456,7 @@ function cardText(
   const effects = card.effectPreviews.flatMap((effect) => {
     if (effect.kind === "calendar.reschedule_event") {
       return [
-        `${mode === "real" ? "📅 Calendar transition" : "• Move"} “${safeDisplayText(effect.eventTitle)}”`,
+        `${mode === "real" ? "📅 Calendar change" : "• Move"} “${safeDisplayText(effect.eventTitle)}”`,
         `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
       ];
     }

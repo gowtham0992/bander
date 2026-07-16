@@ -524,7 +524,7 @@ describe("Bander Telegram service", () => {
     const card = await current.engine.proposeFixture(compoundFixture);
     await current.service.deliverProposal(card);
     const approval = current.api.messages.at(-1)?.text ?? "";
-    expect(approval).toContain("📅 Calendar transition");
+    expect(approval).toContain("📅 Calendar change");
     expect(approval).toContain("👤 Family update Gil:");
     expect(approval).toContain(renderFamilyNotification(compoundFixture.familyNotification!.document));
   });

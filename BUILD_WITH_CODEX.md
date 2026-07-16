@@ -1905,6 +1905,81 @@ values `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
 and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`.
 The unmoderated parent/proxy test and `/feedback` remain explicitly deferred.
 
+## July 16, 2026 — Checkpoint 6C product coherence and failure-state polish
+
+The checkpoint began with focused red evidence rather than a broad refactor. The
+first targeted run reported seven failures: three stale source-of-truth/public
+claim assertions, the parent-visible internal lifecycle noun, the missing
+uncertainty preface, the real Telegram label `Calendar transition`, and the
+silent live action-model outage. The accessibility assertion was deliberately
+not made red: the actual browser accessibility tree already exposed meaningful
+native button names.
+
+The real computed names were:
+
+```text
+ASK What’s on tomorrow? No approval toll for a harmless read.
+CHANGE Move an appointment and let family know One exact Card. One decision.
+UNCERTAIN See an unknowable result Bander says only what it can prove.
+```
+
+No redundant ARIA was added. A true 375×812 browser viewport measured 375px
+content and scroll widths, native `BUTTON` elements in ASK → CHANGE → UNCERTAIN
+tab order, zero nested interactive elements, 343px-wide by 150–153px-high tap
+targets, and a visible `3px solid rgb(231, 122, 110)` focus outline. Native
+Enter and Space each activated their focused lane in an isolated Chrome CDP
+run.
+
+The browser now avoids parent-visible Draft, Band, Permit and Receipt language;
+the requested Change-it instruction reads: “In Telegram, tell your assistant
+what you want changed and Bander will prepare a new deal.” The real Telegram
+Card says `📅 Calendar change`. Only the UNCERTAIN lane adds a sandbox preface,
+outside the trusted Card, explaining that the provider response will be
+deliberately lost after approval. The stored Card itself remains unchanged.
+
+Manual ASK, CHANGE, UNCERTAIN and replay QA found one additional bounded UI bug:
+Change-it discarded the original compound scenario, so approval displayed a
+Calendar-only result even though the seeded family update executed. A focused
+test was observed failing before the screen state retained its scenario. The
+restored path now shows the compound result and exactly one simulated family
+update after replay.
+
+The live action compiler's `model_unavailable` classification previously
+returned `unsupported` to OpenClaw without a Bander human message. Under the
+pinned `NO_REPLY` policy this produced silence. The MCP boundary now returns only
+`temporarily_unavailable`, Bander independently delivers exactly one message—
+“I couldn’t prepare that safely just now. Nothing happened. Please try again in
+a moment.”—and the OpenClaw policy remains silent after that Bander-owned
+explanation. Focused evidence proves no Card, authority proposal or execution is
+created and no provider detail enters the MCP result. There is no fixture or
+mock fallback.
+
+`Bander_Build_Plan.md` now describes the implemented four-tool real inventory,
+bounded read lane, exact Calendar lane, compound family lane, consented and
+revocable contact, Calendar-first execution, replay and ambiguous outcomes,
+sandbox-only standing automation, and process-local production authority. The
+public claim sweep retains the narrower statements: no prompt-injection
+detection, compromised-host protection, human-read confirmation, or
+exactly-once Telegram delivery.
+
+Visual QA passed at 1280×720, a true 375×812 responsive viewport, and 500×900
+for the uncertainty Card. The 375px page had no horizontal overflow, and the
+preface remained readable without entering or changing the Card.
+
+Final restored-green matrix: 29 functional files with 335 cases; 20 adversarial
+tests; all nine deterministic demo outcomes; one-time recovery with one
+mutation, Band, Permit and Receipt; standing recovery with one Draft, Permit,
+mutation, Receipt and counter entry; real OpenClaw verification with exactly
+four real tools; live compound Sol 15/15; live read Sol 7/7; typecheck and
+production build; dependency audit with zero vulnerabilities; offline read-only
+doctor; tracked/proposed-file secret scan with zero matches; and a credential-
+stripped cold sandbox reporting `runtimeMode: sandbox`, fixture compiler, and no
+model compiler. No real Google mutation or family notification was performed.
+Both transcript files remain ignored and untracked with unchanged SHA-256
+values `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
+and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`.
+The parent test, filming, submission work and `/feedback` remain deferred.
+
 ## July 16, 2026 — one approved Calendar move plus one family update
 
 Checkpoint 5 adds the real compound deal without adding an MCP tool. The real

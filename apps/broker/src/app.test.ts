@@ -685,6 +685,56 @@ describe("broker approval boundary", () => {
     }
   });
 
+  it("makes a live action-model outage visible once without creating authority", async () => {
+    const setup = createApp();
+    const proposeFixture = vi.spyOn(setup.engine, "proposeFixture");
+    const delivered: string[] = [];
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: setup.fixtures,
+      runtimeMode: "real",
+      agentCompiler: {
+        compile: async () => {
+          throw new CompilerError("model_unavailable", "private provider detail");
+        },
+      },
+      readSchedule: async () => ({
+        requestedRange: { startLocalDate: "2026-07-18", endLocalDateExclusive: "2026-07-19" },
+        timeZone: "America/Denver",
+        events: [],
+        empty: true,
+        truncated: false,
+        maxEvents: 50,
+      }),
+      deliverAgentClarification: async (message) => {
+        delivered.push(message);
+      },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-model-outage-test", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: { request: "Move my appointment tomorrow at 2 PM" },
+      });
+      const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "";
+
+      expect(JSON.parse(text)).toEqual({ status: "temporarily_unavailable" });
+      expect(text).not.toMatch(/provider|model|API|error/i);
+      expect(delivered).toEqual([
+        "I couldn’t prepare that safely just now. Nothing happened. Please try again in a moment.",
+      ]);
+      expect(proposeFixture).not.toHaveBeenCalled();
+      expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("passes a client request ID into standing execution and returns only minimal status", async () => {
     const setup = createApp();
     let receivedRequestId: string | undefined;

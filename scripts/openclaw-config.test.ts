@@ -120,7 +120,7 @@ describe("OpenClaw reference tool manifest", () => {
     expect(prompt).toContain("do not split it");
     expect(prompt).toContain("newest genuine message");
     expect(prompt).toContain(
-      "After bander__propose_action returns proposed, clarification_required, unsupported, conflict, executed, or declined, respond with exactly NO_REPLY and nothing else",
+      "After bander__propose_action returns proposed, clarification_required, temporarily_unavailable, unsupported, conflict, executed, or declined, respond with exactly NO_REPLY and nothing else",
     );
     expect(prompt).toContain(
       "I can tell you what’s coming up on your connected calendar",

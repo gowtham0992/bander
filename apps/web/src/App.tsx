@@ -32,7 +32,7 @@ type Screen =
   | { kind: "standing-revoked" }
   | { kind: "standing-recovery"; input: StandingRunInput; message: string }
   | { kind: "declined" }
-  | { kind: "change"; card: ApprovalCard }
+  | { kind: "change"; card: ApprovalCard; scenario: "exact" | "conflict" | "compound" | "ambiguous" }
   | { kind: "approval-recovery"; card: ApprovalCard; message: string }
   | { kind: "error"; message: string };
 
@@ -114,6 +114,7 @@ function Brand() {
 }
 
 const sandboxNotice = "Deterministic sandbox — uses seeded data and does not connect to Google, Telegram, or OpenAI. It exercises the same Bander Card, approval, outcome, and replay rules as the real product.";
+const uncertaintySandboxPreface = "The Calendar provider’s response will be deliberately lost after approval, so Bander must report only what it can prove.";
 
 function SandboxNotice() {
   return <p className="sandbox-notice">{sandboxNotice}</p>;
@@ -571,19 +572,15 @@ function Receipt({
           "No messages were sent."
         )}
       </p>
-      <div className="receipt-stamp">
-        <span>Receipt</span>
-        <code>{receipt.id.replace("receipt_", "").slice(0, 12)}</code>
-      </div>
       <div className="result-actions">
         {onTryOutside && (
           <button className="primary" onClick={onTryOutside}>
-            Try a request outside this Band
+            Try a request outside these limits
           </button>
         )}
         <button className="secondary" onClick={onReset}>Back to Bander</button>
         {onRevoke && (
-          <button className="quiet" onClick={onRevoke}>Turn off this Band</button>
+          <button className="quiet" onClick={onRevoke}>Turn off automatic handling</button>
         )}
       </div>
     </main>
@@ -604,7 +601,7 @@ function StandingCardView({
   return (
     <main className="deal-shell">
       <div className="deal-heading">
-        <span className="deal-kicker">Standing Band</span>
+        <span className="deal-kicker">Automatic routine · sandbox</span>
         <h1>{card.title}</h1>
       </div>
       <article className="deal-card standing-card">
@@ -614,7 +611,7 @@ function StandingCardView({
           </p>
         </section>
         <section className="allowance">
-          <h2>This Band allows:</h2>
+          <h2>This routine allows:</h2>
           <ul>
             {card.clauses.map((clause) => (
               <li key={clause}>
@@ -629,7 +626,7 @@ function StandingCardView({
         </div>
         <div className="actions standing-actions">
           <button className="primary" onClick={onApprove} disabled={busy}>
-            {busy ? "Turning it on…" : "Turn on this Band"}
+            {busy ? "Turning it on…" : "Turn on automatic handling"}
           </button>
           <button className="quiet" onClick={onDecline} disabled={busy}>Not now</button>
         </div>
@@ -749,7 +746,7 @@ export function App() {
   }
 
   async function tryOutsideStanding(bandId: string) {
-    setScreen({ kind: "loading", message: "Checking this request against your Band…" });
+    setScreen({ kind: "loading", message: "Checking this request against your approved limits…" });
     try {
       await completeStandingRun({
         bandId,
@@ -783,7 +780,7 @@ export function App() {
         kind: "standing-recovery",
         input,
         message:
-          "Bander couldn’t confirm the result yet. Check this same request again to recover its Receipt or review Card without repeating the action.",
+          "Bander couldn’t confirm the result yet. Check this same request again to recover the outcome or review Card without repeating the action.",
       });
       return;
     }
@@ -920,13 +917,21 @@ export function App() {
         </main>
       )}
       {screen.kind === "card" && (
-        <DealCard
-          card={screen.card}
-          onApprove={() => approve(screen.card, screen.scenario)}
-          onDecline={() => decline(screen.card)}
-          onChange={() => setScreen({ kind: "change", card: screen.card })}
-          busy={busy}
-        />
+        <>
+          {screen.scenario === "ambiguous" && (
+            <aside className="uncertainty-preface">
+              <strong>Sandbox scenario</strong>
+              <span>{uncertaintySandboxPreface}</span>
+            </aside>
+          )}
+          <DealCard
+            card={screen.card}
+            onApprove={() => approve(screen.card, screen.scenario)}
+            onDecline={() => decline(screen.card)}
+            onChange={() => setScreen({ kind: "change", card: screen.card, scenario: screen.scenario })}
+            busy={busy}
+          />
+        </>
       )}
       {screen.kind === "receipt" && (
         <Receipt receipt={screen.receipt} onReset={() => setScreen({ kind: "welcome" })} />
@@ -952,7 +957,7 @@ export function App() {
       )}
       {screen.kind === "standing-revoked" && (
         <main className="result-shell" aria-live="polite">
-          <span className="deal-kicker">Standing Band off</span>
+          <span className="deal-kicker">Automatic handling off</span>
           <h1>You’re back in control.</h1>
           <p className="result-summary">
             Future requests will come back to you as a one-time deal before Bander acts.
@@ -975,9 +980,9 @@ export function App() {
           <span className="deal-kicker">Nothing changed</span>
           <h1>Ask for a different deal.</h1>
           <p className="result-summary">
-            Bander won’t edit the approved effects in place. Your agent can prepare a new Draft for you.
+            In Telegram, tell your assistant what you want changed and Bander will prepare a new deal.
           </p>
-          <button className="secondary" onClick={() => setScreen({ kind: "card", card: screen.card, scenario: "exact" })}>
+          <button className="secondary" onClick={() => setScreen({ kind: "card", card: screen.card, scenario: screen.scenario })}>
             Review this deal again
           </button>
         </main>

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 describe("final sandbox microcopy", () => {
   const source = fs.readFileSync("apps/web/src/App.tsx", "utf8");
+  const styles = fs.readFileSync("apps/web/src/styles.css", "utf8");
 
   it("uses parent-readable quarantine labels", () => {
     expect(source).toContain('source="Calendar"');
@@ -16,5 +17,36 @@ describe("final sandbox microcopy", () => {
   it("explains the complete configured proposal window", () => {
     expect(source).toContain("requests in {card.proposalActivity.windowMinutes} minutes");
     expect(source).not.toContain("Request {card.proposalActivity.count} of");
+  });
+
+  it("renders no internal authority nouns on current parent-facing screens", () => {
+    expect(source).not.toMatch(/>[^<{]*\b(?:Draft|Band|Permit|Receipt|ETag|hash|idempotency|scope|operation)\b[^<{]*</i);
+    expect(source).not.toContain("Your agent can prepare a new Draft for you.");
+  });
+
+  it("frames only the uncertain sandbox journey outside the trusted Card", () => {
+    expect(source).toContain(
+      "The Calendar provider’s response will be deliberately lost after approval, so Bander must report only what it can prove.",
+    );
+    expect(source).toContain('screen.scenario === "ambiguous"');
+    expect(source).toContain('<DealCard\n            card={screen.card}');
+  });
+
+  it("keeps meaningful native lane-button names and keyboard focus", () => {
+    expect(source).toContain('<button className="lane-card read-lane"');
+    expect(source).toContain("What’s on tomorrow?");
+    expect(source).toContain('<button className="lane-card compound-lane"');
+    expect(source).toContain("Move an appointment and let family know");
+    expect(source).toContain('<button className="lane-card uncertain-lane"');
+    expect(source).toContain("See an unknowable result");
+    expect(source).not.toMatch(/<button className="lane-card[^>]*aria-label=/);
+    expect(styles).toContain("button:focus-visible");
+    expect(styles).toContain(".lane-card { width: 100%;");
+  });
+
+  it("keeps a compound deal in the compound lane after Change it", () => {
+    expect(source).toContain('{ kind: "change"; card: ApprovalCard; scenario: "exact" | "conflict" | "compound" | "ambiguous" }');
+    expect(source).toContain('setScreen({ kind: "change", card: screen.card, scenario: screen.scenario })');
+    expect(source).toContain('scenario: screen.scenario');
   });
 });
