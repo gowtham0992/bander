@@ -24,6 +24,7 @@
     "verify:demo": "tsx scripts/verify-demo.ts",
     "verify:recovery": "tsx scripts/verify-http-recovery.ts",
     "verify:standing-recovery": "tsx scripts/verify-standing-recovery.ts",
+    "verify:google-calendar": "tsx scripts/verify-google-calendar.ts",
     "verify:openclaw": "npm run build && tsx scripts/verify-openclaw.ts",
     "verify:telegram-privacy": "tsx scripts/verify-telegram-service.ts",
     "verify:telegram-conflict": "BANDER_TELEGRAM_VERIFY_SCENARIO=conflict tsx scripts/verify-telegram-service.ts",

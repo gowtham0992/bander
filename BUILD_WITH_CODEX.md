@@ -838,3 +838,91 @@ changed-world refusal, replay and imitation resistance
 standing activation, exact execution, revoke and return to one-time review
   .bander/telegram-service-verification-standing-1784133550071-69af215d/
 ```
+
+## Checkpoint 22 — real Google Calendar risk spike
+
+**Status:** verified against the real Google Calendar API on July 15, 2026
+
+This checkpoint is deliberately standalone. It has not changed the broker
+runtime, Hero entrypoint, Telegram choreography, authority engine, fixture
+compiler, mock services or OpenClaw configuration.
+
+The first focused Calendar run was observed red against an explicit
+not-implemented boundary:
+
+```text
+$ npx vitest run apps/broker/src/google-calendar.test.ts
+Test Files  1 failed (1)
+Tests       9 failed (9)
+```
+
+The failures covered ambiguous matching; all-day, recurring, non-owner and
+attended events; exact start/end-only `If-Match` writes; HTTP 412 handling;
+non-412 failure handling; and rejection of Messages/additional effects.
+
+The OAuth boundary was separately observed red before implementation:
+
+```text
+$ npx vitest run apps/broker/src/google-oauth.test.ts
+Test Files  1 failed (1)
+Tests       3 failed | 1 passed (4)
+```
+
+The local restored-green run now passes 14 focused tests and full typechecking.
+Desktop OAuth is pinned to PKCE S256, a loopback redirect, exact state
+validation, offline credentials, and only
+`https://www.googleapis.com/auth/calendar.events.owned`. Credential and token
+files are private local inputs and are never logged or committed.
+
+The first live OAuth run failed before mutation because
+`calendar.events.owned` does not authorize `calendars.get`. The adapter was
+corrected without broadening scope: the deliberately narrow real path now
+requires the eligible event resource itself to carry its authoritative IANA
+timezone. The same run also showed that an uncaught SDK error was too verbose;
+the verifier now emits only allowlisted failure codes and non-sensitive stage
+names.
+
+The first conditional write then exposed a timestamp-representation bug:
+Google may return the same instant with a numeric offset when the request used
+UTC `Z`. Raw-string comparison conservatively refused to claim restoration.
+The event was manually restored, all interval checks were changed to compare
+instants plus the authoritative timezone, and a focused regression now pins
+equivalent timestamp spellings.
+
+The final live run produced only this sanitized evidence:
+
+```text
+mode: real-google-calendar-risk-spike
+calendar: primary
+scope pinned: true
+eligible timed solo event: true
+canonical id/title/start/end/timezone/organizer/attendees/etag read: true
+start/end-only conditional update: true
+stale ETag status: 412
+stale attempt zero mutation: true
+concurrent identical writes with one ETag: 1 commit, 1 HTTP 412
+original interval restored: true
+private values printed: false
+```
+
+The empirical concurrency result establishes the timeout rule for the product
+slice: never mint new authority or accept new agent parameters; inspect the
+stored event after an ambiguous response. If the authoritative interval is the
+approved target, human wording may say only that the Calendar is observed at
+that interval, not that Bander certainly caused it. If it is the original
+interval, a retry with the same ETag cannot create two successful commits; if
+it is anything else, fail closed as changed world.
+
+The verifier prints no account, Calendar, event, title, interval, ETag, OAuth
+URL or token value. Local credential and token files remain under ignored
+`.bander/`. The Hero runtime, mock services, fixtures, OpenClaw configuration,
+Telegram service and authority lifecycle remain unchanged.
+`transcription_day2.md` remains untouched.
+
+The restored deterministic matrix passed after the live spike: typecheck, 123
+functional tests, 20 attack tests, the six-outcome demo verifier, both
+real-process recovery verifiers, the real OpenClaw verifier with exactly three
+Bander tools, production build, and a moderate dependency audit with zero
+vulnerabilities. A high-confidence scan of all 91 tracked and checkpoint files
+found zero OpenAI keys, Telegram bot tokens, Google client secrets or Google
+refresh tokens.

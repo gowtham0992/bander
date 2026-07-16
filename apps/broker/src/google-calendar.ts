@@ -1,0 +1,399 @@
+import type {
+  CalendarEvent,
+  CalendarRescheduleEffect,
+  DraftDocument,
+  Person,
+} from "@bander/contracts";
+import { ExecutionConflictError, type ExecutionAdapter } from "@bander/core";
+import { google } from "googleapis";
+
+type GoogleOAuth2Client = InstanceType<typeof google.auth.OAuth2>;
+
+export interface GoogleEventResource {
+  id?: string | null;
+  etag?: string | null;
+  summary?: string | null;
+  status?: string | null;
+  recurringEventId?: string | null;
+  recurrence?: string[] | null;
+  sequence?: number | null;
+  organizer?: { self?: boolean | null; email?: string | null } | null;
+  attendees?: Array<{ self?: boolean | null; email?: string | null }> | null;
+  start?: { date?: string | null; dateTime?: string | null; timeZone?: string | null } | null;
+  end?: { date?: string | null; dateTime?: string | null; timeZone?: string | null } | null;
+}
+
+export interface GoogleCalendarBoundary {
+  listEvents(input: {
+    calendarId: "primary";
+    timeMin: string;
+    timeMax: string;
+  }): Promise<GoogleEventResource[]>;
+  getEvent(input: {
+    calendarId: "primary";
+    eventId: string;
+  }): Promise<GoogleEventResource>;
+  patchEvent(input: {
+    calendarId: "primary";
+    eventId: string;
+    sendUpdates: "none";
+    requestBody: {
+      start: { dateTime: string; timeZone: string };
+      end: { dateTime: string; timeZone: string };
+    };
+    ifMatch: string;
+  }): Promise<GoogleEventResource>;
+}
+
+export class GoogleCalendarError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+function normalize(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+}
+
+function localDateOf(instant: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).formatToParts(new Date(instant));
+  const part = (name: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === name)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function localMinuteParts(instant: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).formatToParts(new Date(instant));
+  const part = (name: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === name)?.value ?? "";
+  return {
+    date: `${part("year")}-${part("month")}-${part("day")}`,
+    time: `${part("hour")}:${part("minute")}`,
+  };
+}
+
+export function resolveLocalStart(input: {
+  localDate: string;
+  localTime: string;
+  timeZone: string;
+}): string {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.localDate) ||
+    !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(input.localTime)
+  ) {
+    throw new GoogleCalendarError(
+      "invalid_local_start",
+      "Bander requires one complete, minute-precise local start",
+    );
+  }
+  const center = Date.parse(`${input.localDate}T${input.localTime}:00.000Z`);
+  const matches: string[] = [];
+  for (
+    let candidate = center - 18 * 60 * 60_000;
+    candidate <= center + 18 * 60 * 60_000;
+    candidate += 60_000
+  ) {
+    const instant = new Date(candidate).toISOString();
+    const local = localMinuteParts(instant, input.timeZone);
+    if (local.date === input.localDate && local.time === input.localTime) {
+      matches.push(instant);
+    }
+  }
+  if (matches.length !== 1) {
+    throw new GoogleCalendarError(
+      "ambiguous_local_start",
+      "The requested local start is missing or ambiguous in this timezone",
+    );
+  }
+  return matches[0]!;
+}
+
+function discoveryWindow(localDate: string): { timeMin: string; timeMax: string } {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate)) {
+    throw new GoogleCalendarError(
+      "invalid_date_hint",
+      "Bander requires one complete local Calendar date",
+    );
+  }
+  const midnightUtc = Date.parse(`${localDate}T00:00:00.000Z`);
+  if (!Number.isFinite(midnightUtc)) {
+    throw new GoogleCalendarError(
+      "invalid_date_hint",
+      "Bander requires one complete local Calendar date",
+    );
+  }
+  // Every IANA offset falls inside this deliberately broad UTC window. The
+  // authoritative local-date comparison below performs the actual selection.
+  return {
+    timeMin: new Date(midnightUtc - 18 * 60 * 60_000).toISOString(),
+    timeMax: new Date(midnightUtc + 42 * 60 * 60_000).toISOString(),
+  };
+}
+
+function isUnsupported(resource: GoogleEventResource): boolean {
+  return (
+    resource.status === "cancelled" ||
+    !resource.id ||
+    !resource.etag ||
+    !resource.summary ||
+    !resource.start?.dateTime ||
+    !resource.end?.dateTime ||
+    Boolean(resource.start.date || resource.end.date) ||
+    Boolean(resource.recurringEventId) ||
+    Boolean(resource.recurrence?.length) ||
+    resource.organizer?.self !== true ||
+    Boolean(resource.attendees?.length)
+  );
+}
+
+function toCalendarEvent(resource: GoogleEventResource): CalendarEvent {
+  if (isUnsupported(resource)) {
+    throw new GoogleCalendarError(
+      "unsupported_event_shape",
+      "Bander only supports one timed, non-recurring, owner-organized event with no attendees",
+    );
+  }
+  const timeZone =
+    resource.start!.timeZone ??
+    resource.end!.timeZone;
+  if (!timeZone) {
+    throw new GoogleCalendarError(
+      "unsupported_event_shape",
+      "The Calendar event has no authoritative timezone",
+    );
+  }
+  const startTime = resource.start!.dateTime!;
+  const endTime = resource.end!.dateTime!;
+  if (
+    !Number.isFinite(Date.parse(startTime)) ||
+    !Number.isFinite(Date.parse(endTime)) ||
+    Date.parse(endTime) <= Date.parse(startTime)
+  ) {
+    throw new GoogleCalendarError(
+      "unsupported_event_shape",
+      "The Calendar event has an invalid interval",
+    );
+  }
+  return {
+    id: resource.id!,
+    title: resource.summary!,
+    startTime,
+    endTime,
+    timeZone,
+    organizerId: "google-primary-owner",
+    attendeeIds: [],
+    revision: resource.sequence ?? 0,
+    etag: resource.etag!,
+  };
+}
+
+function responseStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return undefined;
+  const status = Reflect.get(response, "status");
+  return typeof status === "number" ? status : undefined;
+}
+
+function sameInstant(left: string | null | undefined, right: string): boolean {
+  if (!left) return false;
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs === rightMs;
+}
+
+export class GoogleCalendarAdapter implements ExecutionAdapter {
+  readonly #executions = new Map<string, string>();
+
+  constructor(readonly boundary: GoogleCalendarBoundary) {}
+
+  async discoverEvent(input: {
+    titleHint: string;
+    localDate: string;
+  }): Promise<CalendarEvent> {
+    const window = discoveryWindow(input.localDate);
+    let resources: GoogleEventResource[];
+    try {
+      resources = await this.boundary.listEvents({
+        calendarId: "primary",
+        ...window,
+      });
+    } catch {
+      throw new GoogleCalendarError(
+        "google_calendar_unavailable",
+        "Google Calendar is temporarily unavailable",
+      );
+    }
+    const titleMatches = resources.filter(
+      (resource) =>
+        typeof resource.summary === "string" &&
+        normalize(resource.summary) === normalize(input.titleHint),
+    );
+    const dateMatches = titleMatches.filter((resource) => {
+      const start = resource.start?.dateTime ?? resource.start?.date;
+      if (!start) return false;
+      if (resource.start?.date) return start === input.localDate;
+      const resourceTimeZone =
+        resource.start?.timeZone ?? resource.end?.timeZone;
+      if (!resourceTimeZone) return false;
+      return localDateOf(start, resourceTimeZone) === input.localDate;
+    });
+    if (dateMatches.length !== 1) {
+      throw new GoogleCalendarError(
+        "ambiguous_event_match",
+        "Bander could not identify exactly one eligible Calendar event",
+      );
+    }
+    return toCalendarEvent(dateMatches[0]!);
+  }
+
+  async resolveEvent(id: string): Promise<CalendarEvent> {
+    try {
+      const resource = await this.boundary.getEvent({
+        calendarId: "primary",
+        eventId: id,
+      });
+      return toCalendarEvent(resource);
+    } catch (error) {
+      if (error instanceof GoogleCalendarError) throw error;
+      throw new GoogleCalendarError(
+        "google_calendar_unavailable",
+        "Google Calendar is temporarily unavailable",
+      );
+    }
+  }
+
+  async resolvePerson(_id: string): Promise<Person> {
+    throw new Error("Google Calendar does not provide a Messages identity");
+  }
+
+  async executeDraft(input: {
+    draftHash: string;
+    permitNonce: string;
+    document: DraftDocument;
+  }): Promise<void> {
+    const calendar = input.document.effects.find(
+      (effect): effect is CalendarRescheduleEffect =>
+        effect.type === "calendar.reschedule_event",
+    );
+    if (
+      input.document.effects.length !== 1 ||
+      !calendar ||
+      calendar.expected.organizerId !== "google-primary-owner" ||
+      calendar.expected.attendeeIds.length !== 0 ||
+      !calendar.expected.etag ||
+      !calendar.expected.timeZone
+    ) {
+      throw new GoogleCalendarError(
+        "unsupported_real_execution_shape",
+        "Real mode accepts exactly one eligible Calendar reschedule",
+      );
+    }
+    if (
+      Date.parse(calendar.changes.endTime) - Date.parse(calendar.changes.startTime) !==
+        Date.parse(calendar.expected.endTime) - Date.parse(calendar.expected.startTime) ||
+      Date.parse(calendar.changes.endTime) <= Date.parse(calendar.changes.startTime)
+    ) {
+      throw new GoogleCalendarError(
+        "unsupported_real_execution_shape",
+        "The approved Calendar duration must remain unchanged",
+      );
+    }
+    try {
+      const committed = await this.boundary.patchEvent({
+        calendarId: "primary",
+        eventId: calendar.eventId,
+        sendUpdates: "none",
+        ifMatch: calendar.expected.etag,
+        requestBody: {
+          start: {
+            dateTime: calendar.changes.startTime,
+            timeZone: calendar.expected.timeZone,
+          },
+          end: {
+            dateTime: calendar.changes.endTime,
+            timeZone: calendar.expected.timeZone,
+          },
+        },
+      });
+      const actual = toCalendarEvent(committed);
+      if (
+        actual.id !== calendar.eventId ||
+        !sameInstant(actual.startTime, calendar.changes.startTime) ||
+        !sameInstant(actual.endTime, calendar.changes.endTime) ||
+        actual.timeZone !== calendar.expected.timeZone
+      ) {
+        throw new GoogleCalendarError(
+          "google_calendar_response_mismatch",
+          "Google Calendar did not return the approved interval",
+        );
+      }
+      this.#executions.set(input.permitNonce, input.draftHash);
+    } catch (error) {
+      if (error instanceof GoogleCalendarError) throw error;
+      if (responseStatus(error) === 412) throw new ExecutionConflictError();
+      throw new GoogleCalendarError(
+        "google_calendar_unavailable",
+        "Google Calendar could not complete the approved update",
+      );
+    }
+  }
+
+  async getExecution(_input: {
+    draftHash: string;
+    permitNonce: string;
+  }): Promise<boolean> {
+    return this.#executions.get(_input.permitNonce) === _input.draftHash;
+  }
+}
+
+export function createGoogleCalendarBoundary(
+  auth: GoogleOAuth2Client,
+): GoogleCalendarBoundary {
+  const calendar = google.calendar({ version: "v3", auth });
+  return {
+    async listEvents(input) {
+      const response = await calendar.events.list({
+        calendarId: input.calendarId,
+        timeMin: input.timeMin,
+        timeMax: input.timeMax,
+        singleEvents: false,
+        showDeleted: false,
+        maxResults: 100,
+      });
+      return response.data.items ?? [];
+    },
+    async getEvent(input) {
+      const response = await calendar.events.get({
+        calendarId: input.calendarId,
+        eventId: input.eventId,
+      });
+      return response.data;
+    },
+    async patchEvent(input) {
+      const response = await calendar.events.patch(
+        {
+          calendarId: input.calendarId,
+          eventId: input.eventId,
+          sendUpdates: input.sendUpdates,
+          requestBody: input.requestBody,
+        },
+        { headers: { "If-Match": input.ifMatch } },
+      );
+      return response.data;
+    },
+  };
+}
