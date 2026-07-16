@@ -64,6 +64,25 @@ function isOpenClawRuntimeContext(value: string): boolean {
   );
 }
 
+function extractHumanRequest(value: string): string | undefined {
+  if (isOpenClawRuntimeContext(value)) return undefined;
+  const openClawTimestamp =
+    /^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? [A-Z]{2,6}\]\s+/;
+  const standaloneTimestamp = value.match(openClawTimestamp);
+  if (standaloneTimestamp) {
+    const request = value.slice(standaloneTimestamp[0].length);
+    return request.length > 0 ? request : undefined;
+  }
+  if (!/## Runtime\r?\nRuntime:/.test(value)) return value;
+  const timestampPrefixes = [
+    ...value.matchAll(new RegExp(openClawTimestamp.source, "gm")),
+  ];
+  const latest = timestampPrefixes.at(-1);
+  if (!latest || latest.index === undefined) return undefined;
+  const request = value.slice(latest.index + latest[0].length);
+  return request.length > 0 ? request : undefined;
+}
+
 function responseForToolResult(
   message: ChatMessage,
   suppressProposedReply = false,
@@ -82,7 +101,7 @@ function responseForToolResult(
     if (result.status === "proposed") {
       return suppressProposedReply
         ? "NO_REPLY"
-        : "I’m checking with Bander. Nothing has happened yet.";
+        : "Bander has prepared this for your review. Nothing has happened yet.";
     }
     if (result.status === "executed") {
       return "Bander handled that within the automatic limits you approved. It will show you exactly what changed.";
@@ -151,15 +170,16 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
     const pendingUserTexts = messages
       .slice(latestToolIndex + 1)
       .filter((message) => message.role === "user")
-      .map((message) => textContent(message.content))
-      .filter((value) => !isOpenClawRuntimeContext(value));
-    const matchedRequest = supportedRequests.find((candidate) =>
-      pendingUserTexts.some((value) =>
-        normalizeRequestText(value).includes(
-          normalizeRequestText(candidate.request),
-        ),
-      ),
-    );
+      .map((message) => extractHumanRequest(textContent(message.content)))
+      .filter((value): value is string => value !== undefined);
+    const latestHumanRequest = pendingUserTexts.at(-1);
+    const matchedRequest = latestHumanRequest
+      ? supportedRequests.find(
+          (candidate) =>
+            normalizeRequestText(latestHumanRequest) ===
+            normalizeRequestText(candidate.request),
+        )
+      : undefined;
     const toolMessage =
       latestToolIndex >= 0 && pendingUserTexts.length === 0
         ? messages[latestToolIndex]
@@ -189,7 +209,7 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
               function: {
                 name: "bander__propose_action",
                 arguments: JSON.stringify({
-                  request: matchedRequest!.request,
+                  request: latestHumanRequest!,
                   ...(matchedRequest!.requestId
                     ? { requestId: matchedRequest!.requestId }
                     : {}),

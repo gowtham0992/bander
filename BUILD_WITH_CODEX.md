@@ -656,7 +656,14 @@ Parent-facing Telegram copy now names OpenClaw as the hearsay source and never i
 
 Agent-supplied request text remains in a clearly labelled plain-text quotation. Telegram parse mode is not enabled. The display renderer normalizes the field and removes newlines, control characters, bidirectional formatting controls and paragraph separators, preventing agent text from creating a second Bander-authored visual section. The versioned deterministic effects remain unchanged.
 
-OpenClaw now acknowledges a proposed action with “I’m checking with Bander. Nothing has happened yet.” Executed standing results use distinct wording and never make that false non-action claim. Unsupported input receives the requested friendly clarification. The pinned current OpenClaw Telegram `errorPolicy` is `always`; Context7 and the installed OpenClaw documentation confirm that this sends channel errors instead of silently suppressing them. Compiler refusal crosses MCP only as `{status:"unsupported"}` without model-authored detail. Exactly three MCP tools remain configured.
+OpenClaw now acknowledges a proposed action with “Bander has prepared this for
+your review. Nothing has happened yet.” Executed standing results use distinct
+wording and never make that false non-action claim. Unsupported input receives
+the requested friendly clarification. The pinned current OpenClaw Telegram
+`errorPolicy` is `always`; Context7 and the installed OpenClaw documentation
+confirm that this sends channel errors instead of silently suppressing them.
+Compiler refusal crosses MCP only as `{status:"unsupported"}` without
+model-authored detail. Exactly three MCP tools remain configured.
 
 The implementation explicitly does not make Bander read ambient Telegram messages. It does not add an MCP tool, enable HTML/Markdown rendering, or trust model-authored effects or authority.
 
@@ -1148,3 +1155,80 @@ and a moderate dependency audit with zero vulnerabilities. A high-confidence
 scan of all 95 tracked and checkpoint files found zero OpenAI keys, Telegram
 bot tokens, Google client secrets or Google refresh tokens.
 `transcription_day2.md` remains untracked and untouched.
+
+## Checkpoint 26 — latest-request provenance and truthful OpenClaw acknowledgment
+
+**Status:** complete — committed after the full matrix passed
+
+The manual real Telegram test exposed a deterministic-provider provenance bug:
+the owner asked for a 1:00 PM move, but the Bander Card truthfully showed that
+OpenClaw had proposed an older allowlisted 3:00 PM request. Nothing executed;
+the visible mismatch was rejected. The cause was localized to the reference
+provider: it scanned every pending user message and selected the first matching
+allowlisted candidate, then sent the candidate's stored wording instead of the
+latest user text.
+
+Three focused regressions were observed red before the fix:
+
+```text
+$ npx vitest run scripts/openclaw-mock-provider.test.ts
+Test Files  1 failed (1)
+Tests       3 failed | 7 passed (10)
+```
+
+They prove that an older supported request cannot override a newer unsupported
+request, the newest supported human message crosses the tool boundary verbatim,
+and the acknowledgment remains truthful when it is delivered after Bander's
+Card. The provider now considers only the newest non-runtime-context user
+message after the last tool result, requires an exact normalized allowlist
+match, and sends the actual newest message rather than candidate-authored text.
+
+The Card is delivered inside the MCP tool call, so OpenClaw's final model text
+cannot be guaranteed to arrive before it without adding a message tool or
+introducing an unacknowledged asynchronous delivery race. Neither is acceptable.
+The post-tool copy is therefore now:
+
+```text
+Bander has prepared this for your review. Nothing has happened yet.
+```
+
+This is true whether it lands immediately before or after the Card. No Bander
+ambient listener, fourth MCP tool, authority change, Calendar change or
+Telegram callback change was introduced.
+
+The actual OpenClaw process then exposed two narrower transport shapes that the
+initial unit fixture did not contain. The newest Telegram message may arrive
+inside OpenClaw's runtime envelope, or as a standalone line prefixed by its
+bounded `[date time timezone]` transport timestamp. Before the extraction fix,
+the real verifier made only one model call and no Bander tool call. The provider
+now removes only those recognized OpenClaw wrappers, still matches only the
+newest human request, and passes the human wording through unchanged. Dedicated
+regressions cover both transport shapes and prove that runtime/system text does
+not cross into `propose_action`. Timestamp recognition is deliberately limited
+to OpenClaw's weekday/date/time/timezone shape; an arbitrary user-authored
+bracket prefix is not stripped into an allowlisted request. Temporary
+request-content diagnostics used to isolate the mismatch were removed after the
+verifier passed.
+
+Restored-green evidence:
+
+```text
+focused provider tests: 13 passed
+typecheck: passed
+functional suite: 15 files, 147 tests passed
+attack suite: 2 files, 20 tests passed
+demo verifier: all six outcomes passed
+one-time recovery: one mutation, Band, Permit and Receipt
+standing recovery: one Draft, Permit, mutation, Receipt and counter entry
+real OpenClaw verifier: two model calls; one propose_action call; execution not started
+effective OpenClaw tools: exactly the three Bander tools
+production build: passed
+dependency audit: 0 vulnerabilities
+tracked token-shaped secret scan: 0 matches
+```
+
+The late-message correction is deliberately a truthful sequencing fix, not a
+claim that OpenClaw can acknowledge before the synchronous Bander Card. The
+reference assistant now says Bander has already prepared the review and that
+nothing has happened yet; it no longer says it is still checking after the Card
+is visible. `transcription_day2.md` remains untracked and untouched.

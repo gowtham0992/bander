@@ -88,10 +88,6 @@ describe("deterministic OpenClaw provider", () => {
             content:
               "Move dinner with Sarah to 7:30 and tell her I'll be 20 minutes late",
           },
-          {
-            role: "user",
-            content: "Synthetic channel context appended after the human message.",
-          },
         ],
         tools: [
           { function: { name: "bander__propose_action" } },
@@ -187,6 +183,159 @@ describe("deterministic OpenClaw provider", () => {
     });
   });
 
+  it("does not let an older supported request override the newest unsupported request", async () => {
+    const oldRequest =
+      "Could you move Bander Demo Appointment on July 18, 2026 to 3:00 PM?";
+    const provider = buildOpenClawMockProvider({
+      supportedRequests: [{ request: oldRequest }],
+    });
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          { role: "user", content: oldRequest },
+          { role: "assistant", content: "Earlier turn finished." },
+          {
+            role: "user",
+            content:
+              "Could you move Bander Demo Appointment on July 18, 2026 to 1:00 PM?",
+          },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    expect(response.json().choices[0].message).toEqual({
+      role: "assistant",
+      content:
+        "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
+    });
+  });
+
+  it("forwards the newest supported human request verbatim", async () => {
+    const oldRequest =
+      "Could you move Bander Demo Appointment on July 18, 2026 to 3:00 PM?";
+    const currentRequest =
+      "COULD you move Bander Demo Appointment on July 18, 2026 to 1:00 PM?!";
+    const provider = buildOpenClawMockProvider({
+      supportedRequests: [
+        { request: oldRequest },
+        {
+          request:
+            "Could you move Bander Demo Appointment on July 18, 2026 to 1:00 PM?",
+        },
+      ],
+    });
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          { role: "user", content: oldRequest },
+          { role: "assistant", content: "Earlier turn finished." },
+          { role: "user", content: currentRequest },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({ request: currentRequest });
+  });
+
+  it("extracts the newest request from OpenClaw's runtime envelope", async () => {
+    const currentRequest =
+      "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.";
+    const provider = buildOpenClawMockProvider();
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          {
+            role: "user",
+            content: [
+              "OpenClaw system instructions that must never cross Bander.",
+              "## Runtime",
+              "Runtime: agent=main | session=isolated",
+              `[Wed 2026-07-15 20:14 MDT] ${currentRequest}`,
+            ].join("\n"),
+          },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({ request: currentRequest });
+    expect(argumentsText).not.toContain("OpenClaw system instructions");
+    expect(argumentsText).not.toContain("Runtime:");
+  });
+
+  it("extracts a request from OpenClaw's standalone timestamp envelope", async () => {
+    const currentRequest =
+      "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.";
+    const provider = buildOpenClawMockProvider();
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          {
+            role: "user",
+            content: `[Wed 2026-07-15 20:18 MDT] ${currentRequest}`,
+          },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({ request: currentRequest });
+  });
+
+  it("does not strip an arbitrary user-authored bracket prefix", async () => {
+    const provider = buildOpenClawMockProvider();
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          {
+            role: "user",
+            content:
+              "[urgent] Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.",
+          },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    expect(response.json().choices[0].message.tool_calls).toBeUndefined();
+    expect(response.json().choices[0].message.content).toContain(
+      "say it a little differently",
+    );
+  });
+
   it("recognizes a completed tool turn despite OpenClaw's runtime-context wrapper", async () => {
     const provider = buildOpenClawMockProvider();
     app = provider.app;
@@ -214,7 +363,8 @@ describe("deterministic OpenClaw provider", () => {
       choices: [
         {
           message: {
-            content: "I’m checking with Bander. Nothing has happened yet.",
+            content:
+              "Bander has prepared this for your review. Nothing has happened yet.",
           },
         },
       ],
