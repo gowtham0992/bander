@@ -169,6 +169,13 @@ async function main(): Promise<void> {
     timeZone,
     todayLocalDate,
   });
+  const chunkArgument = process.argv.find((argument) => argument.startsWith("--chunk="));
+  const chunk = chunkArgument ? Number.parseInt(chunkArgument.slice(8), 10) : undefined;
+  if (chunk !== undefined && (![0, 1, 2].includes(chunk) || !Number.isInteger(chunk))) {
+    throw new Error("invalid_compound_sol_chunk");
+  }
+  const selectedCases =
+    chunk === undefined ? cases : cases.slice(chunk * 6, chunk * 6 + 6);
   const context = {
     nowLocalDate: todayLocalDate,
     timeZone,
@@ -193,38 +200,41 @@ async function main(): Promise<void> {
   let clarificationCorrect = 0;
   let clarificationTotal = 0;
 
-  for (const item of cases) {
-    const actual = (await probeCompoundIntent(
-      selector,
-      item.request,
-      context,
-    )) as Record<string, unknown>;
-    const correct = matchesExpected(actual, item.expected);
-    if (item.expected.status === "ready") {
-      readyTotal += 1;
-      if (correct) readyCorrect += 1;
-    } else {
-      clarificationTotal += 1;
-      if (correct) clarificationCorrect += 1;
-      if (actual.status === "ready") falseAcceptCount += 1;
+  for (let offset = 0; offset < selectedCases.length; offset += 3) {
+    const batch = selectedCases.slice(offset, offset + 3);
+    const actuals = await Promise.all(
+      batch.map((item) => probeCompoundIntent(selector, item.request, context)),
+    );
+    for (const [index, item] of batch.entries()) {
+      const actual = actuals[index] as Record<string, unknown>;
+      const correct = matchesExpected(actual, item.expected);
+      if (item.expected.status === "ready") {
+        readyTotal += 1;
+        if (correct) readyCorrect += 1;
+      } else {
+        clarificationTotal += 1;
+        if (correct) clarificationCorrect += 1;
+        if (actual.status === "ready") falseAcceptCount += 1;
+      }
+      if (actual.status === "invalid_model_output" || actual.status === "model_unavailable") {
+        invalidModelOutputCount += 1;
+      }
+      rows.push({
+        case: item.name,
+        expected: item.expected.status,
+        observed: String(actual.status),
+        ...(typeof actual.reason === "string" ? { reason: actual.reason } : {}),
+        correct,
+      });
+      process.stdout.write(`${JSON.stringify(rows.at(-1))}\n`);
     }
-    if (actual.status === "invalid_model_output" || actual.status === "model_unavailable") {
-      invalidModelOutputCount += 1;
-    }
-    rows.push({
-      case: item.name,
-      expected: item.expected.status,
-      observed: String(actual.status),
-      ...(typeof actual.reason === "string" ? { reason: actual.reason } : {}),
-      correct,
-    });
-    process.stdout.write(`${JSON.stringify(rows.at(-1))}\n`);
   }
 
   const failedCases = rows.filter((row) => !row.correct).map((row) => row.case);
   const summary = {
     model: COMPOUND_SOL_MODEL,
-    liveResponsesCalls: cases.length,
+    liveResponsesCalls: selectedCases.length,
+    ...(chunk === undefined ? {} : { chunk }),
     strictStructuredOutput: true,
     correctExtractionRate: `${readyCorrect}/${readyTotal}`,
     clarificationAndUnsupportedRate: `${clarificationCorrect}/${clarificationTotal}`,

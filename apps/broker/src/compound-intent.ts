@@ -199,6 +199,15 @@ export function validateCompoundIntent(
         "I can only help move one appointment and notify a paired contact.",
     };
   }
+  if (output.clarificationReason === "multiple_events_unsupported") {
+    return {
+      status: "unsupported",
+      reason: "multiple_events_unsupported",
+      question:
+        output.clarificationQuestion ??
+        "I can only prepare one Calendar event at a time.",
+    };
+  }
   if (output.classification === "clarification") {
     const locallyResolvedPairingMistake =
       output.clarificationReason === "unpaired_contact" &&

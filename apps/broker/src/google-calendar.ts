@@ -5,8 +5,13 @@ import type {
   Person,
   ScheduleReadEvent,
   ScheduleReadResult,
+  ObservedExecutionResult,
 } from "@bander/contracts";
-import { ExecutionConflictError, type ExecutionAdapter } from "@bander/core";
+import {
+  ExecutionAmbiguousError,
+  ExecutionConflictError,
+  type ExecutionAdapter,
+} from "@bander/core";
 import { google } from "googleapis";
 import {
   localDateRangeToInstants,
@@ -308,7 +313,10 @@ function scheduleSortKey(event: ScheduleReadEvent): string {
 }
 
 export class GoogleCalendarAdapter implements ExecutionAdapter {
-  readonly #executions = new Map<string, string>();
+  readonly #executions = new Map<
+    string,
+    { draftHash: string; result: ObservedExecutionResult }
+  >();
   #primaryTimeZone: string | undefined;
 
   constructor(
@@ -358,7 +366,12 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
         maxResults: input.maxEvents + 1,
       });
     } catch (error) {
-      if (error instanceof GoogleCalendarError) throw error;
+      if (
+        error instanceof GoogleCalendarError &&
+        error.code !== "google_calendar_response_mismatch"
+      ) {
+        throw error;
+      }
       throw new GoogleCalendarError(
         "google_calendar_unavailable",
         "Google Calendar is temporarily unavailable",
@@ -483,7 +496,7 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     draftHash: string;
     permitNonce: string;
     document: DraftDocument;
-  }): Promise<void> {
+  }): Promise<ObservedExecutionResult> {
     const calendar = input.document.effects.find(
       (effect): effect is CalendarRescheduleEffect =>
         effect.type === "calendar.reschedule_event",
@@ -511,6 +524,18 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
         "The approved Calendar duration must remain unchanged",
       );
     }
+    const committedResult = (
+      status: "committed" | "observed_target",
+    ): ObservedExecutionResult => ({
+      calendar: {
+        status,
+        completed: {
+          startTime: calendar.changes.startTime,
+          endTime: calendar.changes.endTime,
+          timeZone: calendar.expected.timeZone,
+        },
+      },
+    });
     try {
       const committed = await this.boundary.patchEvent({
         calendarId: "primary",
@@ -540,22 +565,79 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
           "Google Calendar did not return the approved interval",
         );
       }
-      this.#executions.set(input.permitNonce, input.draftHash);
+      const result = committedResult("committed");
+      this.#executions.set(input.permitNonce, {
+        draftHash: input.draftHash,
+        result,
+      });
+      return result;
     } catch (error) {
-      if (error instanceof GoogleCalendarError) throw error;
       if (responseStatus(error) === 412) throw new ExecutionConflictError();
-      throw new GoogleCalendarError(
-        "google_calendar_unavailable",
-        "Google Calendar could not complete the approved update",
-      );
+      const status = responseStatus(error);
+      if (status && status >= 400 && status < 500 && ![408, 429].includes(status)) {
+        throw new GoogleCalendarError(
+          "google_calendar_unavailable",
+          "Google Calendar rejected the approved update",
+        );
+      }
+      try {
+        const current = await this.resolveEvent(calendar.eventId);
+        if (
+          sameInstant(current.startTime, calendar.changes.startTime) &&
+          sameInstant(current.endTime, calendar.changes.endTime) &&
+          current.timeZone === calendar.expected.timeZone
+        ) {
+          const result = committedResult("observed_target");
+          this.#executions.set(input.permitNonce, {
+            draftHash: input.draftHash,
+            result,
+          });
+          return result;
+        }
+      } catch {
+        // The causal result remains unknowable. Never issue another patch.
+      }
+      throw new ExecutionAmbiguousError();
     }
   }
 
   async getExecution(_input: {
     draftHash: string;
     permitNonce: string;
-  }): Promise<boolean> {
-    return this.#executions.get(_input.permitNonce) === _input.draftHash;
+    document: DraftDocument;
+  }): Promise<boolean | ObservedExecutionResult> {
+    const execution = this.#executions.get(_input.permitNonce);
+    if (execution?.draftHash === _input.draftHash) {
+      return structuredClone(execution.result);
+    }
+    const calendar = _input.document.effects.find(
+      (effect): effect is CalendarRescheduleEffect =>
+        effect.type === "calendar.reschedule_event",
+    );
+    if (!calendar || _input.document.effects.length !== 1) return false;
+    const current = await this.resolveEvent(calendar.eventId);
+    if (
+      !sameInstant(current.startTime, calendar.changes.startTime) ||
+      !sameInstant(current.endTime, calendar.changes.endTime) ||
+      current.timeZone !== calendar.expected.timeZone
+    ) {
+      return false;
+    }
+    const result: ObservedExecutionResult = {
+      calendar: {
+        status: "observed_target",
+        completed: {
+          startTime: calendar.changes.startTime,
+          endTime: calendar.changes.endTime,
+          timeZone: calendar.expected.timeZone,
+        },
+      },
+    };
+    this.#executions.set(_input.permitNonce, {
+      draftHash: _input.draftHash,
+      result,
+    });
+    return structuredClone(result);
   }
 }
 

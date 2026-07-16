@@ -20,7 +20,16 @@ const event: CalendarEvent = {
 };
 
 function selector(value: unknown): CalendarIntentSelector {
-  return { select: async () => value };
+  return {
+    select: async () =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? {
+            familyNotificationRequested: false,
+            familyContactAlias: null,
+            ...value,
+          }
+        : value,
+  };
 }
 
 function calendar() {
@@ -30,6 +39,142 @@ function calendar() {
 }
 
 describe("real Calendar intent compiler", () => {
+  it("promotes a bounded compound intent into one fixture with the exact pairing", async () => {
+    const resolver = calendar();
+    const compiler = new RealCalendarDraftCompiler(
+      resolver,
+      selector({
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-18",
+        targetLocalStart: "16:00",
+        needsClarification: false,
+        clarificationReason: "none",
+        clarification: "",
+        familyNotificationRequested: true,
+        familyContactAlias: "my son",
+      }),
+      {
+        resolve: () => ({
+          installationId: "installation-opaque",
+          contactId: "contact-opaque",
+          pairingRevision: "b".repeat(64),
+          displayLabel: "Gil",
+        }),
+      },
+    );
+
+    const compiled = await compiler.compile(
+      "Move my planning block to July 18 at 4 PM and let my son know.",
+    );
+
+    expect(compiled.familyNotification).toMatchObject({
+      contactId: "contact-opaque",
+      pairingRevision: "b".repeat(64),
+      displayLabel: "Gil",
+      document: {
+        kind: "calendar_transition",
+        eventTitle: event.title,
+        newStartTime: "2026-07-18T22:00:00.000Z",
+        newEndTime: "2026-07-18T23:30:00.000Z",
+        timeZone: "America/Denver",
+      },
+    });
+  });
+
+  it("unpaired_contact_clarifies_without_authority", async () => {
+    const compiler = new RealCalendarDraftCompiler(
+      calendar(),
+      selector({
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-18",
+        targetLocalStart: "16:00",
+        needsClarification: false,
+        clarificationReason: "none",
+        clarification: "",
+        familyNotificationRequested: true,
+        familyContactAlias: "my son",
+      }),
+      { resolve: () => undefined },
+    );
+    await expect(compiler.compile("Move it and tell my son")).rejects.toMatchObject({
+      code: "clarification_required",
+      humanMessage: expect.stringContaining("isn’t connected"),
+    });
+  });
+
+  it("ambiguous_contact_clarifies_without_authority", async () => {
+    const resolver = calendar();
+    const compiler = new RealCalendarDraftCompiler(
+      resolver,
+      selector({
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-18",
+        targetLocalStart: "16:00",
+        needsClarification: true,
+        clarificationReason: "ambiguous_contact",
+        clarification: "model prose",
+        familyNotificationRequested: true,
+        familyContactAlias: null,
+      }),
+    );
+    await expect(compiler.compile("Move it and tell him")).rejects.toMatchObject({
+      humanMessage: "Which connected family contact did you mean?\nNothing happened.",
+    });
+    expect(resolver.discoverEvent).not.toHaveBeenCalled();
+  });
+
+  it("free_form_family_message_is_rejected", async () => {
+    const resolver = calendar();
+    const compiler = new RealCalendarDraftCompiler(
+      resolver,
+      selector({
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-18",
+        targetLocalStart: "16:00",
+        needsClarification: true,
+        clarificationReason: "free_form_message_unsupported",
+        clarification: "untrusted model prose",
+        familyNotificationRequested: true,
+        familyContactAlias: "Gil",
+      }),
+    );
+    await expect(
+      compiler.compile("Move it and tell Gil to bring groceries"),
+    ).rejects.toMatchObject({
+      humanMessage:
+        "I can include Bander’s exact appointment update, but I can’t send a custom message.\nNothing happened.",
+    });
+    expect(resolver.discoverEvent).not.toHaveBeenCalled();
+  });
+
+  it.each(["body", "chatId", "telegramUserId", "recipientAddress"])(
+    "model_cannot_author_notification_%s",
+    async (field) => {
+      const output = {
+        eventTitleHint: "Fictional planning block",
+        sourceLocalDateHint: null,
+        targetLocalDate: "2026-07-18",
+        targetLocalStart: "16:00",
+        needsClarification: false,
+        clarificationReason: "none",
+        clarification: "",
+        familyNotificationRequested: true,
+        familyContactAlias: "my son",
+        [field]: "agent supplied",
+      };
+      const compiler = new RealCalendarDraftCompiler(calendar(), selector(output), {
+        resolve: () => undefined,
+      });
+      await expect(compiler.compile("Move it and tell my son")).rejects.toMatchObject({
+        code: "invalid_model_output",
+      });
+    },
+  );
+
   it("separates an optional source date from a required cross-day target", async () => {
     const resolver = calendar();
     const compiler = new RealCalendarDraftCompiler(

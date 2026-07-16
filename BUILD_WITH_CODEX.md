@@ -1820,3 +1820,77 @@ secret scan with zero matches. Transcript hashes remain
 `920eb1a862a20debe214af9915401facc23aeb6b` and
 `3c30cae54d4efba1a7a6aa025199d68435dab348`. The family contact is revoked.
 `/feedback` remains deferred.
+
+## July 16, 2026 — one approved Calendar move plus one family update
+
+Checkpoint 5 adds the real compound deal without adding an MCP tool. The real
+OpenClaw inventory remains exactly four tools. Live `gpt-5.6-sol` may identify
+only the Calendar hints, whether a family update was requested, and the human
+alias used. Deterministic Bander code resolves the authoritative Google event,
+the exact active contact pairing revision, and the canonical notification
+document. One immutable Draft and one Card contain both effects before approval.
+
+Red-first and deliberate-mutation evidence covered the load-bearing boundaries.
+The initial live approval exposed a non-reentrant Telegram-state-lock deadlock:
+Google committed, then compound delivery tried to reacquire the lock already
+held by the callback. No family operation or human outcome was created, and a
+second tap could not be processed. The corrected callback reuses only the
+already-held lock in that exact async call chain; external delivery and contact
+revocation still serialize on the same lock through transport. The permanent
+`compound_callback_reuses_the_existing_state_lock_without_deadlock` regression
+completed after timing out under the faulty structure.
+
+Other observed red evidence:
+
+- removing Calendar-before-message ordering caused a conflict path to send one
+  family message;
+- removing the exact pairing-revision check redirected an old deal;
+- rendering the human outcome from Draft intent falsely reported an ambiguous
+  family effect as delivered;
+- generating a fresh delivery ID on replay defeated duplicate-send protection;
+- a committed Google patch with an incomplete response was initially surfaced
+  as an error instead of being reconciled by an authoritative reread.
+
+Restored code binds the exact opaque pairing at proposal, uses one notification
+renderer for Card and delivery, executes Calendar before Telegram, derives a
+stable delivery identity from the approved Draft and internal Permit, and builds
+the human outcome only from observed effect results. A lost Google response is
+never blindly patched again. Bander rereads the exact event and labels an exact
+target match as observed state without claiming causation.
+
+Live two-phone evidence passed. The Card displayed:
+
+```text
+• Move “Bander Demo Appointment”
+Fri, Jul 17, 1:00–2:00 PM MDT → Sat, Jul 18, 4:00–5:00 PM MDT
+• Send Gil:
+“Bander update
+“Bander Demo Appointment” is now Sat, Jul 18, 4:00–5:00 PM MDT.
+This update was sent by Bander at the owner’s request.”
+```
+
+One owner tap produced one real Google transition and one Telegram-confirmed
+family update with exactly the displayed text. The owner saw the combined
+truthful outcome. Replaying the same Card returned Telegram's `already done`
+acknowledgment; the family phone received no second message and the durable
+family-operation count stayed unchanged. In a separate changed-world run, the
+event was independently moved after Card creation. Approval returned the
+human-only refusal “Nothing was moved, and no family update was sent”; the
+independent Calendar interval remained and the family-operation count did not
+increase.
+
+After evidence, the fictional event was restored to Fri, Jul 17, 1:00–2:00 PM
+MDT in `America/Denver`, and the family contact was revoked. Telegram acceptance
+is evidence that Telegram accepted the message, not that the contact read it.
+An ambiguous family response remains permanently unconfirmed and is never
+automatically retried. Real core authority remains process-local by the accepted
+prototype boundary. `/feedback` remains deferred.
+
+Final restored-green matrix: typecheck; 23 functional files with 294 tests;
+20 adversarial tests; all six demo outcomes; one-time recovery with one mutation,
+Band, Permit and Receipt; standing recovery with one Draft, Permit, mutation,
+Receipt and counter entry; real OpenClaw verification with exactly four real
+tools; live compound Sol 18/18 with zero false accepts and zero invalid outputs;
+live read Sol 7/7; production build; dependency audit with zero vulnerabilities;
+and tracked/proposed-file secret scan with zero matches. Both transcript files
+remain ignored and untracked and were not modified by this checkpoint.

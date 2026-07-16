@@ -18,11 +18,11 @@ The claim is intentionally narrow: Bander does not decide whether an agent's goa
 
 ## A 30-second real journey
 
-1. A parent writes in Telegram: “Move Bander Demo Appointment to July 17 at 2 PM.”
+1. A parent writes in Telegram: “Move Bander Demo Appointment to July 18 at 4 PM and let my son know.”
 2. Conversational OpenClaw uses Bander's bounded proposal tool. Nothing has happened yet.
-3. Bander—not OpenClaw—finds one eligible event in the connected Google Calendar and posts the complete old and new intervals from its own Telegram identity.
+3. Bander—not OpenClaw—finds one eligible event and the exact paired family contact, then posts one Card with the complete Calendar transition and deterministic family update.
 4. The bound owner chooses **Do exactly this** or **Not now** on Bander's message.
-5. On approval, Bander conditionally updates the same event with its approved Google ETag, then independently posts what Google now shows. If the event changed first, Bander stops instead.
+5. On approval, Bander conditionally updates the same event with its approved Google ETag and only then sends the exact displayed update through its own Telegram bot. If the event changed first, Bander stops and sends neither effect.
 
 ## Implemented today
 
@@ -35,6 +35,8 @@ The real product path currently provides:
 - exact matching of one timed, non-recurring, owner-organized event with no attendees;
 - a human-readable Bander Card with complete source and destination intervals;
 - owner-bound approval and decline, exact duration preservation, cross-day moves, and timezone-aware display;
+- one immutable compound deal that binds an exact Calendar reschedule and exact paired-family update before approval;
+- Calendar-first execution and replay-safe family delivery through Bander's own Telegram identity;
 - Google ETag preconditions and a changed-world refusal with no retry against a changed plan; and
 - a separate, truthful Bander outcome after Google reports the authoritative state.
 
@@ -55,6 +57,7 @@ flowchart LR
     T --> P
     B -->|"OAuth credential stays here<br/>conditional event update"| G["Google Calendar"]
     G -->|"authoritative event + ETag"| B
+    B -->|"exact approved update<br/>bound private route"| F["Paired family contact"]
     B -->|"independent outcome"| T
 ```
 
@@ -140,7 +143,7 @@ On first Google use, finish the browser OAuth prompt. Bander then writes an expi
 
 When Telegram says **“Bander is ready. Only you can approve what I'm allowed to do.”**, stop the pairing service with `Ctrl-C`.
 
-### 7. Optionally pair one family contact for a future approved update
+### 7. Optionally pair one family contact for an approved update
 
 This optional setup creates one revocable, authenticated Telegram destination.
 It does not create another approver or expose Calendar access to the contact.
@@ -166,11 +169,12 @@ the routable destination. A revoked contact requires a new operator-created
 link. If Telegram cannot verify the contact is outside the protected group,
 Bander refuses the pairing or startup check.
 
-Bander's delivery boundary can send a deterministic structured update to this
-route, but OpenClaw and MCP cannot invoke it, choose its destination, or author
-its text. The local `npm run verify:family-notification` command exists only for
-the empirical delivery check. A real Calendar-plus-notification deal is not yet
-implemented.
+Bander can include one deterministic Calendar update to this route in the same
+approval Card as an eligible Calendar reschedule. OpenClaw and MCP cannot invoke
+delivery directly, choose its destination, or author its text. The Card binds
+the exact opaque contact pairing and displays the same deterministically rendered
+text that Bander later sends. Revoking or replacing the contact before execution
+prevents delivery and never redirects an old approved update.
 
 Telegram has no client idempotency key. Bander persists dispatch before calling
 Telegram, records a confirmed response durably, and never retries an ambiguous
@@ -267,17 +271,17 @@ Current limitations are material:
 - the real action path only reschedules the narrow Google Calendar event shape described above;
 - schedule reads are limited to the connected primary Calendar, one explicit range of at most 31 days, and at most 50 sanitized events; locations, descriptions, conference links, attachments, attendees, identifiers, and ETags are omitted;
 - Calendar titles are untrusted text. Bander strips control and bidirectional-control characters and the OpenClaw prompt treats titles only as quoted data, but this reduces rather than eliminates model prompt-injection risk;
-- it does not send email or messages, make reservations or purchases, control transportation, perform medical actions, or control locks or smart-home devices;
+- it can send only the exact deterministic Telegram family update displayed on an approved compound Card; it cannot send arbitrary messages or email, make reservations or purchases, control transportation, perform medical actions, or control locks or smart-home devices;
 - the current repository does not provide a production installer for an arbitrary existing OpenClaw configuration;
 - real authority state is in memory and is not restart-durable; Telegram installation/callback delivery state is file-backed, while the deterministic sandbox contains the broader recovery demonstrations;
 - Bander's local MCP endpoint is unauthenticated and loopback-only; it must not be exposed to a LAN or the public internet; and
-- an ambiguous crash after Telegram accepted a truthful notification can produce a duplicate notification on retry. Downstream mutation remains idempotent; human notification is at least once.
+- Telegram provides no client idempotency key. A confirmed family delivery is replay-safe, but an ambiguous family transport response is permanently reported as unconfirmed and is not retried automatically. Telegram acceptance proves that Telegram accepted the update, not that the contact read it. Owner-facing Cards, refusals, and outcomes retain their separate at-least-once delivery tradeoff.
 
 ## How Codex and GPT-5.6 Sol were used
 
 Codex was the primary builder and verification partner throughout Build Week. It helped turn the product claim into executable invariants, wrote red-first regressions for authority and recovery gaps, integrated the real OpenClaw/Telegram/Google path, ran the attack and privacy suites, and maintained [BUILD_WITH_CODEX.md](BUILD_WITH_CODEX.md) as an evidence ledger of decisions and observed failures.
 
-In the real product, `gpt-5.6-sol` plays three deliberately bounded roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander makes separate strict Responses API calls for action intent and read-range intent. The read compiler may select only a start local date, exclusive end local date, and a short clarification; the action compiler may select only the bounded rescheduling hints described above. Neither can choose a Calendar ID, event ID, ETag, credential, final end time, effects, authority, or execution parameters. Deterministic Bander code resolves the authoritative timezone and event data, enforces range and eligibility limits, constructs the exact action, and fails closed on malformed, missing, ambiguous, or broadened output.
+In the real product, `gpt-5.6-sol` plays three deliberately bounded roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander makes separate strict Responses API calls for action intent and read-range intent. The read compiler may select only a start local date, exclusive end local date, and a short clarification. The action compiler may select only the bounded rescheduling hints, whether a family update was requested, and the human alias used. It cannot choose a recipient address, message body, Calendar ID, event ID, ETag, credential, final end time, effects, authority, or execution parameters. Deterministic Bander code resolves the authoritative event and exact active contact pairing, constructs both effects, and fails closed on malformed, missing, ambiguous, or broadened output.
 
 ## Roadmap
 

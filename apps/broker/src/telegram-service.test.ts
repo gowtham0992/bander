@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ApprovalCard, CalendarEvent, DraftDocument, Person } from "@bander/contracts";
+import type { ApprovalCard, CalendarEvent, DraftDocument, ObservedExecutionResult, Person } from "@bander/contracts";
 import {
   AuthorityEngine,
   AuthorityStore,
@@ -19,6 +19,7 @@ import {
   type TelegramUpdate,
 } from "./telegram-service.js";
 import type { ProtectedGroupMemberStatus } from "./family-contact.js";
+import { renderFamilyNotification } from "./family-notification.js";
 
 const fixture: DraftFixture = {
   id: "telegram-fixture",
@@ -67,6 +68,9 @@ class FakeAdapter implements ExecutionAdapter {
     revision: 1,
     etag: "event-focus-block-r1",
   };
+  compoundDelivery?: (
+    input: Parameters<TelegramService["deliverBoundFamilyNotification"]>[0],
+  ) => Promise<{ status: "delivered" | "ambiguous" | "not_sent" }>;
 
   async resolveEvent(id: string): Promise<CalendarEvent> {
     if (id === "event-focus-block") {
@@ -98,7 +102,7 @@ class FakeAdapter implements ExecutionAdapter {
     draftHash: string;
     permitNonce: string;
     document: DraftDocument;
-  }): Promise<void> {
+  }): Promise<void | ObservedExecutionResult> {
     this.executions += 1;
     if (this.conflict) throw new ExecutionConflictError();
     const calendar = input.document.effects.find(
@@ -111,6 +115,27 @@ class FakeAdapter implements ExecutionAdapter {
         endTime: calendar.changes.endTime,
         revision: this.focusEvent.revision + 1,
         etag: "event-focus-block-r2",
+      };
+    }
+    const family = input.document.effects.find(
+      (effect) => effect.type === "family.telegram_notification",
+    );
+    if (calendar && family && this.compoundDelivery) {
+      const delivery = await this.compoundDelivery({
+        requestId: `compound-${input.permitNonce}`,
+        binding: family.binding,
+        document: family.document,
+      });
+      return {
+        calendar: {
+          status: "committed",
+          completed: {
+            startTime: calendar.changes.startTime,
+            endTime: calendar.changes.endTime,
+            timeZone: calendar.expected.timeZone,
+          },
+        },
+        familyNotification: { status: delivery.status },
       };
     }
   }
@@ -336,6 +361,81 @@ function declineCallbackValue(binding: unknown): string {
 }
 
 describe("Bander Telegram service", () => {
+  it("compound_callback_reuses_the_existing_state_lock_without_deadlock", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    current.adapter.compoundDelivery = (input) =>
+      current.service.deliverBoundFamilyNotification(input);
+    const binding = current.service.resolveFamilyContactAlias("my son")!;
+    const card = await current.engine.proposeFixture({
+      id: "compound-lock",
+      claimedUserRequest: "Move dinner and let my son know.",
+      calendar: {
+        eventId: "event-dinner-sarah",
+        expectedEtag: "event-dinner-sarah-r1",
+        newStartTime: "2026-07-18T22:00:00.000Z",
+      },
+      familyNotification: {
+        ...binding,
+        document: {
+          kind: "calendar_transition",
+          eventTitle: "Dinner with Sarah",
+          newStartTime: "2026-07-18T22:00:00.000Z",
+          newEndTime: "2026-07-18T23:30:00.000Z",
+          timeZone: "America/Denver",
+        },
+      },
+    });
+    await current.service.deliverProposal(card);
+    const proposal = current.store.read().proposals.at(-1)!;
+    await expect(Promise.race([
+      current.service.handleUpdate({
+        update_id: 777,
+        callback_query: {
+          id: "compound-owner-approval",
+          from: { id: 101, is_bot: false },
+          data: proposal.callbackValue,
+          message: {
+            message_id: proposal.messageId,
+            chat: { id: -500, type: "supergroup" },
+          },
+        },
+      }).then(() => "completed"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("deadlocked"), 100)),
+    ])).resolves.toBe("completed");
+    expect(current.store.read().proposals.at(-1)?.lifecycle).toBe("executed");
+    expect(current.store.read().familyNotifications).toHaveLength(1);
+  });
+  it("compound_card_shows_the_exact_delivery_text", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    const binding = current.service.resolveFamilyContactAlias("my son")!;
+    const compoundFixture: DraftFixture = {
+      id: "compound-card",
+      claimedUserRequest: "Move dinner and let my son know.",
+      calendar: {
+        eventId: "event-dinner-sarah",
+        expectedEtag: "event-dinner-sarah-r1",
+        newStartTime: "2026-07-18T22:00:00.000Z",
+      },
+      familyNotification: {
+        ...binding,
+        document: {
+          kind: "calendar_transition",
+          eventTitle: "Dinner with Sarah",
+          newStartTime: "2026-07-18T22:00:00.000Z",
+          newEndTime: "2026-07-18T23:30:00.000Z",
+          timeZone: "America/Denver",
+        },
+      },
+    };
+    const card = await current.engine.proposeFixture(compoundFixture);
+    await current.service.deliverProposal(card);
+    const approval = current.api.messages.at(-1)?.text ?? "";
+    expect(approval).toContain(renderFamilyNotification(compoundFixture.familyNotification!.document));
+  });
   it("rejects_delivery_to_revoked_contact", async () => {
     const current = setup("real", familyRandomValues);
     await pairOwner(current); await pairFamilyContact(current);
@@ -396,6 +496,81 @@ describe("Bander Telegram service", () => {
     await revoke;
     expect(second.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
     expect(second.store.read().familyContact).toBeUndefined();
+  });
+
+  it("replaced_contact_never_receives_old_approved_message", async () => {
+    const current = setup("real", [
+      ...familyRandomValues,
+      "family-token-replacement-1234",
+      "family-challenge-replacement",
+      "family-contact-replacement",
+      "family-accept-replacement",
+      "family-decline-replacement",
+      "family-contact-revoke-replacement",
+      "family-owner-revoke-replacement",
+    ]);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    const oldBinding = current.service.resolveFamilyContactAlias("my son")!;
+    await current.service.handleUpdate(messageUpdate({ updateId: 93, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" }));
+    await pairFamilyContact(current, 303);
+    const attempts = current.api.sendAttempts;
+    const result = await current.service.deliverBoundFamilyNotification({
+      requestId: "compound-old-pairing-0001",
+      binding: oldBinding,
+      document: familyNotificationDocument,
+    });
+    expect(result).toEqual({ status: "not_sent" });
+    expect(current.api.sendAttempts).toBe(attempts);
+    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(0);
+  });
+
+  it("revoked_contact_never_receives_old_approved_message", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    const binding = current.service.resolveFamilyContactAlias("Gil")!;
+    await current.service.handleUpdate(messageUpdate({ updateId: 94, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" }));
+    const attempts = current.api.sendAttempts;
+    expect(await current.service.deliverBoundFamilyNotification({
+      requestId: "compound-revoked-0001",
+      binding,
+      document: familyNotificationDocument,
+    })).toEqual({ status: "not_sent" });
+    expect(current.api.sendAttempts).toBe(attempts);
+  });
+
+  it("changed_pairing_revision_never_receives_old_approved_message", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    const binding = current.service.resolveFamilyContactAlias("Gil")!;
+    const state = current.store.read();
+    state.familyContact = {
+      ...state.familyContact!,
+      pairedAt: "2026-07-14T18:01:00.000Z",
+    };
+    current.store.write(state);
+    const attempts = current.api.sendAttempts;
+    expect(await current.service.deliverBoundFamilyNotification({
+      requestId: "compound-old-revision-0001",
+      binding,
+      document: familyNotificationDocument,
+    })).toEqual({ status: "not_sent" });
+    expect(current.api.sendAttempts).toBe(attempts);
+  });
+
+  it("bound_delivery_request_rejects_changed_contact_on_replay", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    const binding = current.service.resolveFamilyContactAlias("son")!;
+    await current.service.deliverBoundFamilyNotification({ requestId: "compound-binding-0001", binding, document: familyNotificationDocument });
+    await expect(current.service.deliverBoundFamilyNotification({
+      requestId: "compound-binding-0001",
+      binding: { ...binding, contactId: "different-contact" },
+      document: familyNotificationDocument,
+    })).rejects.toThrow("different content or contact");
   });
   it("rejects a family contact who is still in the protected owner group", async () => {
     const current = setup("real", familyRandomValues);
@@ -848,7 +1023,7 @@ describe("Bander Telegram service", () => {
 
     expect(approvalText).toContain("OpenClaw says you asked:");
     expect(approvalText).toContain("Through Bander, this will:");
-    expect(approvalText).toContain("Any other calendar events or actions");
+    expect(approvalText).toContain("Nothing else will change.");
     expect(approvalText).not.toMatch(
       /messages|payments|\bDraft\b|\bPermit\b|\bBand\b|\bReceipt\b|ETag|MCP/i,
     );

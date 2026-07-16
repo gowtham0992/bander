@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DraftDocument } from "@bander/contracts";
-import { ExecutionConflictError } from "@bander/core";
+import { ExecutionAmbiguousError, ExecutionConflictError } from "@bander/core";
 import {
   GoogleCalendarAdapter,
   GoogleCalendarError,
@@ -264,7 +264,7 @@ describe("real Google Calendar boundary", () => {
         permitNonce: "permit-nonce",
         document: draft,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ calendar: { status: "committed" } });
   });
 
   it("google_adapter_maps_http_412_to_conflict_without_retry", async () => {
@@ -282,9 +282,9 @@ describe("real Google Calendar boundary", () => {
     expect(boundary.patches).toHaveLength(1);
   });
 
-  it("google_adapter_fails_closed_on_non_412_google_errors", async () => {
+  it("google_adapter_fails_closed_on_definitive_google_rejection", async () => {
     const boundary = new FakeBoundary();
-    boundary.patchError = { response: { status: 503 }, config: { headers: "secret" } };
+    boundary.patchError = { response: { status: 403 }, config: { headers: "secret" } };
     const adapter = new GoogleCalendarAdapter(boundary);
 
     await expect(
@@ -295,6 +295,90 @@ describe("real Google Calendar boundary", () => {
       }),
     ).rejects.toMatchObject({ code: "google_calendar_unavailable" });
     expect(boundary.patches).toHaveLength(1);
+  });
+
+  it("committed_google_write_with_lost_response_is_never_blindly_retried", async () => {
+    const boundary = new FakeBoundary();
+    boundary.patchEvent = async (input) => {
+      boundary.patches.push(structuredClone(input));
+      boundary.events[0] = {
+        ...structuredClone(eligibleEvent),
+        etag: '"etag-2"',
+        start: { ...input.requestBody.start },
+        end: { ...input.requestBody.end },
+      };
+      throw new Error("response lost after commit");
+    };
+    const adapter = new GoogleCalendarAdapter(boundary);
+
+    await expect(
+      adapter.executeDraft({
+        draftHash: "draft-hash",
+        permitNonce: "permit-nonce",
+        document: calendarOnlyDraft(),
+      }),
+    ).resolves.toMatchObject({ calendar: { status: "observed_target" } });
+    expect(boundary.patches).toHaveLength(1);
+  });
+
+  it("committed_patch_with_incomplete_response_is_reconciled_by_reread", async () => {
+    const boundary = new FakeBoundary();
+    boundary.patchEvent = async (input) => {
+      boundary.patches.push(structuredClone(input));
+      boundary.events[0] = {
+        ...structuredClone(eligibleEvent),
+        etag: '"etag-2"',
+        start: { ...input.requestBody.start },
+        end: { ...input.requestBody.end },
+      };
+      return {
+        id: eligibleEvent.id!,
+        etag: '"etag-2"',
+        start: { ...input.requestBody.start },
+        end: { ...input.requestBody.end },
+      };
+    };
+    const adapter = new GoogleCalendarAdapter(boundary);
+    await expect(adapter.executeDraft({
+      draftHash: "draft-hash",
+      permitNonce: "permit-nonce",
+      document: calendarOnlyDraft(),
+    })).resolves.toMatchObject({ calendar: { status: "observed_target" } });
+    expect(boundary.patches).toHaveLength(1);
+  });
+
+  it("lost_google_response_with_non_target_state_stays_ambiguous_without_retry", async () => {
+    const boundary = new FakeBoundary();
+    boundary.patchError = { response: { status: 503 } };
+    const adapter = new GoogleCalendarAdapter(boundary);
+    await expect(
+      adapter.executeDraft({
+        draftHash: "draft-hash",
+        permitNonce: "permit-nonce",
+        document: calendarOnlyDraft(),
+      }),
+    ).rejects.toBeInstanceOf(ExecutionAmbiguousError);
+    expect(boundary.patches).toHaveLength(1);
+  });
+
+  it("recovery_observes_the_approved_target_without_another_patch", async () => {
+    const boundary = new FakeBoundary();
+    const draft = calendarOnlyDraft();
+    const calendar = draft.effects[0];
+    if (calendar?.type !== "calendar.reschedule_event") throw new Error("fixture");
+    boundary.events[0] = {
+      ...structuredClone(eligibleEvent),
+      etag: '"etag-2"',
+      start: { dateTime: calendar.changes.startTime, timeZone: calendar.expected.timeZone },
+      end: { dateTime: calendar.changes.endTime, timeZone: calendar.expected.timeZone },
+    };
+    const adapter = new GoogleCalendarAdapter(boundary);
+    await expect(adapter.getExecution({
+      draftHash: "draft-hash",
+      permitNonce: "permit-nonce",
+      document: draft,
+    })).resolves.toMatchObject({ calendar: { status: "observed_target" } });
+    expect(boundary.patches).toHaveLength(0);
   });
 
   it("google_adapter_rejects_messages_or_additional_effects", async () => {

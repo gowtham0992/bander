@@ -95,6 +95,22 @@ describe("bounded compound-intent output", () => {
     });
   });
 
+  it("normalizes multiple-event broadening to unsupported", () => {
+    expect(
+      validateCompoundIntent(
+        ready({
+          classification: "clarification",
+          clarificationReason: "multiple_events_unsupported",
+          clarificationQuestion: "Please choose one.",
+        }),
+        context,
+      ),
+    ).toMatchObject({
+      status: "unsupported",
+      reason: "multiple_events_unsupported",
+    });
+  });
+
   it("normalizes an unresolved model pronoun to deterministic ambiguity", () => {
     expect(
       validateCompoundIntent(

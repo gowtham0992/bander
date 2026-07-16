@@ -3,10 +3,12 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod/v4";
 import type { DraftFixture } from "@bander/core";
 import type { CalendarEvent } from "@bander/contracts";
+import type { FamilyTelegramNotificationEffect } from "@bander/contracts";
 import {
   GoogleCalendarError,
   resolveLocalStart,
 } from "./google-calendar.js";
+import { createFamilyNotificationDocument } from "@bander/core";
 
 const fixtureIds = [
   "move-dinner-and-notify-sarah",
@@ -101,8 +103,14 @@ const CalendarIntentSchema = z
       "missing_destination",
       "unsupported_action",
       "ambiguous",
+      "missing_contact",
+      "ambiguous_contact",
+      "unpaired_contact",
+      "free_form_message_unsupported",
     ]),
     clarification: z.string().trim().max(240),
+    familyNotificationRequested: z.boolean(),
+    familyContactAlias: z.string().trim().max(80).nullable(),
   })
   .strict();
 
@@ -120,10 +128,17 @@ export interface RealCalendarResolver {
   }): Promise<CalendarEvent>;
 }
 
+export interface FamilyContactResolver {
+  resolve(
+    alias: string,
+  ): FamilyTelegramNotificationEffect["binding"] | undefined;
+}
+
 export class RealCalendarDraftCompiler implements DraftCompiler {
   constructor(
     readonly calendar: RealCalendarResolver,
     readonly selector: CalendarIntentSelector,
+    readonly familyContacts?: FamilyContactResolver,
   ) {}
 
   async compile(agentClaimedRequest: string): Promise<DraftFixture> {
@@ -155,6 +170,26 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       throw new CompilerError(
         "invalid_model_output",
         "The model did not return one complete local Calendar time.",
+      );
+    }
+
+    let familyBinding: FamilyTelegramNotificationEffect["binding"] | undefined;
+    if (intent.familyNotificationRequested) {
+      if (!intent.familyContactAlias) {
+        const humanMessage =
+          "Which connected family contact should I notify?\nNothing happened.";
+        throw new CompilerError("clarification_required", humanMessage, humanMessage);
+      }
+      familyBinding = this.familyContacts?.resolve(intent.familyContactAlias);
+      if (!familyBinding) {
+        const label = safeIntentLabel(intent.familyContactAlias);
+        const humanMessage = `“${label}” isn’t connected to Bander yet.\nNothing happened.\nAsk the person who set up Bander to connect them first.`;
+        throw new CompilerError("clarification_required", humanMessage, humanMessage);
+      }
+    } else if (intent.familyContactAlias !== null) {
+      throw new CompilerError(
+        "invalid_model_output",
+        "The model returned an inconsistent family notification intent.",
       );
     }
 
@@ -199,7 +234,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       localTime: intent.targetLocalStart,
       timeZone: event.timeZone,
     });
-    return {
+    const compiled: DraftFixture = {
       id: "real-google-calendar-reschedule",
       claimedUserRequest: agentClaimedRequest,
       calendar: {
@@ -208,6 +243,20 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
         newStartTime,
       },
     };
+    if (intent.familyNotificationRequested) {
+      const duration = Date.parse(event.endTime) - Date.parse(event.startTime);
+      const newEndTime = new Date(Date.parse(newStartTime) + duration).toISOString();
+      compiled.familyNotification = {
+        ...familyBinding!,
+        document: createFamilyNotificationDocument({
+          eventTitle: event.title,
+          newStartTime,
+          newEndTime,
+          timeZone: event.timeZone,
+        }),
+      };
+    }
+    return compiled;
   }
 }
 
@@ -235,7 +284,8 @@ export class OpenAISolIntentSelector implements CalendarIntentSelector {
         instructions: [
           "Extract one narrow Calendar reschedule intent for Bander.",
           "Return only the event-title hint, optional current/source local date hint, required destination local date, and required destination local start.",
-          "Do not choose or emit a Calendar ID, event ID, ETag, end time, duration, effects, execution parameters, approval, or authority.",
+          "Also say whether the person requested a notification to one already-connected family contact and, if so, return only the human alias they used.",
+          "Do not choose or emit a Calendar ID, event ID, ETag, end time, duration, recipient address, Telegram ID, chat ID, username, message body, effects, execution order, execution parameters, approval, authority, callback, permit, receipt, or idempotency value.",
           `The connected Calendar's authoritative timezone is ${this.#calendarTimeZone}; resolve dates in that timezone.`,
           `Today's date in that Calendar timezone is ${currentInstallationLocalDate(new Date(), this.#calendarTimeZone)}.`,
           "sourceLocalDateHint identifies the event's current date only when the person actually supplied it; otherwise return null.",
@@ -243,7 +293,7 @@ export class OpenAISolIntentSelector implements CalendarIntentSelector {
           "Resolve a month and day without a year to its next unambiguous occurrence relative to today's local date.",
           "If the event title, target date, or target start time is missing or ambiguous, set needsClarification true and leave the missing target field empty.",
           "Set clarificationReason to none for a complete reschedule; otherwise classify only as missing_event, missing_target_date, missing_target_time, missing_destination, unsupported_action, or ambiguous.",
-          "Cancellation, deletion, invitation, messaging, spending, and every non-reschedule action are unsupported_action.",
+          "A reschedule plus a short deterministic Bander update to one connected family alias is supported. Arbitrary or free-form message content, pronoun-only contacts, multiple contacts, cancellation, deletion, invitations, spending, and every other action are unsupported_action or ambiguous.",
           "You are advisory extraction only. Deterministic Bander code resolves the event and constructs the action.",
         ].join(" "),
         input: agentClaimedRequest,
@@ -288,6 +338,18 @@ function deterministicIntentClarification(intent: CalendarIntent): string {
   if (intent.clarificationReason === "unsupported_action") {
     return "I can safely prepare an eligible Calendar reschedule here, but not that kind of action yet.\nNothing happened.";
   }
+  if (intent.clarificationReason === "missing_contact") {
+    return "Which connected family contact should I notify?\nNothing happened.";
+  }
+  if (intent.clarificationReason === "ambiguous_contact") {
+    return "Which connected family contact did you mean?\nNothing happened.";
+  }
+  if (intent.clarificationReason === "unpaired_contact") {
+    return "That person isn’t connected to Bander yet.\nNothing happened.";
+  }
+  if (intent.clarificationReason === "free_form_message_unsupported") {
+    return "I can include Bander’s exact appointment update, but I can’t send a custom message.\nNothing happened.";
+  }
   if (!intent.targetLocalDate && !intent.targetLocalStart) {
     return `What date and time should I move “${title}” to?\nNothing happened.`;
   }
@@ -319,10 +381,12 @@ export function createRealCalendarDraftCompiler(input: {
   apiKey: string;
   calendar: RealCalendarResolver;
   calendarTimeZone: string;
+  familyContacts?: FamilyContactResolver;
 }): DraftCompiler {
   return new RealCalendarDraftCompiler(
     input.calendar,
     new OpenAISolIntentSelector(input.apiKey, input.calendarTimeZone),
+    input.familyContacts,
   );
 }
 

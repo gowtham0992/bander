@@ -85,6 +85,7 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
               ? [
                   "Tell you what is coming up on the connected primary Calendar",
                   "Prepare one bounded owner-only Calendar reschedule for human review",
+                  "Prepare one Calendar reschedule plus one deterministic update to the connected family contact on the same human review",
                   "Read only the minimal status of a previously proposed action",
                 ]
               : [
@@ -104,7 +105,7 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
                   ),
             executionBoundary:
               realMode
-                ? "OpenClaw can propose but cannot approve or execute. The person must approve the exact Calendar change on Bander."
+                ? "OpenClaw can propose but cannot approve or execute. The person must approve the exact Calendar change and any exact family update on Bander."
                 : "OpenClaw cannot approve authority. Eligible execution can occur only inside a standing Band the person previously approved.",
           }),
         },
@@ -182,7 +183,7 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
       title: "Propose an action through Bander",
       description:
         realMode
-          ? "Pass the person's natural Calendar request verbatim. Bander can only prepare a one-time human review; OpenClaw cannot approve or execute it."
+          ? "Pass the person's natural Calendar request verbatim. Bander can prepare one Calendar reschedule, optionally with one deterministic update to the connected family contact, for one-time human review; OpenClaw cannot choose routing, author the update, approve, or execute it."
           : "Pass the person's natural request verbatim. Bander either creates a human review Card or, when the request fits an existing standing Band, executes only within that pre-approved authority. Reuse the same requestId when recovering an ambiguous standing result.",
       inputSchema: {
         request: z

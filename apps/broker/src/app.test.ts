@@ -130,7 +130,7 @@ describe("broker approval boundary", () => {
     expect(setup.adapter.executions).toBe(0);
   });
 
-  it("advertises no Messages, fixtures or standing authority in real MCP mode", async () => {
+  it("advertises the bounded family update without routing details in real MCP mode", async () => {
     const setup = createApp();
     const server = createBanderMcpServer({
       engine: setup.engine,
@@ -175,7 +175,8 @@ describe("broker approval boundary", () => {
       expect(text).not.toContain("Messages");
       expect(text).not.toContain("standing");
       expect(text).not.toContain(fixture.claimedUserRequest);
-      expect(text).not.toMatch(/family|contact|alias|telegram|chat id|user id/i);
+      expect(text).toContain("deterministic update");
+      expect(text).not.toMatch(/alias|telegram|chat id|user id|contactId|pairing/i);
     } finally {
       await client.close();
       await server.close();
@@ -532,6 +533,65 @@ describe("broker approval boundary", () => {
       expect(statusText).not.toContain("Nothing changed");
       expect(statusText).not.toContain("OpenClaw again");
       expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("openclaw_receives_no_card_notification_or_contact_details", async () => {
+    const setup = createApp();
+    const compound: DraftFixture = {
+      id: "compound-private",
+      claimedUserRequest: "Move dinner and let my son know.",
+      calendar: {
+        eventId: "event-dinner-sarah",
+        expectedEtag: "event-dinner-sarah-r1",
+        newStartTime: "2026-07-15T01:30:00.000Z",
+      },
+      familyNotification: {
+        installationId: "installation-opaque",
+        contactId: "contact-opaque",
+        pairingRevision: "c".repeat(64),
+        displayLabel: "Gil",
+        document: {
+          kind: "calendar_transition",
+          eventTitle: "Dinner with Sarah",
+          newStartTime: "2026-07-15T01:30:00.000Z",
+          newEndTime: "2026-07-15T03:00:00.000Z",
+          timeZone: "America/Denver",
+        },
+      },
+    };
+    let humanCard: unknown;
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: new Map(),
+      runtimeMode: "real",
+      agentCompiler: { compile: async () => structuredClone(compound) },
+      deliverAgentProposal: async (card) => { humanCard = card; },
+      readSchedule: async () => ({
+        requestedRange: { startLocalDate: "2026-07-18", endLocalDateExclusive: "2026-07-19" },
+        timeZone: "America/Denver",
+        events: [],
+        empty: true,
+        truncated: false,
+        maxEvents: 50,
+      }),
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "compound-privacy", version: "1" });
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: { request: compound.claimedUserRequest },
+      });
+      const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "";
+      expect(JSON.parse(text)).toMatchObject({ status: "proposed" });
+      expect(text).not.toMatch(/Gil|son|Bander update|Dinner|contact|pairing|Calendar/i);
+      expect(JSON.stringify(humanCard)).toContain("Gil");
     } finally {
       await client.close();
       await server.close();

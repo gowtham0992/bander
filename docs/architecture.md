@@ -46,12 +46,14 @@ Real mode uses a separate strict Structured Output call with exact model ID `gpt
 
 - event-title hint;
 - optional source-local-date hint;
-- required target local date; and
-- required target local start.
+- required target local date;
+- required target local start;
+- whether a paired-family update was requested; and
+- the human alias used for that contact.
 
 If no source date is supplied, deterministic code searches a bounded upcoming 31-day window and requires exactly one eligible normalized title match. Date resolution uses the configured connected-Calendar timezone; the selected authoritative event supplies the complete interval and timezone.
 
-The model cannot select the Calendar ID, event ID, ETag, final end, effects, authority, or execution parameters. Invalid, missing, ambiguous, broadened, or malformed output fails closed. Clarification text is deterministically mapped and delivered by Bander; model-authored Calendar details do not cross the MCP boundary.
+The model cannot select a recipient address, Telegram identifier, notification body, Calendar ID, event ID, ETag, final end, effects, authority, or execution parameters. Bander resolves an alias only against the one active, operator-configured contact and constructs the notification from the authoritative Calendar transition. Invalid, missing, ambiguous, broadened, or malformed output fails closed. Clarification text is deterministically mapped and delivered by Bander; model-authored Calendar details do not cross the MCP boundary.
 
 ## ADR-005: Authority binds approval to one immutable action
 
@@ -68,6 +70,14 @@ Internally, Bander uses Draft → Card → Band → Permit → Receipt:
 Every execution shape has one idempotent downstream operation identity. Bander records dispatch before the call. A retry with the same Draft hash reuses existing authority and reconciles the operation; it does not mint another Band or Permit. A different hash, terminal decline, conflict, revocation, or expired-undispatched Permit fails closed.
 
 The sandbox mock service can truthfully reconcile an operation after a lost response. The current real Google adapter uses observed Google state and ETag behavior; it does not overclaim that Bander caused a state merely because the state matches.
+
+For a compound deal, the immutable Draft contains both the complete Calendar
+transition and the exact opaque family-contact pairing revision plus canonical
+notification document. The Card and delivery use the same renderer. Execution
+is deliberately ordered: validate and conditionally update Calendar first,
+then attempt the bound family update. This is not an atomic distributed
+transaction. The human outcome is built from observed effect results and can
+truthfully report Calendar success with ambiguous or absent family delivery.
 
 ## ADR-006: Telegram is a separate human authority surface
 
@@ -119,8 +129,9 @@ Either the contact's private `/disconnect` or the owner's Bander-owned group
 control revokes the relationship idempotently. Revocation removes the raw
 Telegram destination and invalidates pending links, retaining only opaque audit
 hashes needed to recognize replay. Startup removes any stale local link file.
-This relationship itself delivers no Calendar facts, Cards, Receipts, or
-compound actions. Delivery is governed by the separate boundary below.
+Pairing by itself delivers no Calendar facts, Cards, outcomes, or action
+authority. A later approved compound deal may use the exact bound route under
+the separate delivery boundary below.
 
 ## ADR-013: Family notification delivery is durable but not exactly once
 
@@ -147,6 +158,16 @@ response stores Telegram's message ID privately and yields `delivered`. A lost,
 failed, or restart-interrupted response becomes permanently `ambiguous`; replay
 does not send again and must not claim the contact was notified. Telegram's
 confirmed acceptance is not proof that the human read the message.
+
+Compound execution derives one stable family-delivery request ID from the
+approved Draft and internal Permit. Approval replay therefore returns the same
+observed outcome without another Calendar patch or Telegram attempt. The exact
+contact pairing is bound when the proposal is created; a revoked or replacement
+contact makes the family effect `not_sent` and is never substituted. Calendar
+conflict or failure occurs before the message boundary and produces zero family
+attempts. If a Google write response is ambiguous, Bander rereads the exact
+event and proceeds only when the authoritative event is observed at the exact
+approved target; that observation does not prove who caused the change.
 
 ## ADR-008: Standing autonomy remains sandbox-only in the current product claim
 

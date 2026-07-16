@@ -102,7 +102,29 @@ export interface MessageSendEffect {
   body: string;
 }
 
-export type DraftEffect = CalendarRescheduleEffect | MessageSendEffect;
+export interface FamilyNotificationDocument {
+  kind: "calendar_transition";
+  eventTitle: string;
+  newStartTime: string;
+  newEndTime: string;
+  timeZone: string;
+}
+
+export interface FamilyTelegramNotificationEffect {
+  type: "family.telegram_notification";
+  binding: {
+    installationId: string;
+    contactId: string;
+    pairingRevision: string;
+    displayLabel: string;
+  };
+  document: FamilyNotificationDocument;
+}
+
+export type DraftEffect =
+  | CalendarRescheduleEffect
+  | MessageSendEffect
+  | FamilyTelegramNotificationEffect;
 
 export interface DraftDocument {
   version: 1;
@@ -158,6 +180,11 @@ export type ApprovalEffectPreview =
     }
   | {
       kind: "messages.send";
+      recipientDisplayName: string;
+      body: string;
+    }
+  | {
+      kind: "family.telegram_notification";
       recipientDisplayName: string;
       body: string;
     };
@@ -268,12 +295,32 @@ export interface HumanReceipt {
     previous: { startTime: string; endTime: string };
     completed: { startTime: string; endTime: string };
     timeZone: string;
+    executionStatus?: "committed" | "observed_target";
   };
   message?: {
     recipientDisplayName: string;
     body: string;
   };
+  familyNotification?: {
+    recipientDisplayName: string;
+    status: "delivered" | "ambiguous" | "not_sent";
+    body: string;
+  };
   completedAt: string;
+}
+
+export interface ObservedExecutionResult {
+  calendar: {
+    status: "committed" | "observed_target";
+    completed: {
+      startTime: string;
+      endTime: string;
+      timeZone: string;
+    };
+  };
+  familyNotification?: {
+    status: "delivered" | "ambiguous" | "not_sent";
+  };
 }
 
 export interface AgentReceipt {

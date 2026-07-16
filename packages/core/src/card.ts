@@ -2,8 +2,11 @@ import type {
   ApprovalCard,
   CalendarRescheduleEffect,
   DraftDocument,
+  FamilyNotificationDocument,
+  FamilyTelegramNotificationEffect,
   HumanReceipt,
   MessageSendEffect,
+  ObservedExecutionResult,
   StandingBandCard,
   StandingBandCandidate,
 } from "@bander/contracts";
@@ -79,18 +82,78 @@ function messageLine(effect: MessageSendEffect): string {
   return `send one message to ${effect.expected.displayName}: “${effect.body}”`;
 }
 
+export function renderFamilyNotificationDocument(
+  document: FamilyNotificationDocument,
+): string {
+  return [
+    "Bander update",
+    `“${document.eventTitle}” is now ${formatCalendarIntervalWithContext(
+      document.newStartTime,
+      document.newEndTime,
+      document.timeZone,
+    )}.`,
+    "This update was sent by Bander at the owner’s request.",
+  ].join("\n");
+}
+
+export function sanitizeFamilyNotificationTitle(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+export function createFamilyNotificationDocument(input: {
+  eventTitle: string;
+  newStartTime: string;
+  newEndTime: string;
+  timeZone: string;
+}): FamilyNotificationDocument {
+  const document: FamilyNotificationDocument = {
+    kind: "calendar_transition",
+    eventTitle: sanitizeFamilyNotificationTitle(input.eventTitle),
+    newStartTime: new Date(input.newStartTime).toISOString(),
+    newEndTime: new Date(input.newEndTime).toISOString(),
+    timeZone: input.timeZone,
+  };
+  if (
+    !document.eventTitle ||
+    !Number.isFinite(Date.parse(document.newStartTime)) ||
+    !Number.isFinite(Date.parse(document.newEndTime)) ||
+    Date.parse(document.newEndTime) <= Date.parse(document.newStartTime)
+  ) {
+    throw new Error("Invalid family notification document");
+  }
+  new Intl.DateTimeFormat("en-US", { timeZone: document.timeZone }).format(
+    new Date(document.newStartTime),
+  );
+  return document;
+}
+
+function familyNotificationLine(effect: FamilyTelegramNotificationEffect): string {
+  return `send one Bander update to ${effect.binding.displayLabel}: “${renderFamilyNotificationDocument(effect.document)}”`;
+}
+
 export function renderApprovalCard(
   draftId: string,
   draftHash: string,
   document: DraftDocument,
 ): ApprovalCard {
-  const allows = document.effects.map((effect) =>
-    effect.type === "calendar.reschedule_event" ? calendarLine(effect) : messageLine(effect),
-  );
+  const allows = document.effects.map((effect) => {
+    if (effect.type === "calendar.reschedule_event") return calendarLine(effect);
+    if (effect.type === "messages.send") return messageLine(effect);
+    return familyNotificationLine(effect);
+  });
   const connections = [
     ...new Set(
       document.effects.map((effect) =>
-        effect.type === "calendar.reschedule_event" ? "Calendar" : "Messages",
+        effect.type === "calendar.reschedule_event"
+          ? "Calendar"
+          : effect.type === "messages.send"
+            ? "Messages"
+            : "Family Telegram",
       ),
     ),
   ];
@@ -118,11 +181,17 @@ export function renderApprovalCard(
             ),
           };
         })()
-      : {
+      : effect.type === "messages.send"
+        ? {
           kind: effect.type,
           recipientDisplayName: effect.expected.displayName,
           body: effect.body,
-        },
+        }
+        : {
+            kind: effect.type,
+            recipientDisplayName: effect.binding.displayLabel,
+            body: renderFamilyNotificationDocument(effect.document),
+          },
   );
 
   return {
@@ -146,6 +215,7 @@ export function renderHumanReceipt(
   draftId: string,
   document: DraftDocument,
   completedAt: string,
+  observed?: ObservedExecutionResult,
 ): HumanReceipt {
   const calendar = document.effects.find(
     (effect): effect is CalendarRescheduleEffect =>
@@ -154,16 +224,31 @@ export function renderHumanReceipt(
   const message = document.effects.find(
     (effect): effect is MessageSendEffect => effect.type === "messages.send",
   );
+  const familyNotification = document.effects.find(
+    (effect): effect is FamilyTelegramNotificationEffect =>
+      effect.type === "family.telegram_notification",
+  );
   if (!calendar) throw new Error("Draft cannot be rendered as a receipt");
+  const completed = observed?.calendar.completed ?? {
+    startTime: calendar.changes.startTime,
+    endTime: calendar.changes.endTime,
+    timeZone: calendar.expected.timeZone,
+  };
 
   return {
     id,
     draftId,
     title: "Done",
-    summary: `Completed as agreed: “${calendar.expected.title}” moved from ${formatInterval(calendar.expected.startTime, calendar.expected.endTime, calendar.expected.timeZone)} to ${formatInterval(calendar.changes.startTime, calendar.changes.endTime, calendar.expected.timeZone)}.`,
-    detail: message
-      ? `${message.expected.displayName.split(" ")[0]} was notified.`
-      : "No messages were sent.",
+    summary: `Completed as agreed: “${calendar.expected.title}” moved from ${formatInterval(calendar.expected.startTime, calendar.expected.endTime, calendar.expected.timeZone)} to ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`,
+    detail: familyNotification
+      ? observed?.familyNotification?.status === "delivered"
+        ? `The approved update was sent to ${familyNotification.binding.displayLabel}.`
+        : observed?.familyNotification?.status === "ambiguous"
+          ? `The Calendar moved, but Bander could not confirm whether ${familyNotification.binding.displayLabel} received the update and will not send it again automatically.`
+          : `The Calendar moved, but ${familyNotification.binding.displayLabel} was no longer connected and no family update was sent.`
+      : message
+        ? `${message.expected.displayName.split(" ")[0]} was notified.`
+        : "No messages were sent.",
     calendar: {
       title: calendar.expected.title,
       previous: {
@@ -171,16 +256,28 @@ export function renderHumanReceipt(
         endTime: calendar.expected.endTime,
       },
       completed: {
-        startTime: calendar.changes.startTime,
-        endTime: calendar.changes.endTime,
+        startTime: completed.startTime,
+        endTime: completed.endTime,
       },
       timeZone: calendar.expected.timeZone,
+      ...(observed?.calendar.status
+        ? { executionStatus: observed.calendar.status }
+        : {}),
     },
     ...(message
       ? {
           message: {
             recipientDisplayName: message.expected.displayName,
             body: message.body,
+          },
+        }
+      : {}),
+    ...(familyNotification
+      ? {
+          familyNotification: {
+            recipientDisplayName: familyNotification.binding.displayLabel,
+            status: observed?.familyNotification?.status ?? "not_sent",
+            body: renderFamilyNotificationDocument(familyNotification.document),
           },
         }
       : {}),

@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
-import { formatCalendarIntervalWithContext } from "@bander/core";
+import { renderFamilyNotificationDocument } from "@bander/core";
+import type {
+  FamilyNotificationDocument,
+  FamilyTelegramNotificationEffect,
+} from "@bander/contracts";
 import type { ActiveFamilyContact } from "./family-contact.js";
 
-export type FamilyNotificationDocument = {
-  kind: "calendar_transition";
-  eventTitle: string;
-  newStartTime: string;
-  newEndTime: string;
-  timeZone: string;
-};
+export type { FamilyNotificationDocument } from "@bander/contracts";
 
 export type FamilyNotificationOperation = {
   requestId: string;
@@ -17,7 +15,7 @@ export type FamilyNotificationOperation = {
   pairingRevision: string;
   contentDigest: string;
   document: FamilyNotificationDocument;
-  status: "prepared" | "dispatching" | "delivered" | "ambiguous";
+  status: "prepared" | "dispatching" | "delivered" | "ambiguous" | "not_sent";
   createdAt: string;
   dispatchStartedAt?: string;
   deliveredAt?: string;
@@ -55,8 +53,21 @@ export function parseFamilyNotificationDocument(value: unknown): FamilyNotificat
 export function notificationDigest(document: FamilyNotificationDocument): string { return digest(JSON.stringify(document)); }
 export function pairingRevision(contact: ActiveFamilyContact): string { return digest(JSON.stringify([contact.installationId, contact.contactId, contact.pairedAt, contact.telegramUserId, contact.privateChatId])); }
 export function renderFamilyNotification(document: FamilyNotificationDocument): string {
-  return ["Bander update", `“${document.eventTitle}” is now ${formatCalendarIntervalWithContext(document.newStartTime, document.newEndTime, document.timeZone)}.`, "This update was sent by Bander at the owner’s request."].join("\n");
+  return renderFamilyNotificationDocument(document);
 }
-export function deliveryResult(operation: FamilyNotificationOperation): { status: "delivered" | "ambiguous" } {
-  return { status: operation.status === "delivered" ? "delivered" : "ambiguous" };
+export function deliveryResult(operation: FamilyNotificationOperation): { status: "delivered" | "ambiguous" | "not_sent" } {
+  return {
+    status:
+      operation.status === "delivered"
+        ? "delivered"
+        : operation.status === "not_sent"
+          ? "not_sent"
+          : "ambiguous",
+  };
+}
+export function sameFamilyBinding(
+  operation: Pick<FamilyNotificationOperation, "installationId" | "contactId" | "pairingRevision">,
+  binding: FamilyTelegramNotificationEffect["binding"],
+): boolean {
+  return operation.installationId === binding.installationId && operation.contactId === binding.contactId && operation.pairingRevision === binding.pairingRevision;
 }

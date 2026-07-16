@@ -6,8 +6,10 @@ import type {
   CalendarEvent,
   DraftDocument,
   DraftEffect,
+  FamilyNotificationDocument,
   HumanReceipt,
   OneTimeBand,
+  ObservedExecutionResult,
   Permit,
   Person,
   StandingBand,
@@ -20,6 +22,7 @@ import type {
 import { hashCanonical, hashDraft } from "./canonical.js";
 import {
   renderApprovalCard,
+  createFamilyNotificationDocument,
   renderHumanReceipt,
   renderStandingBandCard,
 } from "./card.js";
@@ -39,6 +42,13 @@ export interface DraftFixture {
     expectedRecipientRevision: number;
     body: string;
   };
+  familyNotification?: {
+    installationId: string;
+    contactId: string;
+    pairingRevision: string;
+    displayLabel: string;
+    document: FamilyNotificationDocument;
+  };
 }
 
 export interface ExecutionAdapter {
@@ -48,16 +58,23 @@ export interface ExecutionAdapter {
     draftHash: string;
     permitNonce: string;
     document: DraftDocument;
-  }): Promise<void>;
+  }): Promise<void | ObservedExecutionResult>;
   getExecution(input: {
     draftHash: string;
     permitNonce: string;
-  }): Promise<boolean>;
+    document: DraftDocument;
+  }): Promise<boolean | ObservedExecutionResult>;
 }
 
 export class ExecutionConflictError extends Error {
   constructor() {
     super("A downstream resource changed");
+  }
+}
+
+export class ExecutionAmbiguousError extends Error {
+  constructor() {
+    super("The downstream result could not be confirmed");
   }
 }
 
@@ -858,6 +875,51 @@ export class AuthorityEngine {
         body: fixture.message.body,
       });
     }
+    if (fixture.familyNotification) {
+      const binding = fixture.familyNotification;
+      if (
+        !/^[A-Za-z0-9_-]{8,100}$/.test(binding.installationId) ||
+        !/^[A-Za-z0-9_-]{8,100}$/.test(binding.contactId) ||
+        !/^[a-f0-9]{64}$/.test(binding.pairingRevision) ||
+        !binding.displayLabel.trim()
+      ) {
+        throw new AuthorityError(
+          "invalid_family_contact_binding",
+          "The family contact binding is invalid",
+          422,
+        );
+      }
+      const canonicalDocument = createFamilyNotificationDocument({
+        eventTitle: event.title,
+        newStartTime: fixture.calendar.newStartTime,
+        newEndTime: deriveRescheduledEnd(
+          event.startTime,
+          event.endTime,
+          fixture.calendar.newStartTime,
+        ),
+        timeZone: event.timeZone,
+      });
+      if (
+        hashCanonical(canonicalDocument) !==
+        hashCanonical(fixture.familyNotification.document)
+      ) {
+        throw new AuthorityError(
+          "family_notification_mismatch",
+          "The family notification does not match the Calendar transition",
+          422,
+        );
+      }
+      effects.push({
+        type: "family.telegram_notification",
+        binding: {
+          installationId: fixture.familyNotification.installationId,
+          contactId: fixture.familyNotification.contactId,
+          pairingRevision: fixture.familyNotification.pairingRevision,
+          displayLabel: fixture.familyNotification.displayLabel,
+        },
+        document: canonicalDocument,
+      });
+    }
 
     const createdAt = this.#now();
     const document: DraftDocument = {
@@ -952,9 +1014,15 @@ export class AuthorityEngine {
       const committed = await this.#adapter.getExecution({
         draftHash: permit.draftHash,
         permitNonce: permit.nonce,
+        document: draft.document,
       });
       if (committed) {
-        return this.#completeExecution(permit, band, draft);
+        return this.#completeExecution(
+          permit,
+          band,
+          draft,
+          typeof committed === "boolean" ? undefined : committed,
+        );
       }
     }
     if (new Date(permit.expiresAt).getTime() <= this.#now().getTime()) {
@@ -985,11 +1053,12 @@ export class AuthorityEngine {
         permit = { ...permit, dispatchedAt: this.#now().toISOString() };
         this.#store.updatePermit(permit);
       }
-      await this.#adapter.executeDraft({
+      const observed = await this.#adapter.executeDraft({
         draftHash: draft.hash,
         permitNonce: permit.nonce,
         document: draft.document,
       });
+      return this.#completeExecution(permit, band, draft, observed ?? undefined);
     } catch (error) {
       if (error instanceof ExecutionConflictError) {
         const completedAt = this.#now().toISOString();
@@ -1004,23 +1073,60 @@ export class AuthorityEngine {
           409,
         );
       }
+      if (error instanceof ExecutionAmbiguousError) {
+        const completedAt = this.#now().toISOString();
+        this.#store.updatePermit({ ...permit, consumedAt: completedAt });
+        if (band.mode === "one_time") {
+          this.#store.updateBand({ ...band, status: "consumed" });
+        }
+        this.#store.updateDraft({ ...draft, status: "conflict" });
+        throw new AuthorityError(
+          "calendar_outcome_ambiguous",
+          "Bander could not confirm the Calendar result and did not notify anyone.",
+          409,
+        );
+      }
       throw error;
     }
 
-    return this.#completeExecution(permit, band, draft);
   }
 
   #completeExecution(
     permit: Permit,
     band: Band,
     draft: StoredDraft,
+    observed?: ObservedExecutionResult,
   ): HumanReceipt {
+    const calendar = draft.document.effects.find(
+      (effect) => effect.type === "calendar.reschedule_event",
+    );
+    const family = draft.document.effects.find(
+      (effect) => effect.type === "family.telegram_notification",
+    );
+    if (
+      !calendar ||
+      (observed &&
+        (Date.parse(observed.calendar.completed.startTime) !==
+          Date.parse(calendar.changes.startTime) ||
+          Date.parse(observed.calendar.completed.endTime) !==
+            Date.parse(calendar.changes.endTime) ||
+          observed.calendar.completed.timeZone !== calendar.expected.timeZone)) ||
+      (family && !observed?.familyNotification) ||
+      (!family && observed?.familyNotification)
+    ) {
+      throw new AuthorityError(
+        "invalid_execution_observation",
+        "The observed execution does not match the approved deal",
+        409,
+      );
+    }
     const completedAt = this.#now().toISOString();
     const receipt = renderHumanReceipt(
       `receipt_${this.#id()}`,
       draft.id,
       draft.document,
       completedAt,
+      observed,
     );
     this.#store.saveReceipt(receipt);
     this.#store.updatePermit({

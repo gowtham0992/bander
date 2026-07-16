@@ -1,9 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import path from "node:path";
 import type {
   AgentReceipt,
   ApprovalCard,
+  FamilyTelegramNotificationEffect,
   HumanReceipt,
   StandingBandCard,
 } from "@bander/contracts";
@@ -35,6 +37,7 @@ import {
   pairingRevision,
   parseFamilyNotificationDocument,
   renderFamilyNotification,
+  sameFamilyBinding,
   type FamilyNotificationDocument,
   type FamilyNotificationOperation,
 } from "./family-notification.js";
@@ -422,10 +425,15 @@ function cardText(
         `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
       ];
     }
-    return [
-      `• Send ${firstName(effect.recipientDisplayName)}:`,
-      `“${safeDisplayText(effect.body)}”`,
-    ];
+    return effect.kind === "family.telegram_notification"
+      ? [
+          `• Send ${firstName(effect.recipientDisplayName)}:`,
+          `“${safeMultilineDisplayText(effect.body)}”`,
+        ]
+      : [
+          `• Send ${firstName(effect.recipientDisplayName)}:`,
+          `“${safeDisplayText(effect.body)}”`,
+        ];
   });
   const minutes = Math.max(
     1,
@@ -445,10 +453,15 @@ function cardText(
           `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
         ];
       }
-      return [
-        `💬 Send ${firstName(effect.recipientDisplayName)}:`,
-        `“${safeDisplayText(effect.body)}”`,
-      ];
+      return effect.kind === "family.telegram_notification"
+        ? [
+            `💬 Send ${firstName(effect.recipientDisplayName)}:`,
+            `“${safeMultilineDisplayText(effect.body)}”`,
+          ]
+        : [
+            `💬 Send ${firstName(effect.recipientDisplayName)}:`,
+            `“${safeDisplayText(effect.body)}”`,
+          ];
     });
     return [
       "Ready to approve?",
@@ -469,10 +482,9 @@ function cardText(
     "Through Bander, this will:",
     ...effects,
     "",
-    "Not included:",
-    mode === "real"
-      ? "• Any other calendar events or actions"
-      : "• Any other events, messages or payments",
+    ...(mode === "real"
+      ? ["Nothing else will change."]
+      : ["Not included:", "• Any other events, messages or payments"]),
     "",
     `Closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
   ].join("\n");
@@ -513,6 +525,47 @@ function receiptText(
         : ["No one was messaged."]),
     ].join("\n");
   }
+  if (receipt.familyNotification) {
+    if (receipt.familyNotification.status === "ambiguous") {
+      return [
+        "Calendar updated ✓",
+        `“${safeDisplayText(receipt.calendar.title)}” is now ${formatCalendarIntervalWithContext(
+          receipt.calendar.completed.startTime,
+          receipt.calendar.completed.endTime,
+          receipt.calendar.timeZone,
+        )}.`,
+        `I couldn’t confirm whether ${firstName(receipt.familyNotification.recipientDisplayName)} received the update, so I won’t send it again automatically.`,
+      ].join("\n");
+    }
+    if (receipt.familyNotification.status === "not_sent") {
+      return [
+        "Calendar updated ✓",
+        `“${safeDisplayText(receipt.calendar.title)}” is now ${formatCalendarIntervalWithContext(
+          receipt.calendar.completed.startTime,
+          receipt.calendar.completed.endTime,
+          receipt.calendar.timeZone,
+        )}.`,
+        `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected, so no family update was sent.`,
+      ].join("\n");
+    }
+    return [
+      receipt.calendar.executionStatus === "observed_target"
+        ? "Calendar confirmed at the approved time ✓"
+        : "Done ✓",
+      `“${safeDisplayText(receipt.calendar.title)}”`,
+      `${formatCalendarIntervalWithContext(
+        receipt.calendar.previous.startTime,
+        receipt.calendar.previous.endTime,
+        receipt.calendar.timeZone,
+      )} → ${formatCalendarIntervalWithContext(
+        receipt.calendar.completed.startTime,
+        receipt.calendar.completed.endTime,
+        receipt.calendar.timeZone,
+      )}`,
+      `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
+      "Nothing else changed through Bander.",
+    ].join("\n");
+  }
   return [
     "Done ✓",
     `“${safeDisplayText(receipt.calendar.title)}”`,
@@ -547,6 +600,16 @@ function safeDisplayText(value: string): string {
     .trim();
 }
 
+function safeMultilineDisplayText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => safeDisplayText(line))
+    .join("\n")
+    .trim();
+}
+
 function firstName(value: string): string {
   return safeDisplayText(value).split(" ")[0] ?? "them";
 }
@@ -569,9 +632,14 @@ function refusalText(
     ].join("\n");
   }
   if (mode === "real") {
+    const includesFamily = card.effectPreviews.some(
+      (effect) => effect.kind === "family.telegram_notification",
+    );
     return [
       "I stopped—your calendar changed since you asked.",
-      "Nothing was moved.",
+      includesFamily
+        ? "Nothing was moved, and no family update was sent."
+        : "Nothing was moved.",
       "Ask OpenClaw to check again.",
     ].join("\n");
   }
@@ -657,6 +725,7 @@ export class TelegramService {
   readonly #mode: TelegramCopyMode;
   readonly #familyPairingPath: string | undefined;
   readonly #stateLock = new KeyedLock();
+  readonly #stateLockContext = new AsyncLocalStorage<boolean>();
   readonly #callbackLock = new KeyedLock();
   readonly #standingRequestLock = new KeyedLock();
   #running = false;
@@ -775,6 +844,31 @@ export class TelegramService {
       : { status: "not_connected" };
   }
 
+  resolveFamilyContactAlias(
+    alias: string,
+  ): FamilyTelegramNotificationEffect["binding"] | undefined {
+    const normalized = safeDisplayText(alias).toLocaleLowerCase("en-US");
+    const state = this.#store.read();
+    const installation = state.installation;
+    const contact = state.familyContact;
+    if (
+      !normalized ||
+      !installation ||
+      !contact ||
+      contact.status !== "active" ||
+      contact.installationId !== installation.id ||
+      !contact.aliases.includes(normalized)
+    ) {
+      return undefined;
+    }
+    return {
+      installationId: contact.installationId,
+      contactId: contact.contactId,
+      pairingRevision: pairingRevision(contact),
+      displayLabel: contact.displayLabel,
+    };
+  }
+
   async prepareForStart(): Promise<void> {
     await this.#stateLock.run("telegram-state", async () => {
       const state = this.#store.read();
@@ -823,42 +917,76 @@ export class TelegramService {
     });
   }
 
-  async deliverFamilyNotification(input: { requestId: string; document: unknown }): Promise<{ status: "delivered" | "ambiguous" }> {
+  async deliverFamilyNotification(input: { requestId: string; document: unknown }): Promise<{ status: "delivered" | "ambiguous" | "not_sent" }> {
     return this.#stateLock.run("telegram-state", async () => {
-      if (!/^[A-Za-z0-9_-]{8,100}$/.test(input.requestId)) throw new FamilyContactError("invalid_delivery_request", "A valid delivery request ID is required");
-      const document = parseFamilyNotificationDocument(input.document);
-      const digest = notificationDigest(document);
       const state = this.#store.read();
-      state.familyNotifications ??= [];
-      const existing = state.familyNotifications.find((item) => item.requestId === input.requestId);
-      if (existing) {
-        if (existing.contentDigest !== digest) throw new FamilyContactError("delivery_request_content_mismatch", "This delivery request ID has different content");
-        if (existing.status === "dispatching") { existing.status = "ambiguous"; existing.ambiguousAt = this.#now().toISOString(); this.#store.write(state); }
-        return deliveryResult(existing);
-      }
       const installation = state.installation;
       const contact = state.familyContact;
       if (!installation || !contact || contact.installationId !== installation.id || contact.status !== "active") throw new FamilyContactError("family_contact_unavailable", "No active family contact is available");
-      const operation: FamilyNotificationOperation = { requestId: input.requestId, installationId: installation.id, contactId: contact.contactId, pairingRevision: pairingRevision(contact), contentDigest: digest, document, status: "prepared", createdAt: this.#now().toISOString() };
-      state.familyNotifications.push(operation);
-      this.#store.write(state);
-      if (!state.familyContact || state.familyContact.contactId !== operation.contactId || pairingRevision(state.familyContact) !== operation.pairingRevision) throw new FamilyContactError("family_contact_changed", "The family contact changed before delivery");
-      operation.status = "dispatching";
-      operation.dispatchStartedAt = this.#now().toISOString();
-      this.#store.write(state);
-      try {
-        const sent = await this.#api.sendMessage(contact.privateChatId, renderFamilyNotification(document));
-        operation.status = "delivered";
-        operation.telegramMessageId = sent.message_id;
-        operation.deliveredAt = this.#now().toISOString();
-        this.#store.write(state);
-      } catch {
-        operation.status = "ambiguous";
-        operation.ambiguousAt = this.#now().toISOString();
-        this.#store.write(state);
-      }
-      return deliveryResult(operation);
+      return this.#deliverBoundFamilyNotificationLocked(state, {
+        ...input,
+        binding: {
+          installationId: contact.installationId,
+          contactId: contact.contactId,
+          pairingRevision: pairingRevision(contact),
+          displayLabel: contact.displayLabel,
+        },
+      });
     });
+  }
+
+  async deliverBoundFamilyNotification(input: {
+    requestId: string;
+    binding: FamilyTelegramNotificationEffect["binding"];
+    document: unknown;
+  }): Promise<{ status: "delivered" | "ambiguous" | "not_sent" }> {
+    if (this.#stateLockContext.getStore() === true) {
+      return this.#deliverBoundFamilyNotificationLocked(this.#store.read(), input);
+    }
+    return this.#stateLock.run("telegram-state", async () =>
+      this.#deliverBoundFamilyNotificationLocked(this.#store.read(), input),
+    );
+  }
+
+  async #deliverBoundFamilyNotificationLocked(
+    state: TelegramServiceState,
+    input: {
+      requestId: string;
+      binding: FamilyTelegramNotificationEffect["binding"];
+      document: unknown;
+    },
+  ): Promise<{ status: "delivered" | "ambiguous" | "not_sent" }> {
+    if (!/^[A-Za-z0-9_-]{8,100}$/.test(input.requestId)) throw new FamilyContactError("invalid_delivery_request", "A valid delivery request ID is required");
+    const document = parseFamilyNotificationDocument(input.document);
+    const digest = notificationDigest(document);
+    state.familyNotifications ??= [];
+    const existing = state.familyNotifications.find((item) => item.requestId === input.requestId);
+    if (existing) {
+      if (existing.contentDigest !== digest || !sameFamilyBinding(existing, input.binding)) throw new FamilyContactError("delivery_request_content_mismatch", "This delivery request ID has different content or contact");
+      if (existing.status === "dispatching") { existing.status = "ambiguous"; existing.ambiguousAt = this.#now().toISOString(); this.#store.write(state); }
+      return deliveryResult(existing);
+    }
+    const contact = state.familyContact;
+    const exactContact = contact && contact.status === "active" && contact.installationId === input.binding.installationId && contact.contactId === input.binding.contactId && pairingRevision(contact) === input.binding.pairingRevision;
+    const operation: FamilyNotificationOperation = { requestId: input.requestId, installationId: input.binding.installationId, contactId: input.binding.contactId, pairingRevision: input.binding.pairingRevision, contentDigest: digest, document, status: exactContact ? "prepared" : "not_sent", createdAt: this.#now().toISOString() };
+    state.familyNotifications.push(operation);
+    this.#store.write(state);
+    if (!exactContact) return deliveryResult(operation);
+    operation.status = "dispatching";
+    operation.dispatchStartedAt = this.#now().toISOString();
+    this.#store.write(state);
+    try {
+      const sent = await this.#api.sendMessage(contact.privateChatId, renderFamilyNotification(document));
+      operation.status = "delivered";
+      operation.telegramMessageId = sent.message_id;
+      operation.deliveredAt = this.#now().toISOString();
+      this.#store.write(state);
+    } catch {
+      operation.status = "ambiguous";
+      operation.ambiguousAt = this.#now().toISOString();
+      this.#store.write(state);
+    }
+    return deliveryResult(operation);
   }
 
   async #protectedGroupStatus(
@@ -1317,11 +1445,13 @@ export class TelegramService {
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
     await this.#stateLock.run("telegram-state", async () => {
-      if (update.message) await this.#handleMessage(update.message);
-      if (update.callback_query) await this.#handleCallback(update.callback_query);
-      const state = this.#store.read();
-      state.nextUpdateId = Math.max(state.nextUpdateId ?? 0, update.update_id + 1);
-      this.#store.write(state);
+      await this.#stateLockContext.run(true, async () => {
+        if (update.message) await this.#handleMessage(update.message);
+        if (update.callback_query) await this.#handleCallback(update.callback_query);
+        const state = this.#store.read();
+        state.nextUpdateId = Math.max(state.nextUpdateId ?? 0, update.update_id + 1);
+        this.#store.write(state);
+      });
     });
   }
 

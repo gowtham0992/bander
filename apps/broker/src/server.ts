@@ -20,6 +20,7 @@ import {
 } from "./google-calendar.js";
 import { loadGoogleCalendarOAuth } from "./google-oauth.js";
 import { MockServiceClient } from "./mock-client.js";
+import { CompoundExecutionAdapter } from "./compound-action.js";
 import {
   OpenAISolReadScheduleIntentSelector,
   ReadScheduleService,
@@ -38,6 +39,8 @@ let mockAdapter: MockServiceClient | undefined;
 let fixtures: Map<string, DraftFixture>;
 let compiler: DraftCompiler | undefined;
 let readScheduleService: ReadScheduleService | undefined;
+let realGoogleAdapter: GoogleCalendarAdapter | undefined;
+let telegramService: TelegramService | undefined;
 
 if (configuration.mode === "real") {
   const auth = await loadGoogleCalendarOAuth({
@@ -47,19 +50,23 @@ if (configuration.mode === "real") {
   const googleAdapter = new GoogleCalendarAdapter(
     createGoogleCalendarBoundary(auth),
   );
+  realGoogleAdapter = googleAdapter;
   const authoritativeTimeZone = await googleAdapter.getAuthoritativeTimeZone();
   if (authoritativeTimeZone !== configuration.calendarTimeZone) {
     throw new Error(
       "BANDER_CALENDAR_TIME_ZONE does not match the connected primary Calendar",
     );
   }
-  adapter = googleAdapter;
-  fixtures = new Map();
-  compiler = createRealCalendarDraftCompiler({
-    apiKey: configuration.openaiApiKey,
+  adapter = new CompoundExecutionAdapter({
     calendar: googleAdapter,
-    calendarTimeZone: configuration.calendarTimeZone,
+    deliver: async (input) => {
+      if (!telegramService) {
+        throw new Error("Real family delivery is not configured");
+      }
+      return telegramService.deliverBoundFamilyNotification(input);
+    },
   });
+  fixtures = new Map();
   readScheduleService = new ReadScheduleService({
     selector: new OpenAISolReadScheduleIntentSelector(configuration.openaiApiKey),
     backend: googleAdapter,
@@ -81,7 +88,7 @@ const telegramToken = configuration.telegramToken;
 const telegramStore = telegramToken
   ? new FileTelegramServiceStore(configuration.telegramStatePath)
   : undefined;
-const telegramService =
+telegramService =
   telegramToken && telegramStore
     ? new TelegramService({
         api: new TelegramHttpApi(telegramToken),
@@ -97,6 +104,19 @@ const telegramService =
           : {}),
       })
     : undefined;
+if (configuration.mode === "real") {
+  if (!telegramService || !realGoogleAdapter) {
+    throw new Error("Real Bander requires its independently paired Telegram service");
+  }
+  compiler = createRealCalendarDraftCompiler({
+    apiKey: configuration.openaiApiKey,
+    calendar: realGoogleAdapter,
+    calendarTimeZone: configuration.calendarTimeZone,
+    familyContacts: {
+      resolve: (alias) => telegramService!.resolveFamilyContactAlias(alias),
+    },
+  });
+}
 const app = buildBrokerApp({
   engine,
   fixtures,
