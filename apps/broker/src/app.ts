@@ -31,9 +31,12 @@ interface BrokerAppOptions {
   activateAgentStandingBand?: (bandId: string) => Promise<void>;
   resetDemo?: () => Promise<void>;
   simulateCalendarChange?: () => Promise<void>;
+  prepareAmbiguousCalendarOutcome?: () => void;
   dropNextStandingRunResponseAfterCompletion?: () => boolean;
   heroMode?: boolean;
   readHeroState?: () => Promise<DemoSandboxState>;
+  readDemoState?: () => Promise<DemoSandboxState>;
+  readDemoSchedule?: () => Promise<ScheduleReadResult>;
   readSchedule?: (
     request: string,
   ) => Promise<
@@ -60,6 +63,16 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     logger: false,
     ajv: { customOptions: { removeAdditional: false } },
   });
+  const ambiguousDemoDrafts = new Set<string>();
+  const ambiguousSandboxOutcome = {
+    status: "calendar_outcome_ambiguous" as const,
+    message: [
+      "I couldn’t confirm whether your calendar changed.",
+      "No family update was sent.",
+      "I won’t try this request again automatically.",
+      "Please check your calendar before asking your assistant again.",
+    ].join("\n"),
+  };
 
   app.get("/api/status", async () => ({
     product: "Bander",
@@ -80,6 +93,12 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     app.get("/api/hero/state", async (_request, reply) => {
       reply.header("cache-control", "no-store");
       return options.readHeroState!();
+    });
+  }
+  if (options.runtimeMode !== "real" && options.readDemoState) {
+    app.get("/api/demo/state", async (_request, reply) => {
+      reply.header("cache-control", "no-store");
+      return options.readDemoState!();
     });
   }
 
@@ -153,6 +172,15 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     },
   );
 
+  app.get("/api/demo/schedule/tomorrow", async (_request, reply) => {
+    if (options.runtimeMode === "real" || !options.readDemoSchedule) {
+      return reply.code(404).send({
+        error: { code: "not_found", message: "API route not found" },
+      });
+    }
+    return options.readDemoSchedule();
+  });
+
   app.post("/api/demo/reset", async (_request, reply) => {
     if (options.runtimeMode === "real") {
       return reply.code(404).send({
@@ -165,12 +193,47 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
       });
     }
     try {
+      ambiguousDemoDrafts.clear();
       await options.resetDemo();
       return reply.code(204).send();
     } catch (error) {
       return sendError(error, reply);
     }
   });
+
+  app.post<{
+    Params: { draftId: string };
+    Body: { draftHash: string };
+  }>(
+    "/api/demo/drafts/:draftId/approve-ambiguous",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["draftHash"],
+          properties: { draftHash: { type: "string", pattern: "^[a-f0-9]{64}$" } },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (options.runtimeMode === "real" || !options.prepareAmbiguousCalendarOutcome) {
+        return reply.code(404).send({ error: { code: "not_found", message: "API route not found" } });
+      }
+      if (ambiguousDemoDrafts.has(request.params.draftId)) return ambiguousSandboxOutcome;
+      options.prepareAmbiguousCalendarOutcome();
+      try {
+        await options.engine.approveAndExecute(request.params.draftId, request.body.draftHash);
+        return reply.code(500).send({ error: { code: "simulation_failed", message: "Ambiguous simulation unexpectedly completed" } });
+      } catch (error) {
+        if (error instanceof AuthorityError && error.code === "calendar_outcome_ambiguous") {
+          ambiguousDemoDrafts.add(request.params.draftId);
+          return ambiguousSandboxOutcome;
+        }
+        return sendError(error, reply);
+      }
+    },
+  );
 
   app.post("/api/demo/standing-band-candidates", async (_request, reply) => {
     if (options.runtimeMode === "real") {

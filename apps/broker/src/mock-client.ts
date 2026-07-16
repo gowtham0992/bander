@@ -4,9 +4,16 @@ import type {
   DemoSandboxState,
   DraftDocument,
   MessageSendEffect,
+  FamilyTelegramNotificationEffect,
+  ObservedExecutionResult,
   Person,
 } from "@bander/contracts";
-import { ExecutionConflictError, type ExecutionAdapter } from "@bander/core";
+import {
+  ExecutionAmbiguousError,
+  ExecutionConflictError,
+  type ExecutionAdapter,
+} from "@bander/core";
+import { renderFamilyNotificationDocument } from "@bander/core";
 
 interface MockServiceClientOptions {
   baseUrl: string;
@@ -18,6 +25,7 @@ export class MockServiceClient implements ExecutionAdapter {
   readonly #baseUrl: string;
   readonly #authorization: string;
   readonly #timeoutMs: number;
+  #ambiguousNextCalendar = false;
 
   constructor(options: MockServiceClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -41,7 +49,7 @@ export class MockServiceClient implements ExecutionAdapter {
     draftHash: string;
     permitNonce: string;
     document: DraftDocument;
-  }): Promise<void> {
+  }): Promise<void | ObservedExecutionResult> {
     const calendar = input.document.effects.find(
       (effect): effect is CalendarRescheduleEffect =>
         effect.type === "calendar.reschedule_event",
@@ -49,12 +57,30 @@ export class MockServiceClient implements ExecutionAdapter {
     const message = input.document.effects.find(
       (effect): effect is MessageSendEffect => effect.type === "messages.send",
     );
+    const family = input.document.effects.find(
+      (effect): effect is FamilyTelegramNotificationEffect =>
+        effect.type === "family.telegram_notification",
+    );
     if (!calendar) {
       throw new Error("Stored Draft does not contain a supported Calendar effect");
     }
 
-    if (input.document.effects.length !== (message ? 2 : 1)) {
+    if (message && family) throw new Error("Stored Draft has conflicting notification effects");
+    if (input.document.effects.length !== (message || family ? 2 : 1)) {
       throw new Error("Stored Draft does not match a supported execution shape");
+    }
+
+    if (this.#ambiguousNextCalendar) {
+      this.#ambiguousNextCalendar = false;
+      await this.#request(`/calendar/events/${encodeURIComponent(calendar.eventId)}`, {
+        method: "PATCH",
+        headers: { "if-match": calendar.expected.etag },
+        body: JSON.stringify({
+          startTime: calendar.changes.startTime,
+          endTime: calendar.changes.endTime,
+        }),
+      });
+      throw new ExecutionAmbiguousError();
     }
 
     await this.#request("/operations/execute", {
@@ -77,8 +103,29 @@ export class MockServiceClient implements ExecutionAdapter {
               },
             }
           : {}),
+        ...(family
+          ? {
+              family: {
+                recipientDisplayName: family.binding.displayLabel,
+                body: renderFamilyNotificationDocument(family.document),
+              },
+            }
+          : {}),
       }),
     });
+    if (family) {
+      return {
+        calendar: {
+          status: "committed",
+          completed: {
+            startTime: calendar.changes.startTime,
+            endTime: calendar.changes.endTime,
+            timeZone: calendar.expected.timeZone,
+          },
+        },
+        familyNotification: { status: "delivered" },
+      };
+    }
   }
 
   async getExecution(input: {
@@ -104,7 +151,12 @@ export class MockServiceClient implements ExecutionAdapter {
   }
 
   async resetDemo(): Promise<void> {
+    this.#ambiguousNextCalendar = false;
     await this.#request("/demo/reset", { method: "POST" });
+  }
+
+  prepareAmbiguousCalendarOutcome(): void {
+    this.#ambiguousNextCalendar = true;
   }
 
   async simulateCalendarChange(eventId: string): Promise<void> {

@@ -5,6 +5,7 @@ import type {
   DemoSandboxState,
   HumanReceipt,
   StandingBandCard,
+  ScheduleReadResult,
 } from "@bander/contracts";
 
 type StandingRunResponse =
@@ -21,8 +22,11 @@ export interface StandingRunInput {
 type Screen =
   | { kind: "welcome" }
   | { kind: "loading"; message: string }
-  | { kind: "card"; card: ApprovalCard; scenario: "exact" | "conflict" }
+  | { kind: "card"; card: ApprovalCard; scenario: "exact" | "conflict" | "compound" | "ambiguous" }
   | { kind: "receipt"; receipt: HumanReceipt }
+  | { kind: "compound-receipt"; receipt: HumanReceipt; state: DemoSandboxState; card: ApprovalCard; replayed: boolean }
+  | { kind: "schedule-read"; result: ScheduleReadResult }
+  | { kind: "ambiguous-outcome"; message: string; card: ApprovalCard }
   | { kind: "standing-card"; card: StandingBandCard }
   | { kind: "standing-receipt"; receipt: HumanReceipt; bandId: string }
   | { kind: "standing-revoked" }
@@ -106,6 +110,62 @@ function Brand() {
       <img src="/bander_mark_transparent.svg" alt="" />
       <span>Bander</span>
     </a>
+  );
+}
+
+const sandboxNotice = "Deterministic sandbox — uses seeded data and does not connect to Google, Telegram, or OpenAI. It exercises the same Bander Card, approval, outcome, and replay rules as the real product.";
+
+function SandboxNotice() {
+  return <p className="sandbox-notice">{sandboxNotice}</p>;
+}
+
+function ScheduleReadView({ result, onBack }: { result: ScheduleReadResult; onBack: () => void }) {
+  const localTime = (value: string) => {
+    const [hours = "0", minutes = "00"] = value.split(":");
+    const hour = Number(hours);
+    return `${hour % 12 || 12}:${minutes} ${hour < 12 ? "AM" : "PM"}`;
+  };
+  return (
+    <main className="result-shell read-result" aria-live="polite">
+      <span className="deal-kicker">Assistant answer · seeded schedule</span>
+      <h1>Here’s tomorrow.</h1>
+      {result.events.length === 0 ? <p>You don’t have anything scheduled tomorrow.</p> : (
+        <ul>{result.events.map((event, index) => (
+          <li key={`${event.title}-${index}`}><strong>“{event.title}”</strong>{event.allDay ? " · All day" : ` · ${localTime(event.start.localTime)}–${localTime(event.end.localTime)}`}</li>
+        ))}</ul>
+      )}
+      <p className="zero-authority-note">No Bander Card appeared. Nothing was approved or changed.</p>
+      <button className="secondary" onClick={onBack}>Back to the sandbox</button>
+    </main>
+  );
+}
+
+function FamilyPhone({ state }: { state: DemoSandboxState }) {
+  return (
+    <aside className="sandbox-phone" aria-label="Gil’s phone sandbox">
+      <span>Gil’s phone — sandbox</span>
+      {state.familyUpdates.length === 0 ? <p>No family update received.</p> : state.familyUpdates.map((update) => (
+        <article key={`${update.sentAt}-${update.body}`}><strong>Bander</strong><pre>{update.body}</pre></article>
+      ))}
+    </aside>
+  );
+}
+
+function CompoundResult({ screen, onReplay, onBack }: { screen: Extract<Screen, { kind: "compound-receipt" }>; onReplay: () => void; onBack: () => void }) {
+  return (
+    <main className="compound-result" aria-live="polite">
+      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>“{screen.receipt.calendar.title}” moved to the approved interval.</p><p>Gil’s phone received the exact text shown on the Card.</p><button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
+      <FamilyPhone state={screen.state} />
+    </main>
+  );
+}
+
+function AmbiguousOutcome({ message, onReplay, onBack }: { message: string; onReplay: () => void; onBack: () => void }) {
+  return (
+    <main className="compound-result" aria-live="polite">
+      <section className="result-shell uncertain-result"><span className="deal-kicker">Deliberately simulated lost response</span><h1>Calendar result unknown.</h1><p className="preserve-lines">{message}</p><p>The sandbox deliberately makes the external result unknowable.</p><button className="secondary" onClick={onReplay}>Replay safely</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
+      <aside className="sandbox-phone"><span>Gil’s phone — sandbox</span><p>No family update received.</p></aside>
+    </main>
   );
 }
 
@@ -263,11 +323,13 @@ export function HeroSandbox() {
 
 function Welcome({
   onStart,
+  onSchedule,
   onStanding,
   onCompile,
   status,
 }: {
-  onStart: (scenario: "exact" | "conflict") => void;
+  onStart: (scenario: "exact" | "conflict" | "compound" | "ambiguous") => void;
+  onSchedule: () => void;
   onStanding: () => void;
   onCompile: (request: string) => void;
   status: Status | null;
@@ -275,29 +337,29 @@ function Welcome({
   const [compilerRequest, setCompilerRequest] = useState("");
   return (
     <main className="welcome">
-      <div className="eyebrow">A confidence layer for personal agents</div>
-      <h1>Help without<br />surprises.</h1>
+      <div className="eyebrow">Three everyday Bander lanes</div>
+      <h1>Ask freely.<br />Approve changes.</h1>
       <p className="lede">
         Your agent can prepare useful work. Bander shows you the exact deal and
         carries out only what you approve.
       </p>
-      <section className="request-preview" aria-label="Example agent request">
-        <div className="request-avatar">A</div>
-        <div>
-          <span>Your request</span>
-          <p>“Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.”</p>
-        </div>
+      <section className="lane-grid" aria-label="Main sandbox journeys">
+        <button className="lane-card read-lane" onClick={onSchedule}>
+          <span>ASK</span><strong>What’s on tomorrow?</strong><small>No approval toll for a harmless read.</small>
+        </button>
+        <button className="lane-card compound-lane" onClick={() => onStart("compound")}>
+          <span>CHANGE</span><strong>Move an appointment and let family know</strong><small>One exact Card. One decision.</small>
+        </button>
+        <button className="lane-card uncertain-lane" onClick={() => onStart("ambiguous")}>
+          <span>UNCERTAIN</span><strong>See an unknowable result</strong><small>Bander says only what it can prove.</small>
+        </button>
       </section>
-      <button className="primary welcome-action" onClick={() => onStart("exact")}>
-        See the deal
-        <span aria-hidden="true">→</span>
-      </button>
-      <button className="scenario-link" onClick={() => onStart("conflict")}>
-        Or see what happens when the calendar changes after approval
-      </button>
-      <button className="scenario-link" onClick={onStanding}>
-        See a small routine handled automatically
-      </button>
+      <section className="more-behaviors">
+        <h2>More verified behaviors</h2>
+        <button className="scenario-link" onClick={() => onStart("conflict")}>Changed-world refusal</button>
+        <button className="scenario-link" onClick={() => onStart("exact")}>Approval recovery and replay</button>
+        <button className="scenario-link" onClick={onStanding}>Standing routine sandbox</button>
+      </section>
       {status?.modelCompiler === "available" && (
         <form
           className="compiler-entry"
@@ -365,6 +427,14 @@ export function EffectAllowance({ preview }: { preview: ApprovalEffectPreview })
       </span>
     );
   }
+  if (preview.kind === "family.telegram_notification") {
+    return (
+      <span className="effect-copy message-effect">
+        <span>Send the exact family update to <QuotedData source="Family contact">{preview.recipientDisplayName}</QuotedData></span>
+        <QuotedData source="Bander-rendered update">{preview.body}</QuotedData>
+      </span>
+    );
+  }
   return (
     <span className="effect-copy message-effect">
       <span>
@@ -418,7 +488,7 @@ function DealCard({
         <AgentClaim card={card} />
 
         <section className="allowance">
-          <h2>With this Band, Bander may only:</h2>
+          <h2>Through Bander, this will:</h2>
           <ul>
             {card.effectPreviews.map((preview, index) => (
               <li key={`${preview.kind}-${index}`}>
@@ -430,14 +500,14 @@ function DealCard({
         </section>
 
         <div className="boundary-copy">
-          <p><strong>Not allowed:</strong> {card.notAllowed}</p>
-          <p>{card.boundary}</p>
+          <p><strong>Not included:</strong> Any other calendar events or actions.</p>
+          <p>Nothing else will change in this seeded sandbox.</p>
         </div>
 
         <footer className="deal-meta">
           <div className="connections">
             {card.connections.map((connection) => (
-              <span key={connection}>{connection}</span>
+               <span key={connection}>{connection === "Family Telegram" ? "Family update" : connection}</span>
             ))}
           </div>
           <time dateTime={card.expiresAt}>
@@ -452,7 +522,7 @@ function DealCard({
 
         <div className="actions">
           <button className="primary" onClick={onApprove} disabled={busy}>
-            {busy ? "Completing…" : "Ready"}
+             {busy ? "Completing…" : "Do exactly this"}
           </button>
           <button className="secondary" onClick={onChange} disabled={busy}>Change it</button>
           <button className="quiet" onClick={onDecline} disabled={busy}>Not now</button>
@@ -602,22 +672,30 @@ export function App() {
   useEffect(() => {
     api<Status>("/api/status").then(setStatus).catch(() => setStatus(null));
     const scenario = new URLSearchParams(window.location.search).get("scenario");
-    if (scenario === "exact" || scenario === "conflict") void start(scenario);
+    if (scenario === "exact" || scenario === "conflict" || scenario === "compound" || scenario === "ambiguous") void start(scenario);
     if (scenario === "standing") void startStanding();
   }, []);
 
-  async function start(scenario: "exact" | "conflict") {
+  async function start(scenario: "exact" | "conflict" | "compound" | "ambiguous") {
     setScreen({ kind: "loading", message: "Preparing the exact deal…" });
     try {
       await api("/api/demo/reset", { method: "POST" });
       const card = await api<ApprovalCard>("/api/demo/proposals", {
         method: "POST",
-        body: JSON.stringify({ fixtureId: "move-dinner-and-notify-sarah" }),
+        body: JSON.stringify({ fixtureId: scenario === "compound" || scenario === "ambiguous" ? "move-demo-appointment-and-notify-gil" : "move-dinner-and-notify-sarah" }),
       });
       setScreen({ kind: "card", card, scenario });
     } catch (error) {
       setScreen({ kind: "error", message: (error as Error).message });
     }
+  }
+
+  async function readTomorrow() {
+    setScreen({ kind: "loading", message: "Reading the seeded schedule…" });
+    try {
+      const result = await api<ScheduleReadResult>("/api/demo/schedule/tomorrow");
+      setScreen({ kind: "schedule-read", result });
+    } catch (error) { setScreen({ kind: "error", message: (error as Error).message }); }
   }
 
   async function startStanding() {
@@ -750,11 +828,12 @@ export function App() {
     }
   }
 
-  async function approve(card: ApprovalCard, scenario: "exact" | "conflict") {
+  async function approve(card: ApprovalCard, scenario: "exact" | "conflict" | "compound" | "ambiguous") {
     setBusy(true);
     try {
-      const path =
-        scenario === "conflict"
+      const path = scenario === "ambiguous"
+          ? `/api/demo/drafts/${card.draftId}/approve-ambiguous`
+          : scenario === "conflict"
           ? `/api/demo/drafts/${card.draftId}/approve-after-calendar-change`
           : `/api/drafts/${card.draftId}/approve`;
       const request = () =>
@@ -762,7 +841,12 @@ export function App() {
           method: "POST",
           body: JSON.stringify({ draftHash: card.draftHash }),
         });
-      if (scenario === "exact") {
+      if (scenario === "ambiguous") {
+        const outcome = await api<{ message: string }>(path, { method: "POST", body: JSON.stringify({ draftHash: card.draftHash }) });
+        setScreen({ kind: "ambiguous-outcome", message: outcome.message, card });
+        return;
+      }
+      if (scenario === "exact" || scenario === "compound") {
         const result = await attemptApprovalWithRecovery(request, () =>
           setScreen({ kind: "loading", message: "Checking what happened…" }),
         );
@@ -775,7 +859,10 @@ export function App() {
           });
           return;
         }
-        setScreen({ kind: "receipt", receipt: result.value });
+        if (scenario === "compound") {
+          const state = await api<DemoSandboxState>("/api/hero/state").catch(() => api<DemoSandboxState>("/api/demo/state"));
+          setScreen({ kind: "compound-receipt", receipt: result.value, state, card, replayed: false });
+        } else setScreen({ kind: "receipt", receipt: result.value });
         return;
       }
       setScreen({ kind: "receipt", receipt: await request() });
@@ -784,6 +871,12 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function replayCompound(screen: Extract<Screen, { kind: "compound-receipt" }>) {
+    const receipt = await api<HumanReceipt>(`/api/drafts/${screen.card.draftId}/approve`, { method: "POST", body: JSON.stringify({ draftHash: screen.card.draftHash }) });
+    const state = await api<DemoSandboxState>("/api/demo/state");
+    setScreen({ ...screen, receipt, state, replayed: true });
   }
 
   async function decline(card: ApprovalCard) {
@@ -810,9 +903,11 @@ export function App() {
   return (
     <div className="app-frame">
       <header><Brand /><span className="tagline">Help without surprises.</span></header>
+      <SandboxNotice />
       {screen.kind === "welcome" && (
         <Welcome
           onStart={start}
+          onSchedule={readTomorrow}
           onStanding={startStanding}
           onCompile={compileRequest}
           status={status}
@@ -836,6 +931,9 @@ export function App() {
       {screen.kind === "receipt" && (
         <Receipt receipt={screen.receipt} onReset={() => setScreen({ kind: "welcome" })} />
       )}
+      {screen.kind === "schedule-read" && <ScheduleReadView result={screen.result} onBack={() => setScreen({ kind: "welcome" })} />}
+      {screen.kind === "compound-receipt" && <CompoundResult screen={screen} onReplay={() => replayCompound(screen)} onBack={() => setScreen({ kind: "welcome" })} />}
+      {screen.kind === "ambiguous-outcome" && <AmbiguousOutcome message={screen.message} onReplay={() => approve(screen.card, "ambiguous")} onBack={() => setScreen({ kind: "welcome" })} />}
       {screen.kind === "standing-card" && (
         <StandingCardView
           card={screen.card}

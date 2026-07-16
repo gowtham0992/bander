@@ -42,8 +42,10 @@ describe("mock-service credential boundary", () => {
           timeZone: "America/Denver",
         }),
         expect.objectContaining({ title: "Focus block" }),
+        expect.objectContaining({ title: "Bander Demo Appointment" }),
       ],
       messages: [],
+      familyUpdates: [],
     });
     expect(visible.body).not.toContain("event-dinner-sarah");
     expect(visible.body).not.toContain("etag");
@@ -213,6 +215,7 @@ describe("atomic seeded deal execution", () => {
           sentAt: "2026-07-13T18:00:00.000Z",
         },
       ],
+      familyUpdates: [],
     });
     expect(first.statusCode).toBe(201);
     expect(retry.statusCode).toBe(200);

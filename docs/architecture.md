@@ -202,3 +202,23 @@ The Google boundary performs only a primary-Calendar event listing for this lane
 Calendar titles are untrusted data. Bander normalizes them, strips control and bidirectional-control characters, bounds them to 120 characters, and tells OpenClaw to treat them only as quoted data—not instructions or a reason to call an action tool. This narrows exposure but does not claim to solve prompt injection: schedule facts intentionally enter the model trajectory, and a model can still mis-summarize benign or adversarial text. Consequential execution remains structurally unreachable from the read handler, and action tools require a later genuine human request.
 
 The Hero/reference sandbox remains on its historically verified three-tool profile. The canonical real product has exactly four Bander tools; the distinction is asserted at startup and in the real-process verifier.
+
+## ADR-014: Parent explanation is Bander-owned and delivered once
+
+**Status:** accepted for the current prototype
+
+After authenticated owner/group pairing, the Bander Telegram service posts one
+plain-text introduction to the bound protected group. The selected group comes
+only from the persisted installation, never an agent parameter. Confirmed
+delivery stores the Telegram message ID and delivery timestamp; startup and
+pairing replay therefore do not resend it. A definite send failure leaves the
+introduction pending for startup recovery and creates no authority or Calendar
+activity.
+
+The zero-account browser experience is a deterministic sandbox. Its seeded
+schedule read creates no authority. Its compound deal uses the production
+family-notification document and renderer, and its simulated phone receives the
+same bytes displayed on the Card. Its ambiguous Calendar scenario deliberately
+records an unknowable external result, sends no family update, and never claims
+that nothing changed. The sandbox never loads real Google, Telegram, or OpenAI
+credentials.

@@ -92,7 +92,7 @@ export function renderFamilyNotificationDocument(
       document.newEndTime,
       document.timeZone,
     )}.`,
-    "This update was sent by Bander at the owner’s request.",
+    "This is the exact update your family approved Bander to send.",
   ].join("\n");
 }
 

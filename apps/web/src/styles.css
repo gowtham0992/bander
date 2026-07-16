@@ -7,6 +7,7 @@
 }
 
 * { box-sizing: border-box; }
+html, body, #root { max-width: 100%; overflow-x: hidden; }
 
 body {
   margin: 0;
@@ -34,7 +35,7 @@ header {
 .brand img { width: 34px; height: 34px; object-fit: contain; }
 .tagline { color: #637673; font-size: 13px; letter-spacing: 0.02em; }
 
-.welcome { width: min(920px, 100%); margin: 12vh auto 0; }
+.welcome { width: 100%; max-width: 920px; margin: 12vh auto 0; }
 .eyebrow, .deal-kicker { color: #b44940; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
 .welcome h1 { margin: 18px 0 22px; max-width: 720px; font-family: "Iowan Old Style", "Palatino Linotype", serif; font-size: clamp(64px, 10vw, 116px); line-height: 0.87; letter-spacing: -0.065em; font-weight: 600; color: #143f3c; }
 .lede { max-width: 580px; margin: 0; color: #536965; font-size: 20px; line-height: 1.6; }
@@ -149,15 +150,41 @@ header {
 .hero-load-error h2 { margin: 0; color: #173e3b; }
 .hero-load-error .secondary { margin-top: 10px; }
 
+.sandbox-notice { width: 100%; max-width: 980px; margin: 14px auto 0; padding: 11px 15px; border: 1px solid #c9d9d5; border-radius: 12px; background: #edf6f3; color: #365d59; font-size: 12px; line-height: 1.45; text-align: center; }
+.lane-grid { width: 100%; max-width: 980px; margin: 34px auto 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.lane-card { width: 100%; min-width: 0; min-height: 190px; padding: 22px; border: 1px solid #d8d7cd; border-radius: 20px; background: #fffdf8; color: #173e3b; text-align: left; overflow-wrap: anywhere; box-shadow: 0 16px 38px rgba(24, 62, 58, .06); }
+.lane-card:hover, .lane-card:focus-visible { transform: translateY(-2px); border-color: #78a9a3; }
+.lane-card span { display: block; margin-bottom: 30px; color: #aa4a42; font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.lane-card strong { display: block; font-size: 19px; line-height: 1.25; }
+.lane-card small { display: block; margin-top: 9px; color: #687976; font-size: 13px; line-height: 1.45; }
+.more-behaviors { width: min(760px, 100%); margin: 32px auto 0; padding-top: 20px; border-top: 1px solid #dddcd4; }
+.more-behaviors h2 { margin: 0 0 8px; color: #72807d; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.read-result ul { max-width: 520px; margin: 26px auto; padding: 0; list-style: none; display: grid; gap: 10px; }
+.read-result li { padding: 15px; border-radius: 12px; background: #fffdf8; color: #345451; }
+.zero-authority-note { color: #0e6964; font-weight: 700; }
+.compound-result { width: min(980px, 100%); margin: 5vh auto 0; display: grid; grid-template-columns: 1.2fr .8fr; gap: 24px; align-items: start; }
+.compound-result .result-shell { width: 100%; margin: 0; padding: 36px; border: 1px solid #d8d7cd; border-radius: 22px; background: #fffdf8; }
+.sandbox-phone { min-height: 360px; padding: 18px; border: 7px solid #1d2928; border-radius: 30px; background: #e5eeeb; color: #173e3b; box-shadow: 0 22px 50px rgba(24,62,58,.13); }
+.sandbox-phone > span { display: block; margin-bottom: 18px; color: #526b68; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.sandbox-phone article { padding: 15px; border-radius: 14px; background: #fff; }
+.sandbox-phone pre { margin: 8px 0 0; font: inherit; line-height: 1.5; white-space: pre-wrap; }
+.preserve-lines { white-space: pre-line; }
+.uncertain-result { border-color: #d9b1a8 !important; }
+
 @media (max-width: 640px) {
   .app-frame { padding: 19px 16px 34px; }
   .tagline { display: none; }
   .welcome { margin-top: 10vh; }
   .welcome h1 { font-size: clamp(50px, 14vw, 68px); }
+  .welcome h1, .lede { max-width: 100%; overflow-wrap: anywhere; }
   .lede { font-size: 17px; }
   .request-preview { width: 100%; margin-top: 32px; padding: 16px; }
   .request-preview > div:last-child { min-width: 0; }
   .scenario-link { max-width: 100%; text-align: left; white-space: normal; }
+  .lane-grid, .compound-result { grid-template-columns: 1fr; }
+  .lane-card { min-height: 150px; }
+  .lane-card span { margin-bottom: 18px; }
+  .sandbox-notice { text-align: left; }
   .compiler-entry > div { flex-direction: column; }
   .deal-shell { margin-top: 5vh; }
   .deal-card { border-radius: 17px; }

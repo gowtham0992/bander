@@ -72,6 +72,40 @@ const reset = () => post<void>("/api/demo/reset", undefined, 204);
 await ensureLocalServices();
 try {
 await reset();
+const schedule = await request<{
+  events: unknown[];
+}>("/api/demo/schedule/tomorrow");
+
+await reset();
+const compoundCard = await post<{
+  draftId: string;
+  draftHash: string;
+  effectPreviews: Array<{ kind: string; body?: string }>;
+}>("/api/demo/proposals", { fixtureId: "move-demo-appointment-and-notify-gil" });
+const compoundReceipt = await post<{ familyNotification?: { body: string } }>(
+  `/api/drafts/${compoundCard.draftId}/approve`,
+  { draftHash: compoundCard.draftHash },
+);
+const compoundState = await request<{ familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+await post(`/api/drafts/${compoundCard.draftId}/approve`, { draftHash: compoundCard.draftHash });
+const compoundReplayState = await request<{ familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+
+await reset();
+const ambiguousCard = await post<{ draftId: string; draftHash: string }>(
+  "/api/demo/proposals",
+  { fixtureId: "move-demo-appointment-and-notify-gil" },
+);
+const ambiguous = await post<{ status: string; message: string }>(
+  `/api/demo/drafts/${ambiguousCard.draftId}/approve-ambiguous`,
+  { draftHash: ambiguousCard.draftHash },
+);
+const ambiguousState = await request<{ familyUpdates: unknown[] }>("/api/demo/state");
+const ambiguousReplay = await post<{ status: string; message: string }>(
+  `/api/demo/drafts/${ambiguousCard.draftId}/approve-ambiguous`,
+  { draftHash: ambiguousCard.draftHash },
+);
+
+await reset();
 const exactCard = await post<{ draftId: string; draftHash: string }>(
   "/api/demo/proposals",
   { fixtureId: "move-dinner-and-notify-sarah" },
@@ -136,6 +170,22 @@ console.log(
       standingEligible: eligible.status,
       standingAdjacent: adjacent.status,
       standingRevoked: revokedRun.error.code,
+      scheduleRead:
+        schedule.events.length > 0 ? "zero_authority_seeded_answer" : "unexpected",
+      compoundFamily:
+        compoundState.familyUpdates.length === 1 &&
+        compoundReplayState.familyUpdates.length === 1 &&
+        compoundCard.effectPreviews.find((effect) => effect.kind === "family.telegram_notification")?.body === compoundReceipt.familyNotification?.body &&
+        compoundReceipt.familyNotification?.body === compoundState.familyUpdates[0]?.body
+          ? "exact_text_replay_safe"
+          : "unexpected",
+      ambiguousCalendar:
+        ambiguous.status === "calendar_outcome_ambiguous" &&
+        ambiguousReplay.message === ambiguous.message &&
+        !ambiguous.message.includes("nothing changed") &&
+        ambiguousState.familyUpdates.length === 0
+          ? "truthful_zero_family_update"
+          : "unexpected",
     },
     null,
     2,

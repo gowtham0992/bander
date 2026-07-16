@@ -2,6 +2,28 @@
   "version": 1,
   "fixtures": [
     {
+      "id": "move-demo-appointment-and-notify-gil",
+      "claimedUserRequest": "Move Bander Demo Appointment to July 18 at 4 PM and let my son know.",
+      "calendar": {
+        "eventId": "event-demo-appointment",
+        "expectedEtag": "event-demo-appointment-r1",
+        "newStartTime": "2026-07-18T16:00:00-06:00"
+      },
+      "familyNotification": {
+        "installationId": "sandbox-installation",
+        "contactId": "sandbox-contact-gil",
+        "pairingRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "displayLabel": "Gil",
+        "document": {
+          "kind": "calendar_transition",
+          "eventTitle": "Bander Demo Appointment",
+          "newStartTime": "2026-07-18T22:00:00.000Z",
+          "newEndTime": "2026-07-18T23:00:00.000Z",
+          "timeZone": "America/Denver"
+        }
+      }
+    },
+    {
       "id": "move-dinner-and-notify-sarah",
       "claimedUserRequest": "Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.",
       "calendar": {

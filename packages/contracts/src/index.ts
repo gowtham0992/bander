@@ -64,9 +64,16 @@ export interface DemoMessageItem {
   sentAt: string;
 }
 
+export interface DemoFamilyUpdateItem {
+  recipientDisplayName: string;
+  body: string;
+  sentAt: string;
+}
+
 export interface DemoSandboxState {
   calendar: DemoCalendarItem[];
   messages: DemoMessageItem[];
+  familyUpdates: DemoFamilyUpdateItem[];
 }
 
 export interface MockSeed {

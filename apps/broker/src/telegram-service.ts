@@ -184,6 +184,8 @@ export interface TelegramInstallation {
   ownerTelegramId: string;
   chatId: string;
   pairedAt: string;
+  groupIntroductionMessageId?: number;
+  groupIntroductionDeliveredAt?: string;
 }
 
 export interface TelegramPairingChallenge {
@@ -454,13 +456,13 @@ function cardText(
   const effects = card.effectPreviews.flatMap((effect) => {
     if (effect.kind === "calendar.reschedule_event") {
       return [
-        `• Move “${safeDisplayText(effect.eventTitle)}”`,
+        `${mode === "real" ? "📅 Calendar transition" : "• Move"} “${safeDisplayText(effect.eventTitle)}”`,
         `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
       ];
     }
     return effect.kind === "family.telegram_notification"
       ? [
-          `• Send ${firstName(effect.recipientDisplayName)}:`,
+          `${mode === "real" ? "👤 Family update" : "• Send"} ${firstName(effect.recipientDisplayName)}:`,
           `“${safeMultilineDisplayText(effect.body)}”`,
         ]
       : [
@@ -963,6 +965,7 @@ export class TelegramService {
       }
       const active = state.familyContact;
       const installation = state.installation;
+      if (installation) await this.#deliverGroupIntroduction(state);
       if (!active) return;
       if (!installation || active.installationId !== installation.id) {
         throw new FamilyContactError(
@@ -986,6 +989,21 @@ export class TelegramService {
       }
       await this.#deliverFamilyContactConfirmations(state);
     });
+  }
+
+  async #deliverGroupIntroduction(state: TelegramServiceState): Promise<void> {
+    const installation = state.installation;
+    if (!installation || installation.groupIntroductionDeliveredAt) return;
+    const sent = await this.#api.sendMessage(
+      installation.chatId,
+      "I’m Bander. Ask your assistant about your calendar anytime. If something would change—or a family update would be sent—I’ll show you the exact details first. Nothing happens through me until you say yes.",
+    );
+    state.installation = {
+      ...installation,
+      groupIntroductionMessageId: sent.message_id,
+      groupIntroductionDeliveredAt: this.#now().toISOString(),
+    };
+    this.#store.write(state);
   }
 
   async deliverFamilyNotification(input: { requestId: string; document: unknown }): Promise<{ status: "delivered" | "ambiguous" | "not_sent" }> {
@@ -1600,16 +1618,16 @@ export class TelegramService {
       const sent = await this.#api.sendMessage(
         String(message.chat.id),
         [
-          `Connect as ${safeDisplayText(challenge.displayLabel)}?`,
-          "This is a limited family-contact role.",
-          "No notifications are enabled yet.",
-          "You will not be able to approve anything or see the person’s calendar or conversations.",
+          `Keep me posted as ${safeDisplayText(challenge.displayLabel)}?`,
+          "No updates are enabled until you choose to connect.",
+          "Bander may send you only the exact appointment update your family approves.",
+          "You cannot approve anything or see their calendar or conversations, and you can disconnect anytime.",
         ].join("\n"),
         {
           inline_keyboard: [
             [
               {
-                text: "Accept limited role",
+                text: "OK, keep me posted",
                 callback_data: claimed.acceptCallbackValue!,
               },
               {
@@ -1656,7 +1674,7 @@ export class TelegramService {
         this.#revokeFamilyContactInState(state, "contact");
         await this.#api.sendMessage(
           String(message.chat.id),
-          "You’re disconnected. Bander no longer has a destination it can use for you.",
+          "You’re disconnected. Bander can’t send you updates anymore.",
         );
         return;
       }
@@ -1784,6 +1802,7 @@ export class TelegramService {
           ].join("\n"),
       { remove_keyboard: true },
     );
+    await this.#deliverGroupIntroduction(state);
   }
 
   async #handleFamilyContactCallback(
@@ -1923,12 +1942,12 @@ export class TelegramService {
         if (contactRevoke) {
           await this.#api.sendMessage(
             String(callback.message.chat.id),
-            "You’re disconnected. Bander no longer has a destination it can use for you.",
+            "You’re disconnected. Bander can’t send you updates anymore.",
           );
         } else {
           await this.#api.sendMessage(
             installation!.chatId,
-            "Family contact disconnected. No routing destination remains.",
+            `${safeDisplayText(contact.displayLabel)} is disconnected. Bander can no longer message ${safeDisplayText(contact.displayLabel)}.`,
           );
         }
         await this.#api.answerCallback(callback.id, "Family contact disconnected.");

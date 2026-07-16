@@ -100,7 +100,7 @@ describe("real Calendar intent compiler", () => {
     );
     await expect(compiler.compile("Move it and tell my son")).rejects.toMatchObject({
       code: "clarification_required",
-      humanMessage: expect.stringContaining("isn’t connected"),
+      humanMessage: expect.stringContaining("I can’t message family yet"),
     });
   });
 
@@ -121,7 +121,7 @@ describe("real Calendar intent compiler", () => {
       }),
     );
     await expect(compiler.compile("Move it and tell him")).rejects.toMatchObject({
-      humanMessage: "Which connected family contact did you mean?\nNothing happened.",
+      humanMessage: "Who should I let know? Please use their name, like Gil.\nNothing happened.",
     });
     expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });

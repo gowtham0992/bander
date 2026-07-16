@@ -409,6 +409,48 @@ async function ambiguousProposal(compound: boolean) {
 }
 
 describe("Bander Telegram service", () => {
+  it("protected_group_receives_one_bander_introduction", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const introductions = current.api.messages.filter((message) => message.text.startsWith("I’m Bander."));
+    expect(introductions).toHaveLength(1);
+    expect(introductions[0]?.chatId).toBe("-500");
+    expect(current.store.read().installation?.groupIntroductionDeliveredAt).toBeDefined();
+    expect(current.authorityStore.getOneTimeBandsForDraft("anything")).toHaveLength(0);
+    expect(current.adapter.executions).toBe(0);
+  });
+
+  it("introduction_replay_and_restart_send_nothing", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    await current.service.prepareForStart();
+    const restarted = new TelegramService({
+      api: current.api,
+      engine: current.engine,
+      store: current.store,
+      mode: "real",
+      now: current.now,
+    });
+    await restarted.prepareForStart();
+    expect(current.api.messages.filter((message) => message.text.startsWith("I’m Bander."))).toHaveLength(1);
+  });
+
+  it("introduction_failure_never_claims_delivery_and_can_recover", async () => {
+    const current = setup("real");
+    current.api.failNextMessageMatching = (text) => text.startsWith("I’m Bander.");
+    await expect(pairOwner(current)).rejects.toThrow("simulated Telegram send failure");
+    expect(current.store.read().installation?.groupIntroductionDeliveredAt).toBeUndefined();
+    expect(current.api.messages.filter((message) => message.text.startsWith("I’m Bander."))).toHaveLength(0);
+    await current.service.prepareForStart();
+    expect(current.api.messages.filter((message) => message.text.startsWith("I’m Bander."))).toHaveLength(1);
+  });
+
+  it("contact_cannot_trigger_group_introduction", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    await current.service.handleUpdate(messageUpdate({ updateId: 90, fromId: 202, chatId: 202, chatType: "private", text: "hello" }));
+    expect(current.api.messages.filter((message) => message.text.startsWith("I’m Bander."))).toHaveLength(1);
+  });
   it("compound_callback_reuses_the_existing_state_lock_without_deadlock", async () => {
     const current = setup("real", familyRandomValues);
     await pairOwner(current);
@@ -482,6 +524,8 @@ describe("Bander Telegram service", () => {
     const card = await current.engine.proposeFixture(compoundFixture);
     await current.service.deliverProposal(card);
     const approval = current.api.messages.at(-1)?.text ?? "";
+    expect(approval).toContain("📅 Calendar transition");
+    expect(approval).toContain("👤 Family update Gil:");
     expect(approval).toContain(renderFamilyNotification(compoundFixture.familyNotification!.document));
   });
   it("rejects_delivery_to_revoked_contact", async () => {
@@ -679,6 +723,7 @@ describe("Bander Telegram service", () => {
     expect(current.api.messages.some((message) => message.text.includes(
       "Bander can send only the exact update shown on your approval Card.",
     ))).toBe(true);
+    expect(JSON.stringify(current.api.messages.map((message) => message.replyMarkup))).toContain("OK, keep me posted");
     expect(current.api.messages.filter((message) =>
       message.text.startsWith("You’re connected as Gil.") ||
       message.text.startsWith("Gil is connected for approved appointment updates."),
@@ -730,7 +775,7 @@ describe("Bander Telegram service", () => {
     });
     expect(
       current.api.messages.filter((message) =>
-        message.text.startsWith("Connect as Gil?"),
+        message.text.startsWith("Keep me posted as Gil?"),
       ),
     ).toHaveLength(1);
   });
@@ -743,7 +788,7 @@ describe("Bander Telegram service", () => {
       aliases: ["my son"],
     });
     const start = new URL(pairing.link).searchParams.get("start")!;
-    current.api.failNextMessageMatching = (text) => text.startsWith("Connect as Gil?");
+    current.api.failNextMessageMatching = (text) => text.startsWith("Keep me posted as Gil?");
 
     await current.service.handleUpdate(
       messageUpdate({
@@ -785,7 +830,7 @@ describe("Bander Telegram service", () => {
     );
     expect(
       current.api.messages.filter((message) =>
-        message.text.startsWith("Connect as Gil?"),
+        message.text.startsWith("Keep me posted as Gil?"),
       ),
     ).toHaveLength(1);
   });
@@ -1014,7 +1059,7 @@ describe("Bander Telegram service", () => {
     expect(fs.existsSync(linkPath)).toBe(false);
     expect(
       current.api.messages.filter((message) =>
-        message.text.includes("You’re disconnected"),
+        message.text === "You’re disconnected. Bander can’t send you updates anymore.",
       ),
     ).toHaveLength(1);
     expect(current.adapter.executions).toBe(0);
@@ -1272,9 +1317,10 @@ describe("Bander Telegram service", () => {
     expect(current.api.messages[0]?.text).toBe(
       "You’re the person who approves Bander’s limits.\nChoose the Telegram group where you use OpenClaw.",
     );
-    expect(current.api.messages.at(-1)?.text).toBe(
+    expect(current.api.messages.some((message) => message.text ===
       "Bander is ready.\nI only act here, and only within limits you approve.",
-    );
+    )).toBe(true);
+    expect(current.api.messages.filter((message) => message.text.startsWith("I’m Bander."))).toHaveLength(1);
   });
   it("owner_can_activate_standing_from_telegram", async () => {
     const current = setup();
@@ -1736,17 +1782,16 @@ describe("Bander Telegram service", () => {
     expect(binding).toMatchObject({
       ownerTelegramId: "101",
       chatId: "-500",
-      messageId: 43,
       draftId: card.draftId,
       lifecycle: "pending",
     });
     expect(binding.callbackValue).toContain("opaque-callback");
 
     for (const [id, fromId, chatId, messageId, data] of [
-      ["non-owner", 202, -500, 43, binding.callbackValue],
-      ["wrong-chat", 101, -501, 43, binding.callbackValue],
+      ["non-owner", 202, -500, binding.messageId, binding.callbackValue],
+      ["wrong-chat", 101, -501, binding.messageId, binding.callbackValue],
       ["wrong-message", 101, -500, 99, binding.callbackValue],
-      ["imitation", 101, -500, 43, "openclaw:imitation"],
+      ["imitation", 101, -500, binding.messageId, "openclaw:imitation"],
     ] as const) {
       await current.service.handleUpdate({
         update_id: 10,
@@ -1766,7 +1811,7 @@ describe("Bander Telegram service", () => {
         id: "owner",
         from: { id: 101, is_bot: false },
         data: binding.callbackValue,
-        message: { message_id: 43, chat: { id: -500, type: "supergroup" } },
+        message: { message_id: binding.messageId, chat: { id: -500, type: "supergroup" } },
       },
     };
     await current.service.handleUpdate(ownerCallback);

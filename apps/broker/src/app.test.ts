@@ -306,7 +306,8 @@ describe("broker approval boundary", () => {
           timeZone: "America/Denver",
         },
       ],
-      messages: [],
+        messages: [],
+        familyUpdates: [],
     };
     app = buildBrokerApp({
       engine: setup.engine,

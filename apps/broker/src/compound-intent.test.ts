@@ -125,7 +125,7 @@ describe("bounded compound-intent output", () => {
     ).toEqual({
       status: "clarification_required",
       reason: "ambiguous_contact",
-      question: "Which paired family contact should I notify?",
+      question: "Who should I let know? Please use their name, like Gil.",
     });
   });
 

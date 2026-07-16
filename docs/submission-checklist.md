@@ -55,6 +55,7 @@ Current required form fields also include submitter type, country of residence, 
 - [ ] Capture `Hi` → ordinary conversation with no Bander call
 - [ ] Capture a natural schedule question → warm real Calendar answer with no Bander Card
 - [ ] Capture natural request → real Card → approval → one real Google move → truthful outcome
+- [ ] Capture the compound Card’s exact Gil update → real Calendar move → Gil lock-screen buzz → truthful combined outcome
 - [ ] Capture independent Google change → approval → human refusal → zero Bander mutation
 - [ ] Show exactly four bounded Bander tools and the credential boundary briefly
 - [ ] Show selected red/green Codex evidence briefly

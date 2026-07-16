@@ -1942,3 +1942,59 @@ production build; dependency audit with zero vulnerabilities; and tracked plus
 proposed-file secret scan with zero matches. No real Calendar mutation was
 needed for this callback-only correction. Both transcript files remain ignored,
 untracked, and untouched. `/feedback` remains deferred.
+
+## July 16, 2026 — Checkpoint 6A parent comprehension and judge-sandbox parity
+
+The focused browser acceptance test was written before the sandbox changes. Its
+first run observed three failures: `/api/demo/schedule/tomorrow` did not exist,
+the versioned compound fixture did not contain a
+`family.telegram_notification` effect, and the browser did not identify itself
+as seeded and disconnected from Google, Telegram and OpenAI. The restored test
+also proves that schedule reading calls no authority-store writer. Focused
+engine/process coverage then proved Card/phone byte equality, one Calendar and
+one family effect on approval, no second mutation or family update on replay,
+and a terminal ambiguous Calendar classification that never says “nothing
+changed” and never sends a family update.
+
+Parent-visible production language now uses the shared deterministic family
+renderer sentence “This is the exact update your family approved Bander to
+send.” The real Telegram compound Card labels the two effects `📅 Calendar
+transition` and `👤 Family update`. Family clarification, consent and disconnect
+copy no longer exposes pairing or routing plumbing. The Card renderer and
+delivered Telegram update remain the same bytes.
+
+Authenticated owner/group pairing now sends one Bander-authored introduction to
+the persisted protected group binding. Focused tests proved one confirmed send,
+no resend on pairing replay or a reconstructed-service startup, definite-send
+failure remaining pending without a delivery claim, recovery on startup, zero
+authority/Calendar execution, and no contact-triggered introduction.
+
+The zero-account browser now leads with three lanes: a seeded schedule answer
+with no Card or authority; a compound Calendar-plus-Gil deal using the
+production family document/renderer and a visibly labelled simulated phone; and
+a deliberately unknowable Calendar result with truthful copy, zero family
+update and replay safety. Changed-world refusal, approval recovery/replay and
+standing sandbox behavior remain secondary. Every page carries the exact
+seeded/not-live disclosure. `verify:demo` reports nine green outcomes: the six
+prior proofs plus `zero_authority_seeded_answer`,
+`exact_text_replay_safe`, and `truthful_zero_family_update`.
+
+Desktop 1440×1100 and mobile 500×900 local screenshots were inspected from the
+running sandbox. The landing hierarchy, disclosure, compound Card, complete
+intervals, exact family text, focus states and single-column mobile layout were
+legible with no horizontal overflow at the reliable mobile viewport. QA images
+remain only under `/private/tmp` and contain seeded data.
+
+Final restored-green matrix: typecheck; 24 functional files with 311 tests; 20
+adversarial tests; all nine demo outcomes; one-time recovery with one mutation,
+Band, Permit and Receipt; standing recovery with one Draft, Permit, mutation,
+Receipt and counter entry; real OpenClaw process verification with exactly four
+real tools; live compound Sol 15/15; live read Sol 7/7; production build;
+dependency audit with zero vulnerabilities; and tracked/proposed-file
+token-shaped secret scans with zero matches. No real Google request or family
+notification was used for this checkpoint. Production authority lifecycle,
+Google execution semantics, compound ordering and the four-tool inventory were
+unchanged. Both transcripts remain ignored and untracked; their current SHA-256
+values are `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
+and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`.
+`/feedback` remains deferred.

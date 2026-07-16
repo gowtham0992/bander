@@ -37,6 +37,10 @@ interface ExecuteOperationBody {
     expectedRecipientRevision: number;
     body: string;
   };
+  family?: {
+    recipientDisplayName: string;
+    body: string;
+  };
 }
 
 function tokenMatches(actual: string | undefined, expected: string): boolean {
@@ -59,6 +63,10 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
   const events = new Map<string, CalendarEvent>();
   const people = new Map<string, (typeof options.seed.people)[number]>();
   const messagesByKey = new Map<string, SentMessage>();
+  const familyUpdatesByKey = new Map<
+    string,
+    { recipientDisplayName: string; body: string; sentAt: string }
+  >();
   const operationResults = new Map<
     string,
     {
@@ -73,6 +81,7 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
     events.clear();
     people.clear();
     messagesByKey.clear();
+    familyUpdatesByKey.clear();
     operationResults.clear();
     for (const event of structuredClone(options.seed.events)) events.set(event.id, event);
     for (const person of structuredClone(options.seed.people)) people.set(person.id, person);
@@ -103,6 +112,7 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
       body: message.body,
       sentAt: message.sentAt,
     })),
+    familyUpdates: [...familyUpdatesByKey.values()],
   }));
 
   app.get<{ Params: { eventId: string } }>(
@@ -319,6 +329,15 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
                 body: { type: "string", minLength: 1, maxLength: 1000 },
               },
             },
+            family: {
+              type: "object",
+              additionalProperties: false,
+              required: ["recipientDisplayName", "body"],
+              properties: {
+                recipientDisplayName: { type: "string", minLength: 1, maxLength: 80 },
+                body: { type: "string", minLength: 1, maxLength: 1000 },
+              },
+            },
           },
         },
       },
@@ -390,10 +409,18 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
               sentAt: now().toISOString(),
             }
           : undefined;
+      const familyUpdate = request.body.family
+        ? {
+            recipientDisplayName: request.body.family.recipientDisplayName,
+            body: request.body.family.body,
+            sentAt: now().toISOString(),
+          }
+        : undefined;
 
       // Both seeded effects commit together after every precondition has passed.
       events.set(updatedEvent.id, updatedEvent);
       if (message) messagesByKey.set(request.body.operationKey, message);
+      if (familyUpdate) familyUpdatesByKey.set(request.body.operationKey, familyUpdate);
       const result = {
         operationKey: request.body.operationKey,
         draftHash: request.body.draftHash,

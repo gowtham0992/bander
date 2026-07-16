@@ -187,7 +187,7 @@ export function validateCompoundIntent(
   ) {
     return clarification(
       "ambiguous_contact",
-      "Which paired family contact should I notify?",
+      "Who should I let know? Please use their name, like Gil.",
     );
   }
   if (output.classification === "unsupported") {
@@ -233,21 +233,21 @@ export function validateCompoundIntent(
     return clarification("missing_target_time", "What time should I move it to?");
   }
   if (!output.familyNotificationRequested || !output.familyContactAlias) {
-    return clarification("missing_contact", "Which paired family contact should I notify?");
+    return clarification("missing_contact", "Who should I let know? Please use their name, like Gil.");
   }
 
   const alias = normalized(output.familyContactAlias);
   if (["him", "her", "them", "someone", "family"].includes(alias)) {
     return clarification(
       "ambiguous_contact",
-      "Which paired family contact should I notify?",
+      "Who should I let know? Please use their name, like Gil.",
     );
   }
   const matches = locallyMatchedContacts;
   if (matches.length === 0) {
     return clarification(
       "unpaired_contact",
-      `I don't have a paired family contact called ${output.familyContactAlias}. Who should I notify?`,
+      "I can’t message family yet. Ask the person who set up Bander to connect someone first.",
     );
   }
   if (matches.length > 1) {

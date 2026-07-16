@@ -132,6 +132,7 @@ export interface FamilyContactResolver {
   resolve(
     alias: string,
   ): FamilyTelegramNotificationEffect["binding"] | undefined;
+  activeDisplayLabel?(): string | undefined;
 }
 
 export class RealCalendarDraftCompiler implements DraftCompiler {
@@ -153,7 +154,10 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
     }
     const intent = parsed.data;
     if (intent.needsClarification) {
-      const humanMessage = deterministicIntentClarification(intent);
+      const humanMessage = deterministicIntentClarification(
+        intent,
+        this.familyContacts?.activeDisplayLabel?.(),
+      );
       throw new CompilerError(
         "clarification_required",
         humanMessage,
@@ -177,13 +181,16 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
     if (intent.familyNotificationRequested) {
       if (!intent.familyContactAlias) {
         const humanMessage =
-          "Which connected family contact should I notify?\nNothing happened.";
+          "Who should I let know? Please use their name, like Gil.\nNothing happened.";
         throw new CompilerError("clarification_required", humanMessage, humanMessage);
       }
       familyBinding = this.familyContacts?.resolve(intent.familyContactAlias);
       if (!familyBinding) {
         const label = safeIntentLabel(intent.familyContactAlias);
-        const humanMessage = `“${label}” isn’t connected to Bander yet.\nNothing happened.\nAsk the person who set up Bander to connect them first.`;
+        const activeLabel = this.familyContacts?.activeDisplayLabel?.();
+        const humanMessage = activeLabel
+          ? `I can’t message ${label} yet. Right now Bander can only message ${safeIntentLabel(activeLabel)}.\nNothing happened.`
+          : "I can’t message family yet. Ask the person who set up Bander to connect someone first.\nNothing happened.";
         throw new CompilerError("clarification_required", humanMessage, humanMessage);
       }
     } else if (intent.familyContactAlias !== null) {
@@ -330,7 +337,10 @@ function safeIntentLabel(value: string): string {
   );
 }
 
-function deterministicIntentClarification(intent: CalendarIntent): string {
+function deterministicIntentClarification(
+  intent: CalendarIntent,
+  activeFamilyDisplayLabel?: string,
+): string {
   const title = safeIntentLabel(intent.eventTitleHint);
   if (!intent.eventTitleHint) {
     return "Which Calendar event would you like to move?\nNothing happened.";
@@ -339,13 +349,15 @@ function deterministicIntentClarification(intent: CalendarIntent): string {
     return "I can safely prepare an eligible Calendar reschedule here, but not that kind of action yet.\nNothing happened.";
   }
   if (intent.clarificationReason === "missing_contact") {
-    return "Which connected family contact should I notify?\nNothing happened.";
+    return "Who should I let know? Please use their name, like Gil.\nNothing happened.";
   }
   if (intent.clarificationReason === "ambiguous_contact") {
-    return "Which connected family contact did you mean?\nNothing happened.";
+    return "Who should I let know? Please use their name, like Gil.\nNothing happened.";
   }
   if (intent.clarificationReason === "unpaired_contact") {
-    return "That person isn’t connected to Bander yet.\nNothing happened.";
+    return activeFamilyDisplayLabel
+      ? `I can’t message that person yet. Right now Bander can only message ${safeIntentLabel(activeFamilyDisplayLabel)}.\nNothing happened.`
+      : "I can’t message family yet. Ask the person who set up Bander to connect someone first.\nNothing happened.";
   }
   if (intent.clarificationReason === "free_form_message_unsupported") {
     return "I can include Bander’s exact appointment update, but I can’t send a custom message.\nNothing happened.";

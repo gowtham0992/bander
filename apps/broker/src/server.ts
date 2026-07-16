@@ -114,6 +114,10 @@ if (configuration.mode === "real") {
     calendarTimeZone: configuration.calendarTimeZone,
     familyContacts: {
       resolve: (alias) => telegramService!.resolveFamilyContactAlias(alias),
+      activeDisplayLabel: () => {
+        const status = telegramService!.familyContactStatus();
+        return status.status === "connected" ? status.displayLabel : undefined;
+      },
     },
   });
 }
@@ -156,8 +160,33 @@ const app = buildBrokerApp({
           engine.resetDemo();
           await mockAdapter.resetDemo();
         },
+        readDemoState: () => mockAdapter.readDemoState(),
         simulateCalendarChange: () =>
           mockAdapter.simulateCalendarChange("event-dinner-sarah"),
+        prepareAmbiguousCalendarOutcome: () =>
+          mockAdapter.prepareAmbiguousCalendarOutcome(),
+        readDemoSchedule: async () => {
+          const state = await mockAdapter.readDemoState();
+          const events = state.calendar
+            .filter((event) => event.startTime.startsWith("2026-07-17"))
+            .map((event) => ({
+              title: event.title,
+              allDay: false as const,
+              start: { localDate: "2026-07-17", localTime: event.startTime.slice(11, 16) },
+              end: { localDate: "2026-07-17", localTime: event.endTime.slice(11, 16) },
+            }));
+          return {
+            requestedRange: {
+              startLocalDate: "2026-07-17",
+              endLocalDateExclusive: "2026-07-18",
+            },
+            timeZone: "America/Denver",
+            events,
+            empty: events.length === 0,
+            truncated: false,
+            maxEvents: 12,
+          };
+        },
       }
     : {}),
 });
