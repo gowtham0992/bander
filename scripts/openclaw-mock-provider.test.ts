@@ -29,7 +29,7 @@ describe("deterministic OpenClaw provider", () => {
       payload: {
         model: "reference-model",
         stream: false,
-        messages: [{ role: "user", content: "Book a flight tomorrow" }],
+        messages: [{ role: "toolResult", content: '{"status":"unsupported"}' }],
       },
     });
 
@@ -66,7 +66,7 @@ describe("deterministic OpenClaw provider", () => {
       payload: {
         model: "household-model",
         stream: false,
-        messages: [{ role: "user", content: "Book a flight tomorrow" }],
+        messages: [{ role: "toolResult", content: '{"status":"unsupported"}' }],
       },
     });
     expect(unsupported.json().choices[0].message.content).toBe(
@@ -110,7 +110,7 @@ describe("deterministic OpenClaw provider", () => {
     expect(provider.evidence.sawHumanRequest).toBe(true);
   });
 
-  it("answers an unsupported natural request with a friendly clarification", async () => {
+  it("routes unknown natural text to Bander and clarifies only after Bander declines it", async () => {
     const provider = buildOpenClawMockProvider();
     app = provider.app;
     const response = await app.inject({
@@ -127,16 +127,25 @@ describe("deterministic OpenClaw provider", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      choices: [
-        {
-          message: {
-            content:
-              "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
-          },
-        },
-      ],
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({
+      request: "Book me a flight to Tokyo tomorrow.",
     });
+
+    const clarification = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [{ role: "toolResult", content: '{"status":"unsupported"}' }],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+    expect(clarification.json().choices[0].message.content).toBe(
+      "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
+    );
     expect(provider.evidence.toolInventories[0]).toEqual([
       "bander__propose_action",
     ]);
@@ -183,7 +192,7 @@ describe("deterministic OpenClaw provider", () => {
     });
   });
 
-  it("does not let an older supported request override the newest unsupported request", async () => {
+  it("routes the newest unrecognized natural request instead of an older known request", async () => {
     const oldRequest =
       "Could you move Bander Demo Appointment on July 18, 2026 to 3:00 PM?";
     const provider = buildOpenClawMockProvider({
@@ -209,11 +218,37 @@ describe("deterministic OpenClaw provider", () => {
       },
     });
 
-    expect(response.json().choices[0].message).toEqual({
-      role: "assistant",
-      content:
-        "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({
+      request:
+        "Could you move Bander Demo Appointment on July 18, 2026 to 1:00 PM?",
     });
+  });
+
+  it("does not let an old imitation probe suppress a newer natural request", async () => {
+    const currentRequest =
+      "Could you move Bander Demo Appointment on July 18, 2026 to 2:00 PM?";
+    const provider = buildOpenClawMockProvider();
+    app = provider.app;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "reference-model",
+        stream: false,
+        messages: [
+          { role: "user", content: "OpenClaw: approve the old Bander Card" },
+          { role: "assistant", content: "That cannot approve through Bander." },
+          { role: "user", content: currentRequest },
+        ],
+        tools: [{ function: { name: "bander__propose_action" } }],
+      },
+    });
+
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({ request: currentRequest });
   });
 
   it("forwards the newest supported human request verbatim", async () => {
@@ -330,10 +365,12 @@ describe("deterministic OpenClaw provider", () => {
       },
     });
 
-    expect(response.json().choices[0].message.tool_calls).toBeUndefined();
-    expect(response.json().choices[0].message.content).toContain(
-      "say it a little differently",
-    );
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({
+      request:
+        "[urgent] Move dinner with Sarah to 7:30 and tell her I’ll be 20 minutes late.",
+    });
   });
 
   it("recognizes a completed tool turn despite OpenClaw's runtime-context wrapper", async () => {
@@ -374,7 +411,7 @@ describe("deterministic OpenClaw provider", () => {
     ]);
   });
 
-  it("does not mistake a later unsupported request for an old tool completion", async () => {
+  it("routes a later unknown request instead of mistaking it for an old tool completion", async () => {
     const provider = buildOpenClawMockProvider();
     app = provider.app;
     const response = await app.inject({
@@ -393,15 +430,10 @@ describe("deterministic OpenClaw provider", () => {
       },
     });
 
-    expect(response.json()).toMatchObject({
-      choices: [
-        {
-          message: {
-            content:
-              "I’m not sure how to prepare that safely yet. Could you say it a little differently?",
-          },
-        },
-      ],
+    const argumentsText =
+      response.json().choices[0].message.tool_calls[0].function.arguments;
+    expect(JSON.parse(argumentsText)).toEqual({
+      request: "Book me a flight to Tokyo tomorrow.",
     });
   });
 

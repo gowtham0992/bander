@@ -173,7 +173,7 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
       .map((message) => extractHumanRequest(textContent(message.content)))
       .filter((value): value is string => value !== undefined);
     const latestHumanRequest = pendingUserTexts.at(-1);
-    const matchedRequest = latestHumanRequest
+    const matchedRequestMetadata = latestHumanRequest
       ? supportedRequests.find(
           (candidate) =>
             normalizeRequestText(latestHumanRequest) ===
@@ -192,12 +192,12 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
 
     const created = Math.floor(Date.now() / 1000);
     const id = `chatcmpl-bander-${evidence.calls}`;
-    const toolCall = !toolMessage && Boolean(matchedRequest);
-    const imitationCallback = messages.some(
-      (message) =>
-        message.role === "user" &&
-        normalizeRequestText(textContent(message.content)).includes("openclaw:"),
+    const imitationCallback = Boolean(
+      latestHumanRequest &&
+        normalizeRequestText(latestHumanRequest).includes("openclaw:"),
     );
+    const toolCall =
+      !toolMessage && Boolean(latestHumanRequest) && !imitationCallback;
     const message = toolCall
       ? {
           role: "assistant",
@@ -210,8 +210,8 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
                 name: "bander__propose_action",
                 arguments: JSON.stringify({
                   request: latestHumanRequest!,
-                  ...(matchedRequest!.requestId
-                    ? { requestId: matchedRequest!.requestId }
+                  ...(matchedRequestMetadata?.requestId
+                    ? { requestId: matchedRequestMetadata.requestId }
                     : {}),
                 }),
               },

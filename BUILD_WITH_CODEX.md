@@ -1232,3 +1232,56 @@ claim that OpenClaw can acknowledge before the synchronous Bander Card. The
 reference assistant now says Bander has already prepared the review and that
 nothing has happened yet; it no longer says it is still checking after the Card
 is visible. `transcription_day2.md` remains untracked and untouched.
+
+## Checkpoint 27 — natural-request routing belongs to Bander
+
+**Status:** complete — real OpenClaw regression green
+
+The first manual retest correctly prevented stale-request substitution, but it
+also exposed a product-level contradiction: the reference OpenClaw provider
+still used its small deterministic request list as a semantic gate. A parent
+could not be expected to guess those exact phrases. A new regression was
+observed red before implementation:
+
+```text
+Test Files  1 failed (1)
+Tests       1 failed | 12 passed (13)
+```
+
+The newest unrecognized 1:00 PM Calendar request produced no tool call. The
+provider now routes every newest non-empty human request verbatim through the
+existing `propose_action` tool. Its known-request table supplies only optional
+client request-ID metadata for the standing-flow fixtures; it no longer decides
+which natural language Bander may examine. OpenClaw imitation callbacks remain
+rejected before proposal.
+
+The same review found a sibling history bug in the imitation guard. A second
+regression was observed red (`1 failed | 13 passed`): an old imitation probe in
+the conversation suppressed a newer legitimate 2:00 PM request. The guard now
+examines only the same newest human request used for routing. A current
+imitation remains rejected, while an earlier probe cannot poison future turns.
+
+This does not let the agent construct or enlarge authority. In real mode, live
+Sol receives only the bounded natural request and returns hints; deterministic
+Bander code still resolves exactly one supported Google event, validates the
+shape, preserves duration, captures the ETag, constructs the immutable action,
+posts the genuine owner Card, and waits for the bound callback. Unsupported,
+ambiguous or malformed requests still produce only minimal `unsupported`
+status and the friendly OpenClaw clarification, with no authority.
+
+Restored-green evidence:
+
+```text
+focused provider tests: 14 passed
+typecheck: passed
+functional suite: 15 files, 148 tests passed
+attack suite: 2 files, 20 tests passed
+real OpenClaw verifier: exactly three tools; supported proposal not executed
+unknown flight request: friendly clarification; no authority
+production build: passed
+```
+
+No Telegram listener, callback, Google adapter, compiler authority boundary,
+standing predicate or MCP tool inventory changed. The running manual stack was
+stopped before the real-process verifier and restarted only after the verified
+checkpoint. `transcription_day2.md` remains untracked and untouched.
