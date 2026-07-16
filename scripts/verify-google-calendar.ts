@@ -13,6 +13,9 @@ let verificationStage = "configuration";
 let failureStage: string | undefined;
 let diagnosticConcurrentSuccesses = 0;
 let diagnosticConcurrentPreconditionFailures = 0;
+let diagnosticConcurrentRejectedStatuses: number[] = [];
+let diagnosticConcurrentRejectedReasons: string[] = [];
+let diagnosticRestored = false;
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -26,6 +29,22 @@ function statusOf(error: unknown): number | undefined {
   if (!response || typeof response !== "object") return undefined;
   const status = Reflect.get(response, "status");
   return typeof status === "number" ? status : undefined;
+}
+
+function reasonOf(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return undefined;
+  const data = Reflect.get(response, "data");
+  if (!data || typeof data !== "object") return undefined;
+  const details = Reflect.get(data, "error");
+  if (!details || typeof details !== "object") return undefined;
+  const errors = Reflect.get(details, "errors");
+  if (!Array.isArray(errors) || !errors[0] || typeof errors[0] !== "object") {
+    return undefined;
+  }
+  const reason = Reflect.get(errors[0], "reason");
+  return typeof reason === "string" ? reason : undefined;
 }
 
 function sameInstant(left: string | null | undefined, right: string): boolean {
@@ -102,6 +121,8 @@ let staleStatus: number | undefined;
 let staleZeroMutation = false;
 let concurrentSuccesses = 0;
 let concurrentPreconditionFailures = 0;
+let concurrentRejectedStatuses: number[] = [];
+let concurrentRejectedReasons: string[] = [];
 
 try {
   verificationStage = "first_conditional_write";
@@ -153,9 +174,29 @@ try {
     (result) =>
       result.status === "rejected" && statusOf(result.reason) === 412,
   ).length;
+  concurrentRejectedStatuses = concurrent.flatMap((result) =>
+    result.status === "rejected" ? [statusOf(result.reason) ?? 0] : [],
+  );
+  concurrentRejectedReasons = concurrent.flatMap((result) => {
+    if (result.status !== "rejected") return [];
+    const reason = reasonOf(result.reason);
+    return reason ? [reason] : [];
+  });
   diagnosticConcurrentSuccesses = concurrentSuccesses;
   diagnosticConcurrentPreconditionFailures = concurrentPreconditionFailures;
-  if (concurrentSuccesses !== 1 || concurrentPreconditionFailures !== 1) {
+  diagnosticConcurrentRejectedStatuses = concurrentRejectedStatuses;
+  diagnosticConcurrentRejectedReasons = concurrentRejectedReasons;
+  const rejectedAsRateLimited =
+    concurrentRejectedStatuses.length === 1 &&
+    concurrentRejectedStatuses[0] === 403 &&
+    concurrentRejectedReasons.length === 1 &&
+    ["rateLimitExceeded", "userRateLimitExceeded"].includes(
+      concurrentRejectedReasons[0]!,
+    );
+  if (
+    concurrentSuccesses !== 1 ||
+    (concurrentPreconditionFailures !== 1 && !rejectedAsRateLimited)
+  ) {
     throw new GoogleCalendarError(
       "unexpected_concurrent_precondition_result",
       "Google Calendar did not serialize identical conditional updates as expected",
@@ -190,6 +231,7 @@ try {
       original.endTime,
     );
   }
+  diagnosticRestored = restored;
 }
 
 if (!restored) {
@@ -219,8 +261,10 @@ console.log(
       staleEtagStatus: staleStatus,
       staleAttemptZeroMutation: staleZeroMutation,
       concurrentIdenticalUpdates: {
-        committed: concurrentSuccesses,
+        acknowledgedCommitted: concurrentSuccesses,
         preconditionFailed: concurrentPreconditionFailures,
+        rejectedStatuses: concurrentRejectedStatuses,
+        rejectedReasons: concurrentRejectedReasons,
       },
       restoredOriginalInterval: restored,
       privateValuesPrinted: false,
@@ -252,6 +296,11 @@ main().catch((error: unknown) => {
             concurrentCommitted: diagnosticConcurrentSuccesses,
             concurrentPreconditionFailed:
               diagnosticConcurrentPreconditionFailures,
+            concurrentRejectedStatuses:
+              diagnosticConcurrentRejectedStatuses,
+            concurrentRejectedReasons:
+              diagnosticConcurrentRejectedReasons,
+            restoredOriginalInterval: diagnosticRestored,
           }
         : {}),
     })}\n`,

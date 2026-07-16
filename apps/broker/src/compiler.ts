@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod/v4";
 import type { DraftFixture } from "@bander/core";
+import type { CalendarEvent } from "@bander/contracts";
+import { resolveLocalStart } from "./google-calendar.js";
 
 const fixtureIds = [
   "move-dinner-and-notify-sarah",
@@ -69,11 +71,148 @@ export function createDeterministicDraftCompiler(
 
 export class CompilerError extends Error {
   constructor(
-    readonly code: "unsupported_request" | "clarification_required" | "model_unavailable",
+    readonly code:
+      | "unsupported_request"
+      | "clarification_required"
+      | "invalid_model_output"
+      | "model_unavailable",
     message: string,
   ) {
     super(message);
   }
+}
+
+const CalendarIntentSchema = z
+  .object({
+    eventTitleHint: z.string().trim().min(1).max(160),
+    localDateHint: z.string().trim().max(10),
+    requestedLocalStart: z.string().trim().max(5),
+    needsClarification: z.boolean(),
+    clarification: z.string().trim().max(240),
+  })
+  .strict();
+
+export type CalendarIntent = z.infer<typeof CalendarIntentSchema>;
+export const REAL_SOL_MODEL = "gpt-5.6-sol" as const;
+
+export interface CalendarIntentSelector {
+  select(agentClaimedRequest: string): Promise<unknown>;
+}
+
+export interface RealCalendarResolver {
+  discoverEvent(input: {
+    titleHint: string;
+    localDate: string;
+  }): Promise<CalendarEvent>;
+}
+
+export class RealCalendarDraftCompiler implements DraftCompiler {
+  constructor(
+    readonly calendar: RealCalendarResolver,
+    readonly selector: CalendarIntentSelector,
+  ) {}
+
+  async compile(agentClaimedRequest: string): Promise<DraftFixture> {
+    const parsed = CalendarIntentSchema.safeParse(
+      await this.selector.select(agentClaimedRequest),
+    );
+    if (!parsed.success) {
+      throw new CompilerError(
+        "invalid_model_output",
+        "The model did not return one bounded Calendar intent.",
+      );
+    }
+    const intent = parsed.data;
+    if (intent.needsClarification) {
+      throw new CompilerError(
+        "clarification_required",
+        intent.clarification ||
+          "The request needs clarification before Bander can prepare it.",
+      );
+    }
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(intent.localDateHint) ||
+      !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(intent.requestedLocalStart)
+    ) {
+      throw new CompilerError(
+        "invalid_model_output",
+        "The model did not return one complete local Calendar time.",
+      );
+    }
+
+    const event = await this.calendar.discoverEvent({
+      titleHint: intent.eventTitleHint,
+      localDate: intent.localDateHint,
+    });
+    const newStartTime = resolveLocalStart({
+      localDate: intent.localDateHint,
+      localTime: intent.requestedLocalStart,
+      timeZone: event.timeZone,
+    });
+    return {
+      id: "real-google-calendar-reschedule",
+      claimedUserRequest: agentClaimedRequest,
+      calendar: {
+        eventId: event.id,
+        expectedEtag: event.etag,
+        newStartTime,
+      },
+    };
+  }
+}
+
+export class OpenAISolIntentSelector implements CalendarIntentSelector {
+  readonly #client: OpenAI;
+
+  constructor(apiKey: string) {
+    this.#client = new OpenAI({ apiKey, timeout: 15_000, maxRetries: 1 });
+  }
+
+  async select(agentClaimedRequest: string): Promise<unknown> {
+    try {
+      const response = await this.#client.responses.parse({
+        model: REAL_SOL_MODEL,
+        store: false,
+        reasoning: { effort: "low" },
+        max_output_tokens: 300,
+        instructions: [
+          "Extract one narrow Calendar reschedule intent for Bander.",
+          "Return only the event-title hint, complete local date YYYY-MM-DD, and requested local start HH:mm.",
+          "Do not choose or emit a Calendar ID, event ID, ETag, end time, duration, effects, execution parameters, approval, or authority.",
+          "Resolve relative dates using the date explicitly present in the request; if it is not unambiguous, set needsClarification true.",
+          "If the title, date, or start time is missing or ambiguous, set needsClarification true and ask one short question.",
+          "You are advisory extraction only. Deterministic Bander code resolves the event and constructs the action.",
+        ].join(" "),
+        input: agentClaimedRequest,
+        text: {
+          format: zodTextFormat(CalendarIntentSchema, "bander_calendar_intent"),
+        },
+      });
+      if (!response.output_parsed) {
+        throw new CompilerError(
+          "model_unavailable",
+          "GPT-5.6 Sol did not return a usable Calendar intent.",
+        );
+      }
+      return response.output_parsed;
+    } catch (error) {
+      if (error instanceof CompilerError) throw error;
+      throw new CompilerError(
+        "model_unavailable",
+        "GPT-5.6 Sol is temporarily unavailable.",
+      );
+    }
+  }
+}
+
+export function createRealCalendarDraftCompiler(input: {
+  apiKey: string;
+  calendar: RealCalendarResolver;
+}): DraftCompiler {
+  return new RealCalendarDraftCompiler(
+    input.calendar,
+    new OpenAISolIntentSelector(input.apiKey),
+  );
 }
 
 export class FixtureDraftCompiler implements DraftCompiler {

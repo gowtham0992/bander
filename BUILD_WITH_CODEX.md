@@ -900,18 +900,30 @@ canonical id/title/start/end/timezone/organizer/attendees/etag read: true
 start/end-only conditional update: true
 stale ETag status: 412
 stale attempt zero mutation: true
-concurrent identical writes with one ETag: 1 commit, 1 HTTP 412
+concurrent identical writes with one ETag:
+  1 acknowledged commit, 1 HTTP 403 rateLimitExceeded
 original interval restored: true
 private values printed: false
 ```
 
-The empirical concurrency result establishes the timeout rule for the product
-slice: never mint new authority or accept new agent parameters; inspect the
-stored event after an ambiguous response. If the authoritative interval is the
-approved target, human wording may say only that the Calendar is observed at
-that interval, not that Bander certainly caused it. If it is the original
-interval, a retry with the same ETag cannot create two successful commits; if
-it is anything else, fail closed as changed world.
+After OAuth was rotated to the dedicated test account, the ordinary stale-ETag
+probe again returned HTTP 412 with zero mutation. Its simultaneous-write probe
+exposed a different documented Google outcome: one request was acknowledged
+and the other returned HTTP 403 `rateLimitExceeded`, rather than HTTP 412. The
+first diagnostic run was intentionally treated as red because the verifier did
+not yet distinguish the response. It still restored the original interval.
+The verifier now accepts only one acknowledged success plus either 412
+`conditionNotMet` or 403 `rateLimitExceeded`/`userRateLimitExceeded`, records
+the numeric status and machine-readable reason only, and again proved
+restoration.
+
+This empirical result establishes the conservative timeout rule for the
+product slice: never mint new authority, accept new agent parameters or claim
+causation from an ambiguous response. Inspect the stored event. If the
+authoritative interval is the approved target, human wording may say only that
+the Calendar is observed at that interval. If it is the original interval,
+retry only through the existing authority and precondition; if it is anything
+else, fail closed as changed world.
 
 The verifier prints no account, Calendar, event, title, interval, ETag, OAuth
 URL or token value. Local credential and token files remain under ignored
@@ -926,3 +938,76 @@ Bander tools, production build, and a moderate dependency audit with zero
 vulnerabilities. A high-confidence scan of all 91 tracked and checkpoint files
 found zero OpenAI keys, Telegram bot tokens, Google client secrets or Google
 refresh tokens.
+
+## Checkpoint 23 — live GPT-5.6 Sol bounded intent compiler
+
+**Status:** verified locally and against the live Responses API on July 15,
+2026
+
+The focused compiler test was added before the implementation and observed red:
+
+```text
+$ npx vitest run apps/broker/src/real-calendar-compiler.test.ts
+Test Files  1 failed (1)
+Tests       6 failed (6)
+```
+
+All six tests failed because `RealCalendarDraftCompiler` did not exist. They
+cover deterministic event resolution, strict rejection of missing fields,
+strict rejection of a model-authored event ID, malformed local date/time,
+clarification without a Calendar query, and fail-closed ambiguous discovery.
+
+The restored local run now passes all 10 compiler tests plus full typechecking.
+The new path is pinned to the exact model ID `gpt-5.6-sol` and accepts only five
+strict fields: event-title hint, complete local-date hint, requested local
+start, a clarification flag and clarification text. Bander—not the model—then
+resolves exactly one real event, reads its ID and ETag, converts the requested
+wall time using the authoritative event timezone, and constructs the immutable
+Calendar-only fixture. The model cannot provide an event ID, ETag, end time,
+duration, effect, approval, Permit or other authority field.
+
+The live verifier is read-only: it makes one Responses API call, resolves the
+real staged event and confirms the authoritative duration exists, but performs
+no Calendar mutation and prints no request, event, account, token, title, time,
+ID or ETag. Its first run stopped at the explicit configuration gate because
+the local OpenAI key and evidence request were not both configured:
+
+```text
+$ npm run verify:gpt-sol
+{"status":"failed","code":"configuration_missing","stage":"configuration"}
+```
+
+Google OAuth was rotated after the filming account changed. Fresh consent with
+the dedicated test account succeeded at the exact Calendar scope. A subsequent
+read-only query confirmed that the configured date matches the authoritative
+event date. After the fictional event was recreated, Google returned
+`America/Denver` as its authoritative event timezone and exact Bander discovery
+resolved one eligible event without mutation.
+
+The configured live evidence call then passed and printed only:
+
+```text
+model: gpt-5.6-sol
+live Responses call: true
+model output fields: eventTitleHint, localDateHint, requestedLocalStart,
+  needsClarification, clarification
+exactly one real event resolved: true
+event ID chosen by Bander: true
+ETag read by Bander: true
+duration read from authoritative event: true
+Calendar mutation performed: false
+model-authored authority fields: false
+private values printed: false
+```
+
+The real Calendar spike was then rerun under this same dedicated account. The
+stale ETag again returned 412 with zero mutation, the documented concurrent
+rate-limit outcome above was observed, and the original interval was restored.
+
+The restored checkpoint matrix passed: typecheck, 129 functional tests, 20
+attack tests, the six-outcome demo verifier, one-time recovery, standing
+recovery, the real OpenClaw verifier with exactly the three Bander tools,
+production build, and a moderate dependency audit with zero vulnerabilities.
+A high-confidence scan of all 92 tracked and checkpoint files found zero
+OpenAI keys, Telegram bot tokens, Google client secrets or Google refresh
+tokens. `transcription_day2.md` remains untracked and untouched.
