@@ -247,4 +247,4 @@ Future work may add a safe additive installer for existing OpenClaw configuratio
 
 Bander is available under the [MIT License](LICENSE).
 
-For the product source of truth, see [Bander_Build_Plan.md](Bander_Build_Plan.md). For the canonical video, see the [recording plan](docs/recording-plan.md) and [submission checklist](docs/submission-checklist.md).
+For the product source of truth, see [Bander_Build_Plan.md](Bander_Build_Plan.md). Submission preparation is tracked in the [submission checklist](docs/submission-checklist.md).

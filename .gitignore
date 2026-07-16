@@ -8,3 +8,4 @@ coverage/
 .bander/
 *.log
 transcription*.md
+docs/recording-plan.md

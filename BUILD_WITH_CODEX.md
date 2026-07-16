@@ -1478,3 +1478,7 @@ local file was preserved and ignored. `transcription_day2.md` remains local,
 ignored, untouched and absent from this checkpoint. No `.env`, `.bander/`,
 OAuth client/token, bot token, personal screenshot or private account detail
 was added.
+
+Post-push public-scope correction: `docs/recording-plan.md` was removed from
+the repository index and added to `.gitignore` while its local working copy was
+preserved. The public README now links only to the submission checklist.
