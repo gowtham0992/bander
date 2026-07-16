@@ -96,6 +96,17 @@ describe("broker approval boundary", () => {
       agentCompiler: {
         compile: async () => fixture,
       },
+      readSchedule: async () => ({
+        requestedRange: {
+          startLocalDate: "2026-07-17",
+          endLocalDateExclusive: "2026-07-18",
+        },
+        timeZone: "America/Denver",
+        events: [],
+        empty: true,
+        truncated: false,
+        maxEvents: 50,
+      }),
     });
 
     const status = await app.inject({ method: "GET", url: "/api/status" });
@@ -126,6 +137,17 @@ describe("broker approval boundary", () => {
       fixtures: new Map(),
       runtimeMode: "real",
       agentCompiler: { compile: async () => fixture },
+      readSchedule: async () => ({
+        requestedRange: {
+          startLocalDate: "2026-07-17",
+          endLocalDateExclusive: "2026-07-18",
+        },
+        timeZone: "America/Denver",
+        events: [],
+        empty: true,
+        truncated: false,
+        maxEvents: 50,
+      }),
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: "bander-real-test", version: "1.0.0" });
@@ -146,11 +168,120 @@ describe("broker approval boundary", () => {
         "get_receipt",
         "list_capabilities",
         "propose_action",
+        "read_schedule",
       ]);
       expect(text).toContain("Calendar");
+      expect(text).toContain("what is coming up");
       expect(text).not.toContain("Messages");
       expect(text).not.toContain("standing");
       expect(text).not.toContain(fixture.claimedUserRequest);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("reads schedule facts through the real MCP tool with zero authority state", async () => {
+    const setup = createApp();
+    const storeWrites = [
+      vi.spyOn(setup.authorityStore, "saveDraft"),
+      vi.spyOn(setup.authorityStore, "saveBand"),
+      vi.spyOn(setup.authorityStore, "savePermit"),
+      vi.spyOn(setup.authorityStore, "saveReceipt"),
+      vi.spyOn(setup.authorityStore, "saveStandingCandidate"),
+      vi.spyOn(setup.authorityStore, "saveStandingRequest"),
+    ];
+    const proposal = vi.spyOn(setup.engine, "proposeFixture");
+    const readSchedule = vi.fn(async (request: string) => ({
+      requestedRange: {
+        startLocalDate: "2026-07-17",
+        endLocalDateExclusive: "2026-07-18",
+      },
+      timeZone: "America/Denver",
+      events: [
+        {
+          title: "Quoted untrusted event title",
+          allDay: false as const,
+          start: { localDate: "2026-07-17", localTime: "09:00" },
+          end: { localDate: "2026-07-17", localTime: "10:00" },
+        },
+      ],
+      empty: false,
+      truncated: false,
+      maxEvents: 50,
+    }));
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: new Map(),
+      runtimeMode: "real",
+      agentCompiler: { compile: async () => fixture },
+      readSchedule,
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-read-test", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "read_schedule",
+        arguments: { request: "What’s on my calendar tomorrow?" },
+      });
+      const text = (result.content as Array<{ type: string; text?: string }>)[0]?.text ?? "";
+
+      expect(readSchedule).toHaveBeenCalledWith("What’s on my calendar tomorrow?");
+      expect(JSON.parse(text)).toMatchObject({
+        timeZone: "America/Denver",
+        events: [{ title: "Quoted untrusted event title" }],
+      });
+      expect(text).not.toMatch(
+        /calendarId|eventId|etag|credential|oauth|draft|permit|receipt|callback/i,
+      );
+      expect(storeWrites.every((write) => write.mock.calls.length === 0)).toBe(true);
+      expect(proposal).not.toHaveBeenCalled();
+      expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("does not accept an agent-selected Calendar or account parameter", async () => {
+    const setup = createApp();
+    const readSchedule = vi.fn(async () => ({
+      requestedRange: {
+        startLocalDate: "2026-07-17",
+        endLocalDateExclusive: "2026-07-18",
+      },
+      timeZone: "America/Denver",
+      events: [],
+      empty: true,
+      truncated: false,
+      maxEvents: 50,
+    }));
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: new Map(),
+      runtimeMode: "real",
+      agentCompiler: { compile: async () => fixture },
+      readSchedule,
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-read-abuse", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "read_schedule",
+        arguments: {
+          request: "What’s tomorrow?",
+          calendarId: "someone-else@example.invalid",
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(readSchedule).not.toHaveBeenCalled();
+      expect(setup.adapter.executions).toBe(0);
     } finally {
       await client.close();
       await server.close();

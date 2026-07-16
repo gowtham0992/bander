@@ -29,8 +29,8 @@ describe("canonical real-product runtime", () => {
       "bander-openai/gpt-5.6-sol",
     );
     expect(runtime.config.models.providers).not.toHaveProperty("bander-mock");
-    expect(runtime.config.tools.allow).toHaveLength(3);
-    expect(runtime.config.mcp.servers.bander.toolFilter.include).toHaveLength(3);
+    expect(runtime.config.tools.allow).toHaveLength(4);
+    expect(runtime.config.mcp.servers.bander.toolFilter.include).toHaveLength(4);
     expect(runtime.brokerEnv).toMatchObject({ BANDER_RUNTIME_MODE: "real" });
     expect(runtime.brokerEnv).not.toHaveProperty("MOCK_SERVICE_URL");
     expect(runtime.openclawEnv).not.toHaveProperty("GOOGLE_OAUTH_CLIENT_PATH");

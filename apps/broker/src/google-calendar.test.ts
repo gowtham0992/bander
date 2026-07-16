@@ -32,6 +32,18 @@ class FakeBoundary implements GoogleCalendarBoundary {
   patchError: unknown;
   lists: Parameters<GoogleCalendarBoundary["listEvents"]>[0][] = [];
 
+  async getPrimaryTimeZone(): Promise<string> {
+    return "America/Denver";
+  }
+
+  async listScheduleEvents() {
+    return {
+      events: structuredClone(this.events),
+      timeZone: "America/Denver",
+      truncated: false,
+    };
+  }
+
   async listEvents(
     input: Parameters<GoogleCalendarBoundary["listEvents"]>[0],
   ): Promise<GoogleEventResource[]> {

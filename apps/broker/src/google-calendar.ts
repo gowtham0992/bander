@@ -3,9 +3,15 @@ import type {
   CalendarRescheduleEffect,
   DraftDocument,
   Person,
+  ScheduleReadEvent,
+  ScheduleReadResult,
 } from "@bander/contracts";
 import { ExecutionConflictError, type ExecutionAdapter } from "@bander/core";
 import { google } from "googleapis";
+import {
+  localDateRangeToInstants,
+  sanitizeScheduleTitle,
+} from "./read-schedule.js";
 
 type GoogleOAuth2Client = InstanceType<typeof google.auth.OAuth2>;
 
@@ -29,6 +35,18 @@ export interface GoogleCalendarBoundary {
     timeMin: string;
     timeMax: string;
   }): Promise<GoogleEventResource[]>;
+  getPrimaryTimeZone(): Promise<string>;
+  listScheduleEvents(input: {
+    calendarId: "primary";
+    timeMin: string;
+    timeMax: string;
+    timeZone: string;
+    maxResults: number;
+  }): Promise<{
+    events: GoogleEventResource[];
+    timeZone: string;
+    truncated: boolean;
+  }>;
   getEvent(input: {
     calendarId: "primary";
     eventId: string;
@@ -228,13 +246,147 @@ function sameInstant(left: string | null | undefined, right: string): boolean {
   return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs === rightMs;
 }
 
+function scheduleLocalParts(instant: string, timeZone: string) {
+  if (!Number.isFinite(Date.parse(instant))) {
+    throw new GoogleCalendarError(
+      "unsupported_schedule_event",
+      "Google Calendar returned an invalid event time",
+    );
+  }
+  return localMinuteParts(new Date(instant).toISOString(), timeZone);
+}
+
+function scheduleEvent(resource: GoogleEventResource, timeZone: string): ScheduleReadEvent {
+  const title = sanitizeScheduleTitle(resource.summary);
+  const startDate = resource.start?.date;
+  const endDate = resource.end?.date;
+  const startDateTime = resource.start?.dateTime;
+  const endDateTime = resource.end?.dateTime;
+  if (
+    startDate &&
+    endDate &&
+    !startDateTime &&
+    !endDateTime &&
+    /^\d{4}-\d{2}-\d{2}$/.test(startDate) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(endDate) &&
+    Date.parse(`${endDate}T00:00:00.000Z`) >
+      Date.parse(`${startDate}T00:00:00.000Z`)
+  ) {
+    return {
+      title,
+      allDay: true,
+      startLocalDate: startDate,
+      endLocalDateExclusive: endDate,
+    };
+  }
+  if (startDateTime && endDateTime && !startDate && !endDate) {
+    const start = scheduleLocalParts(startDateTime, timeZone);
+    const end = scheduleLocalParts(endDateTime, timeZone);
+    if (Date.parse(endDateTime) <= Date.parse(startDateTime)) {
+      throw new GoogleCalendarError(
+        "unsupported_schedule_event",
+        "Google Calendar returned an invalid event interval",
+      );
+    }
+    return {
+      title,
+      allDay: false,
+      start: { localDate: start.date, localTime: start.time },
+      end: { localDate: end.date, localTime: end.time },
+    };
+  }
+  throw new GoogleCalendarError(
+    "unsupported_schedule_event",
+    "Google Calendar returned an unsupported event interval",
+  );
+}
+
+function scheduleSortKey(event: ScheduleReadEvent): string {
+  return event.allDay
+    ? `${event.startLocalDate}T00:00:00|0|${event.title}`
+    : `${event.start.localDate}T${event.start.localTime}:00|1|${event.title}`;
+}
+
 export class GoogleCalendarAdapter implements ExecutionAdapter {
   readonly #executions = new Map<string, string>();
+  #primaryTimeZone: string | undefined;
 
   constructor(
     readonly boundary: GoogleCalendarBoundary,
     readonly now: () => Date = () => new Date(),
   ) {}
+
+  async getAuthoritativeTimeZone(): Promise<string> {
+    if (this.#primaryTimeZone) return this.#primaryTimeZone;
+    let timeZone: string;
+    try {
+      timeZone = await this.boundary.getPrimaryTimeZone();
+      new Intl.DateTimeFormat("en-US", { timeZone }).format();
+    } catch {
+      throw new GoogleCalendarError(
+        "google_calendar_unavailable",
+        "Google Calendar could not provide its authoritative timezone",
+      );
+    }
+    this.#primaryTimeZone = timeZone;
+    return timeZone;
+  }
+
+  async readSchedule(input: {
+    startLocalDate: string;
+    endLocalDateExclusive: string;
+    timeZone: string;
+    maxEvents: number;
+  }): Promise<ScheduleReadResult> {
+    if (
+      input.maxEvents < 1 ||
+      input.maxEvents > 50 ||
+      input.timeZone !== (await this.getAuthoritativeTimeZone())
+    ) {
+      throw new GoogleCalendarError(
+        "invalid_schedule_read",
+        "Bander rejected an invalid schedule read",
+      );
+    }
+    const instants = localDateRangeToInstants(input);
+    let page;
+    try {
+      page = await this.boundary.listScheduleEvents({
+        calendarId: "primary",
+        ...instants,
+        timeZone: input.timeZone,
+        maxResults: input.maxEvents + 1,
+      });
+    } catch (error) {
+      if (error instanceof GoogleCalendarError) throw error;
+      throw new GoogleCalendarError(
+        "google_calendar_unavailable",
+        "Google Calendar is temporarily unavailable",
+      );
+    }
+    if (page.timeZone !== input.timeZone) {
+      throw new GoogleCalendarError(
+        "google_calendar_timezone_mismatch",
+        "Google Calendar returned an unexpected timezone",
+      );
+    }
+    const mapped = page.events
+      .filter((resource) => resource.status !== "cancelled")
+      .map((resource) => scheduleEvent(resource, input.timeZone))
+      .sort((left, right) => scheduleSortKey(left).localeCompare(scheduleSortKey(right)));
+    const events = mapped.slice(0, input.maxEvents);
+    return {
+      requestedRange: {
+        startLocalDate: input.startLocalDate,
+        endLocalDateExclusive: input.endLocalDateExclusive,
+      },
+      timeZone: input.timeZone,
+      events,
+      empty: events.length === 0,
+      truncated: page.truncated || mapped.length > input.maxEvents,
+      maxEvents: input.maxEvents,
+    };
+  }
 
   async discoverEvent(input: {
     titleHint: string;
@@ -438,6 +590,47 @@ export function createGoogleCalendarBoundary(
         pageToken = nextPageToken;
       } while (pageToken);
       return events;
+    },
+    async getPrimaryTimeZone() {
+      const response = await calendar.events.list({
+        calendarId: "primary",
+        maxResults: 1,
+        showDeleted: false,
+        fields: "timeZone",
+      });
+      const timeZone = response.data.timeZone;
+      if (!timeZone) {
+        throw new GoogleCalendarError(
+          "google_calendar_timezone_missing",
+          "Google Calendar did not return its timezone",
+        );
+      }
+      return timeZone;
+    },
+    async listScheduleEvents(input) {
+      const response = await calendar.events.list({
+        calendarId: input.calendarId,
+        timeMin: input.timeMin,
+        timeMax: input.timeMax,
+        timeZone: input.timeZone,
+        singleEvents: true,
+        orderBy: "startTime",
+        showDeleted: false,
+        maxResults: input.maxResults,
+        fields: "timeZone,nextPageToken,items(summary,status,start,end)",
+      });
+      const timeZone = response.data.timeZone;
+      if (!timeZone) {
+        throw new GoogleCalendarError(
+          "google_calendar_timezone_missing",
+          "Google Calendar did not return its timezone",
+        );
+      }
+      return {
+        events: response.data.items ?? [],
+        timeZone,
+        truncated: Boolean(response.data.nextPageToken),
+      };
     },
     async getEvent(input) {
       const response = await calendar.events.get({

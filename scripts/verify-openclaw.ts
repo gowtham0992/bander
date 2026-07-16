@@ -1,16 +1,17 @@
 import path from "node:path";
+import fs from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createRuntimeEnvironments } from "./process-env.js";
 import {
   buildOpenClawMockProvider,
   type MockProviderEvidence,
 } from "./openclaw-mock-provider.js";
+import {
+  BANDER_REAL_OPENCLAW_TOOLS,
+  BANDER_SANDBOX_OPENCLAW_TOOLS,
+} from "./openclaw-telegram-config.js";
 
-const expectedTools = [
-  "bander__get_receipt",
-  "bander__list_capabilities",
-  "bander__propose_action",
-];
+const expectedTools = [...BANDER_SANDBOX_OPENCLAW_TOOLS];
 const forbiddenTools = new Set([
   "exec",
   "process",
@@ -104,6 +105,16 @@ const provider = buildOpenClawMockProvider();
 const children: Array<{ child: ChildProcess; logs: () => string }> = [];
 
 try {
+  const realConfig = JSON.parse(
+    fs.readFileSync("openclaw/real-product.openclaw.json", "utf8"),
+  ) as Record<string, any>;
+  const realConfiguredTools = [...(realConfig.tools?.allow ?? [])].sort();
+  if (
+    JSON.stringify(realConfiguredTools) !==
+    JSON.stringify([...BANDER_REAL_OPENCLAW_TOOLS].sort())
+  ) {
+    throw new Error("The real OpenClaw profile does not expose exactly four Bander tools");
+  }
   await provider.app.listen({ host: "127.0.0.1", port: 4313 });
   children.push(
     start(
@@ -212,7 +223,8 @@ try {
     JSON.stringify(
       {
         humanRequestObserved: true,
-        effectiveTools,
+        referenceEffectiveTools: effectiveTools,
+        realConfiguredTools,
         toolPolicyAudit: "removed all non-allowlisted tools",
         toolCalls: parsed.meta?.toolSummary,
         draftId: proposalStatus.draftId,

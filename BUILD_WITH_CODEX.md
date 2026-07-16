@@ -1573,3 +1573,128 @@ before product code started; the unchanged verifier passed with permission.
 Both transcript blob hashes remain exactly equal to the starting checkpoint,
 and both transcript files remain local, ignored and untracked. No public
 capability claim was changed and `/feedback` remains deferred.
+
+## July 16, 2026 — bounded real schedule read lane
+
+This checkpoint adds one deliberately separate read-only lane to the canonical
+real product. It does not add production family pairing, notification delivery,
+compound authority, real standing autonomy, another Calendar, or a general
+Google query surface. Hero remains the deterministic three-tool sandbox; real
+mode now has the exact four-tool inventory `list_capabilities`, `read_schedule`,
+`propose_action`, and `get_receipt`.
+
+The red-first run established that real mode had no `read_schedule` module or
+Google read boundary, the MCP/config/runtime inventories still contained three
+tools, and a schedule-shaped request could not produce a real answer. The first
+implementation pass also exposed a strict-boundary mistake: the MCP schema was
+initially expressed as a raw Zod shape, so the SDK stripped an unexpected
+`calendarId` instead of rejecting it. Replacing it with a strict Zod object made
+the forbidden caller-selected Calendar test fail closed. A test expectation
+also caught the bounded event-count edge before the focused suite was green.
+
+The final design keeps reads structurally outside the authority lifecycle. The
+only MCP input is the newest natural request verbatim. A separate live
+`gpt-5.6-sol` Structured Output compiler may select only a start local date,
+exclusive end local date, clarification state, and one short question.
+Deterministic code resolves relative dates using the connected primary
+Calendar's authoritative timezone and an injected clock, rejects missing or
+ambiguous ranges, and caps the request at 31 calendar days. The Google boundary
+uses only an events-list operation against `primary`, requests 51 entries to
+detect truncation, and returns at most 50 deterministically ordered items.
+
+The MCP response uses a dedicated schedule DTO. It includes only sanitized
+title, human-relevant start/end, all-day state, authoritative timezone,
+requested range, and honest empty/truncated state. Timed, all-day, and recurring
+occurrences are readable without becoming eligible writable events. Control and
+bidirectional-control characters are removed and titles are bounded to 120
+characters. Calendar IDs, event IDs, ETags, sequence, organizer and attendee
+data, descriptions, locations, conference links, attachments, OAuth/account
+data, and authority metadata are never selected from Google or returned through
+MCP.
+
+Focused tests cover strict model output, forbidden caller parameters, the
+31-day limit, 50-event truncation, deterministic timed/all-day/recurring
+rendering, control/bidi title sanitization, empty results, Google failure with
+no sandbox fallback, zero authority/store/execution calls, and injected-clock
+boundaries across America/Denver's 23-hour spring day and 25-hour fall day.
+Schedule facts intentionally enter OpenClaw's trajectory for the requested
+answer; Card, callback, outcome, credential, ID and ETag canaries remain absent.
+The system prompt treats titles only as quoted untrusted data and forbids a read
+result from causing an action call without a later genuine human request. This
+reduces exposure but does not claim to solve prompt injection or model
+mis-summary.
+
+The live read-intent probe used the exact model `gpt-5.6-sol` and passed 7/7
+cases: tomorrow, a named date and an inclusive parent range compiled correctly;
+missing date, an over-31-day range, an action-shaped request and a mixed
+read/action request failed into bounded clarification. It accepted no
+model-authored Calendar or authority fields, called no Calendar, created no
+authority, and printed no private value.
+
+The genuine supervised product then passed the parent journey through Telegram:
+
+```text
+Hi
+  ordinary OpenClaw reply; 0 Bander calls
+
+What's on my calendar tomorrow?
+  exactly 1 read_schedule call; honest empty Friday; no Card
+
+Do I have anything on July 18?
+  exactly 1 read_schedule call; 1 real fictional event with only
+  title/start/end/allDay in the event DTO; no Card
+
+What can you help me with?
+  exact installed-capability answer; 0 Bander calls
+
+What's on my calendar?
+  1 read_schedule call; one specific date/range clarification
+
+What's on my calendar from July 17 through August 20?
+  1 read_schedule call; explicit 31-day refusal; no silent truncation
+
+What's on my calendar tomorrow, and move my appointment?
+  0 tools; asked for one clear consequential request; no split
+
+Move my appointment tomorrow
+  propose_action clarification lane, never read_schedule; 0 new proposals
+```
+
+The last live turn exposed one additional parent-facing red: Bander delivered
+the deterministic clarification, then OpenClaw redundantly asked a second
+question. The sandbox prompt already suppressed this, but the new real prompt
+had omitted the rule. A focused prompt test failed first. Real mode now requires
+OpenClaw to return exactly `NO_REPLY` after proposal-lane terminal or
+clarification statuses. After restart, the same request produced one Bander
+clarification, an internal OpenClaw `NO_REPLY`, and no second Telegram message.
+
+Throughout the live run the Telegram proposal count remained at its six-item
+pre-test baseline, standing candidate/outcome counts remained zero, and no Card
+appeared. The non-empty read trajectory contained one event and no forbidden
+field. Startup and the generated real configuration both reported exactly four
+Bander tools; OpenClaw had no Google OAuth client or token path. Google reads
+were real and never fell back to a fixture or mock service.
+
+Restored-green verification:
+
+```text
+focused read/config/provider suites: 6 files, 54 tests; post-live prompt tests 21
+typecheck: passed
+functional suite: 20 files, 214 tests passed
+attack suite: 2 files, 20 tests passed
+demo verifier: all 6 outcomes passed
+one-time HTTP recovery: 1 mutation, Band, Permit and Receipt
+standing HTTP recovery: 1 Draft, Permit, mutation, Receipt and counter entry
+real OpenClaw verifier: sandbox reference 3 tools; real configuration 4 tools
+live read Sol evidence: 7/7 cases passed
+production build: passed
+dependency audit: 0 vulnerabilities
+tracked and proposed-file token-shaped secret scan: 0 matches across 113 files
+```
+
+The first sandboxed recovery invocation hit the known local tsx IPC `EPERM`
+before product code started; the unchanged verifiers passed with local-process
+permission. Transcript blob hashes remain
+`920eb1a862a20debe214af9915401facc23aeb6b` and
+`3c30cae54d4efba1a7a6aa025199d68435dab348`; both files remain ignored,
+untracked and untouched. `/feedback` remains deferred.

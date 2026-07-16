@@ -7,7 +7,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { TelegramServiceState } from "../apps/broker/src/telegram-service.js";
-import { BANDER_OPENCLAW_TOOLS } from "./openclaw-telegram-config.js";
+import { BANDER_REAL_OPENCLAW_TOOLS } from "./openclaw-telegram-config.js";
 import { createRealProductRuntime } from "./real-product-runtime.js";
 
 function loadEnvironment(): void {
@@ -67,13 +67,13 @@ async function runCommand(command: string, args: string[], env: NodeJS.ProcessEn
   });
 }
 
-async function assertExactlyThreeMcpTools(brokerUrl: string): Promise<void> {
+async function assertExactRealMcpTools(brokerUrl: string): Promise<void> {
   const client = new Client({ name: "bander-real-startup", version: "1.0.0" });
   const transport = new StreamableHTTPClientTransport(new URL(`${brokerUrl}/mcp`));
   try {
     await client.connect(transport as Parameters<Client["connect"]>[0]);
     const tools = (await client.listTools()).tools.map((tool) => `bander__${tool.name}`).sort();
-    assert.deepEqual(tools, [...BANDER_OPENCLAW_TOOLS].sort());
+    assert.deepEqual(tools, [...BANDER_REAL_OPENCLAW_TOOLS].sort());
   } finally {
     await client.close();
   }
@@ -152,6 +152,7 @@ export async function runRealProduct(): Promise<void> {
       calendarBackend: "google",
       compilerKind: "real_calendar",
       modelCompiler: "available",
+      scheduleRead: "available",
       heroMode: false,
     });
     const fixtureResponse = await fetch(`${brokerUrl}/api/demo/proposals`, {
@@ -168,7 +169,7 @@ export async function runRealProduct(): Promise<void> {
       404,
       "/api/demo/standing-band-candidates leaked into real mode",
     );
-    await assertExactlyThreeMcpTools(brokerUrl);
+    await assertExactRealMcpTools(brokerUrl);
 
     const gatewayPort = await reservePort();
     const gatewayLog = fs.createWriteStream(runtime.paths.gatewayLog, { flags: "w", mode: 0o600 });
@@ -197,7 +198,7 @@ export async function runRealProduct(): Promise<void> {
       "Another Telegram gateway is already polling the OpenClaw bot",
     );
     console.log("Bander real product is ready.");
-    console.log("Telegram → live OpenClaw → Bander → real Google Calendar");
+    console.log("Telegram → live OpenClaw → four bounded Bander tools → real Google Calendar");
     console.log(`OpenClaw gateway log: ${runtime.paths.gatewayLog}`);
 
     await new Promise<void>((resolve, reject) => {

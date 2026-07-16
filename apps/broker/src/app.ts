@@ -8,6 +8,7 @@ import type {
   AgentReceipt,
   ApprovalCard,
   DemoSandboxState,
+  ScheduleReadResult,
 } from "@bander/contracts";
 import { CompilerError, type DraftCompiler } from "./compiler.js";
 import { registerMcpRoutes } from "./mcp.js";
@@ -33,6 +34,11 @@ interface BrokerAppOptions {
   dropNextStandingRunResponseAfterCompletion?: () => boolean;
   heroMode?: boolean;
   readHeroState?: () => Promise<DemoSandboxState>;
+  readSchedule?: (
+    request: string,
+  ) => Promise<
+    ScheduleReadResult | { status: "clarification_required"; question: string }
+  >;
 }
 
 function sendError(error: unknown, reply: { code(status: number): { send(body: unknown): unknown } }) {
@@ -47,6 +53,9 @@ function sendError(error: unknown, reply: { code(status: number): { send(body: u
 }
 
 export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
+  if (options.runtimeMode === "real" && !options.readSchedule) {
+    throw new Error("Real Bander requires the bounded schedule reader");
+  }
   const app = Fastify({
     logger: false,
     ajv: { customOptions: { removeAdditional: false } },
@@ -60,6 +69,10 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     calendarBackend: options.runtimeMode === "real" ? "google" : "sandbox",
     compilerKind: options.runtimeMode === "real" ? "real_calendar" : "fixture",
     modelCompiler: options.compiler ? "available" : "not_configured",
+    scheduleRead:
+      options.runtimeMode === "real" && options.readSchedule
+        ? "available"
+        : "not_configured",
     heroMode: options.heroMode === true,
   }));
 

@@ -1,6 +1,6 @@
 # Architecture decisions
 
-This document describes the implemented Build Week architecture as of July 15, 2026. Parent-facing copy avoids the internal authority terms used here.
+This document describes the implemented Build Week architecture as of July 16, 2026. Parent-facing copy avoids the internal authority terms used here.
 
 ## ADR-001: Real and sandbox are separate fail-closed runtimes
 
@@ -11,19 +11,20 @@ The repository has two deliberately distinct product paths:
 - **Real:** live conversational OpenClaw, exact model `gpt-5.6-sol`, Bander's Google Calendar adapter, one bound Telegram owner/group, and no fixture or mock-service routes.
 - **Sandbox:** deterministic provider, versioned fixtures, seeded credential-protected mock services, and no claim of Google access.
 
-`npm run real` supervises a fresh broker and OpenClaw gateway. Before printing ready, it verifies `runtimeMode: real`, the Google backend, real compiler, paired Telegram installation, exact three-tool inventory, live model configuration, credential separation, and missing fixture/standing demo routes. It refuses an existing broker rather than attaching to a possibly stale sandbox.
+`npm run real` supervises a fresh broker and OpenClaw gateway. Before printing ready, it verifies `runtimeMode: real`, the Google backend, real action and read compilers, paired Telegram installation, exact four-tool inventory, live model configuration, credential separation, and missing fixture/standing demo routes. It refuses an existing broker rather than attaching to a possibly stale sandbox.
 
-## ADR-002: The protected OpenClaw profile has exactly three Bander tools
+## ADR-002: The protected OpenClaw profile has a small exact tool inventory
 
 **Status:** accepted
 
 The dedicated profile can call:
 
 - `bander__list_capabilities`
+- `bander__read_schedule`
 - `bander__propose_action`
 - `bander__get_receipt`
 
-The OpenClaw model may converse normally and decide whether to propose a clear Calendar action. It cannot approve, mint authority, author a Card or outcome, or call Google directly. Its environment contains the OpenAI key and OpenClaw Telegram token needed for its own work, but not Google OAuth paths, the Bander Telegram token, mock-service credentials, Calendar tools, browser, shell, or generic outbound-action tools.
+The OpenClaw model may converse normally, ask Bander for one bounded schedule range, and decide whether to propose a clear Calendar action. It cannot approve, mint authority, author a Card or outcome, choose a Calendar/account/API query, or call Google directly. Its environment contains the OpenAI key and OpenClaw Telegram token needed for its own work, but not Google OAuth paths, the Bander Telegram token, mock-service credentials, Calendar tools, browser, shell, or generic outbound-action tools.
 
 The strong route property applies only inside this profile. Bander does not restrict other OpenClaw profiles or a host compromised at the operating-system/user-account level.
 
@@ -78,7 +79,7 @@ Pairing uses an expiring high-entropy private-chat deep link and Telegram's grou
 
 Each proposal callback binds the installation, owner Telegram ID, chat ID, Bander-authored message ID, opaque callback value, Draft, expiry, and lifecycle. Approval and replay always enter the engine's idempotent approval method. Decline is terminal and idempotent. Wrong owner, chat, message, bot, callback, expiry, or changed content fails closed.
 
-The accepted bot policy is: Bot-to-Bot Communication off for both bots, OpenClaw Group Privacy off, Bander Group Privacy on, owner-only sender allowlist, bound group only, `requireMention: false`, `historyLimit: 0`, and restricted context visibility. Exported OpenClaw trajectories must contain no human Card, callback, Calendar/refusal detail, or Bander outcome.
+The accepted bot policy is: Bot-to-Bot Communication off for both bots, OpenClaw Group Privacy off, Bander Group Privacy on, owner-only sender allowlist, bound group only, `requireMention: false`, `historyLimit: 0`, and restricted context visibility. Exported OpenClaw trajectories may contain the bounded schedule DTO when the parent asks a read question. They must contain no human Card, callback, writable Calendar identifier or precondition, action/refusal detail, credential, or Bander outcome.
 
 ## ADR-007: Execution and human notification have different retry guarantees
 
@@ -109,3 +110,15 @@ A future production version needs transactional durable authority storage, migra
 **Status:** accepted limitation
 
 The Streamable HTTP MCP endpoint binds to `127.0.0.1`, accepts no agent-controlled owner identity, and rate-limits proposal traffic. It has no application-level authentication and must not be exposed to a LAN or public network. The prototype's trust boundary assumes the local OS/user account is not already compromised.
+
+## ADR-011: Schedule reading is a separate bounded data lane
+
+**Status:** accepted after live Google + Telegram evidence
+
+Real mode alone adds `bander__read_schedule`. Its sole input is the newest natural user request verbatim; the caller cannot provide a Calendar ID, account, query, filter, timezone, event ID, or API parameter. A separate live `gpt-5.6-sol` Structured Output call may return only the start local date, exclusive end local date, clarification state, and one short clarification question. Deterministic Bander code resolves relative dates in the connected primary Calendar's authoritative timezone using an injected clock, rejects missing or ambiguous ranges, and enforces a maximum of 31 calendar days.
+
+The Google boundary performs only a primary-Calendar event listing for this lane. It returns a separate DTO capped at 50 deterministically ordered events: sanitized title, human-relevant start/end, all-day state, authoritative timezone, requested range, and honest empty/truncated state. Timed, all-day, and recurring occurrences are readable; that does not make them eligible for writable authority. Calendar IDs, event IDs, ETags, sequence, organizer/attendee data, descriptions, locations, conference links, attachments, OAuth/account data, and internal metadata are omitted.
+
+Calendar titles are untrusted data. Bander normalizes them, strips control and bidirectional-control characters, bounds them to 120 characters, and tells OpenClaw to treat them only as quoted data—not instructions or a reason to call an action tool. This narrows exposure but does not claim to solve prompt injection: schedule facts intentionally enter the model trajectory, and a model can still mis-summarize benign or adversarial text. Consequential execution remains structurally unreachable from the read handler, and action tools require a later genuine human request.
+
+The Hero/reference sandbox remains on its historically verified three-tool profile. The canonical real product has exactly four Bander tools; the distinction is asserted at startup and in the real-process verifier.

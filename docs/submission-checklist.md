@@ -6,13 +6,15 @@ Live Devpost check: submissions close **July 21, 2026 at 5:00 PM Pacific Time** 
 
 - [x] Canonical `npm run real` supervises live OpenClaw and the real Bander broker
 - [x] Ordinary conversation uses live `gpt-5.6-sol` with zero Bander call
+- [x] Natural schedule questions use one bounded real Google read with no Card, authority or mutation
+- [x] Empty, missing-date, over-31-day and mixed read/action requests fail honestly without silent broadening
 - [x] Natural cross-day request uses live Sol intent compilation and real Google discovery
 - [x] Primary Calendar, timed/non-recurring/owner-organized/attendee-free event gate
 - [x] Complete source/destination Card, owner approval and decline, duration preservation
 - [x] One real conditional Google mutation and truthful Bander outcome
 - [x] Real stale-ETag changed-world refusal with zero Bander mutation
-- [x] Exactly three Bander tools and OpenClaw credential isolation
-- [x] Human Card, callback, Calendar detail, refusal, and outcome absent from OpenClaw trajectory
+- [x] Exactly four bounded real-product tools and OpenClaw credential isolation
+- [x] Only the bounded schedule DTO may enter the model trajectory; Card, callback, writable Calendar detail, credential, refusal, and outcome remain absent
 - [x] Deterministic Hero and browser sandbox preserved for judges
 - [x] Functional, attack, recovery, OpenClaw, Telegram, Google, Sol, build, audit, and secret checks recorded
 - [ ] Final clean recording-machine run immediately before filming
@@ -38,7 +40,7 @@ Current required form fields also include submitter type, country of residence, 
 - [x] README leads with the real product and separates Real from Hero sandbox
 - [x] Fresh-clone macOS/Node/OpenClaw/Telegram/OpenAI/Google/pairing instructions
 - [x] Current capability and exact security boundary
-- [x] Architecture, recording plan, builder plan, and evidence ledger synchronized
+- [x] Architecture, builder plan, submission checklist, and evidence ledger synchronized
 - [x] No tracked `.env`, `.bander/`, OAuth client/token, bot token, personal screenshot, or current transcript
 - [ ] Make `gowtham0992/bander` public, or keep private and share with both judge addresses
 - [ ] Verify repository rendering and links on GitHub after push
@@ -51,9 +53,10 @@ Current required form fields also include submitter type, country of residence, 
 - [ ] Restore the staged event and confirm `America/Denver` before filming
 - [ ] Stop all stale gateways, then start only `npm run real`
 - [ ] Capture `Hi` → ordinary conversation with no Bander call
+- [ ] Capture a natural schedule question → warm real Calendar answer with no Bander Card
 - [ ] Capture natural request → real Card → approval → one real Google move → truthful outcome
 - [ ] Capture independent Google change → approval → human refusal → zero Bander mutation
-- [ ] Show exactly three Bander tools and the credential boundary briefly
+- [ ] Show exactly four bounded Bander tools and the credential boundary briefly
 - [ ] Show selected red/green Codex evidence briefly
 - [ ] Keep secrets, account identifiers, OAuth details, generated config, and personal content off screen
 - [ ] Export, watch end to end, confirm narration and duration under three minutes
@@ -80,6 +83,7 @@ npm run verify:demo
 npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
+npm run verify:read-sol
 npm audit
 ```
 

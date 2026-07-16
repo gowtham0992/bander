@@ -9,6 +9,7 @@ interface MockProviderOptions {
   supportedRequests?: Array<{ request: string; requestId?: string }>;
   suppressProposedReply?: boolean;
   suppressBanderReplies?: boolean;
+  scheduleRequests?: string[];
 }
 
 interface ChatMessage {
@@ -89,7 +90,35 @@ function responseForToolResult(
   suppressBanderReplies = false,
 ): string {
   try {
-    const result = JSON.parse(textContent(message.content)) as { status?: string };
+    const result = JSON.parse(textContent(message.content)) as {
+      status?: string;
+      events?: Array<{
+        title?: string;
+        allDay?: boolean;
+        start?: { localDate?: string; localTime?: string };
+        startLocalDate?: string;
+      }>;
+      empty?: boolean;
+      truncated?: boolean;
+      timeZone?: string;
+      requestedRange?: unknown;
+    };
+    if (result.requestedRange && Array.isArray(result.events)) {
+      if (result.empty || result.events.length === 0) {
+        return "You don’t have anything scheduled in that period.";
+      }
+      const lines = result.events.map((event) => {
+        const when = event.allDay
+          ? `${event.startLocalDate ?? "that day"} (all day)`
+          : `${event.start?.localDate ?? "that day"} at ${event.start?.localTime ?? "an unspecified time"}`;
+        return `“${event.title ?? "Untitled event"}” — ${when}`;
+      });
+      return [
+        "Here’s what’s on your connected calendar:",
+        ...lines,
+        ...(result.truncated ? ["There are more events than I can show in one answer."] : []),
+      ].join("\n");
+    }
     if (
       suppressBanderReplies &&
       ["proposed", "executed", "conflict", "declined"].includes(
@@ -131,6 +160,11 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
           ? { requestId: options.standingRequestId }
           : {}),
       },
+    ];
+  const scheduleRequests =
+    options.scheduleRequests ?? [
+      "What’s on my calendar tomorrow?",
+      "Do I have anything on July 18?",
     ];
   const app = Fastify({ logger: false });
   const evidence: MockProviderEvidence = {
@@ -180,6 +214,14 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
             normalizeRequestText(candidate.request),
         )
       : undefined;
+    const scheduleRequest = Boolean(
+      latestHumanRequest &&
+        scheduleRequests.some(
+          (candidate) =>
+            normalizeRequestText(candidate) ===
+            normalizeRequestText(latestHumanRequest),
+        ),
+    );
     const toolMessage =
       latestToolIndex >= 0 && pendingUserTexts.length === 0
         ? messages[latestToolIndex]
@@ -207,7 +249,9 @@ export function buildOpenClawMockProvider(options: MockProviderOptions = {}): {
               id: "call_bander_proposal",
               type: "function",
               function: {
-                name: "bander__propose_action",
+                name: scheduleRequest
+                  ? "bander__read_schedule"
+                  : "bander__propose_action",
                 arguments: JSON.stringify({
                   request: latestHumanRequest!,
                   ...(matchedRequestMetadata?.requestId

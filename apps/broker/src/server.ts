@@ -20,6 +20,10 @@ import {
 } from "./google-calendar.js";
 import { loadGoogleCalendarOAuth } from "./google-oauth.js";
 import { MockServiceClient } from "./mock-client.js";
+import {
+  OpenAISolReadScheduleIntentSelector,
+  ReadScheduleService,
+} from "./read-schedule.js";
 import { parseRuntimeConfiguration } from "./runtime-config.js";
 import {
   FileTelegramServiceStore,
@@ -33,6 +37,7 @@ let adapter: ExecutionAdapter;
 let mockAdapter: MockServiceClient | undefined;
 let fixtures: Map<string, DraftFixture>;
 let compiler: DraftCompiler | undefined;
+let readScheduleService: ReadScheduleService | undefined;
 
 if (configuration.mode === "real") {
   const auth = await loadGoogleCalendarOAuth({
@@ -42,12 +47,22 @@ if (configuration.mode === "real") {
   const googleAdapter = new GoogleCalendarAdapter(
     createGoogleCalendarBoundary(auth),
   );
+  const authoritativeTimeZone = await googleAdapter.getAuthoritativeTimeZone();
+  if (authoritativeTimeZone !== configuration.calendarTimeZone) {
+    throw new Error(
+      "BANDER_CALENDAR_TIME_ZONE does not match the connected primary Calendar",
+    );
+  }
   adapter = googleAdapter;
   fixtures = new Map();
   compiler = createRealCalendarDraftCompiler({
     apiKey: configuration.openaiApiKey,
     calendar: googleAdapter,
     calendarTimeZone: configuration.calendarTimeZone,
+  });
+  readScheduleService = new ReadScheduleService({
+    selector: new OpenAISolReadScheduleIntentSelector(configuration.openaiApiKey),
+    backend: googleAdapter,
   });
 } else {
   mockAdapter = new MockServiceClient({
@@ -81,6 +96,9 @@ const app = buildBrokerApp({
   runtimeMode: configuration.mode,
   ...(compiler ? { compiler } : {}),
   ...(compiler ? { agentCompiler: compiler } : {}),
+  ...(readScheduleService
+    ? { readSchedule: (request: string) => readScheduleService.read(request) }
+    : {}),
   ...(telegramService
     ? {
         deliverAgentProposal: (card) => telegramService.deliverProposal(card),

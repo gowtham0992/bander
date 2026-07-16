@@ -30,6 +30,7 @@
     "verify:google-calendar": "tsx scripts/verify-google-calendar.ts",
     "verify:gpt-sol": "tsx scripts/verify-gpt-sol.ts",
     "verify:compound-sol": "tsx scripts/verify-compound-sol.ts",
+    "verify:read-sol": "tsx scripts/verify-read-sol.ts",
     "spike:family-contact": "tsx scripts/spike-family-contact.ts",
     "verify:openclaw": "npm run build && tsx scripts/verify-openclaw.ts",
     "verify:telegram-privacy": "tsx scripts/verify-telegram-service.ts",

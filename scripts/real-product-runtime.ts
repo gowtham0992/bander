@@ -5,7 +5,7 @@ import type { TelegramInstallation } from "../apps/broker/src/telegram-service.j
 import {
   applyPinnedTelegramPolicy,
   assertPinnedTelegramPolicy,
-  BANDER_OPENCLAW_TOOLS,
+  BANDER_REAL_OPENCLAW_TOOLS,
 } from "./openclaw-telegram-config.js";
 import { createRuntimeEnvironments } from "./process-env.js";
 
@@ -51,7 +51,10 @@ export function createRealProductRuntime(input: {
   assertPinnedTelegramPolicy(config, input.installation);
   assert.equal(config.agents.defaults.model.primary, "bander-openai/gpt-5.6-sol");
   assert.equal(config.models.providers["bander-mock"], undefined);
-  assert.deepEqual([...config.tools.allow].sort(), [...BANDER_OPENCLAW_TOOLS].sort());
+  assert.deepEqual(
+    [...config.tools.allow].sort(),
+    [...BANDER_REAL_OPENCLAW_TOOLS].sort(),
+  );
 
   const openclawEnv: NodeJS.ProcessEnv = {
     ...environments.openclaw,

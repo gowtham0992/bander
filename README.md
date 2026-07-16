@@ -19,7 +19,7 @@ The claim is intentionally narrow: Bander does not decide whether an agent's goa
 ## A 30-second real journey
 
 1. A parent writes in Telegram: “Move Bander Demo Appointment to July 17 at 2 PM.”
-2. Conversational OpenClaw uses one of three Bander tools to propose the request. Nothing has happened yet.
+2. Conversational OpenClaw uses Bander's bounded proposal tool. Nothing has happened yet.
 3. Bander—not OpenClaw—finds one eligible event in the connected Google Calendar and posts the complete old and new intervals from its own Telegram identity.
 4. The bound owner chooses **Do exactly this** or **Not now** on Bander's message.
 5. On approval, Bander conditionally updates the same event with its approved Google ETag, then independently posts what Google now shows. If the event changed first, Bander stops instead.
@@ -29,6 +29,7 @@ The claim is intentionally narrow: Bander does not decide whether an agent's goa
 The real product path currently provides:
 
 - ordinary OpenClaw conversation without invoking Bander for greetings or unrelated chat;
+- bounded read-only answers about the connected primary Calendar, including timed, all-day, and recurring occurrences, without an approval Card;
 - natural-language rescheduling of Google Calendar events on the connected primary calendar;
 - live `gpt-5.6-sol` compilation into a bounded title hint, optional source date, required destination date, and required destination time;
 - exact matching of one timed, non-recurring, owner-organized event with no attendees;
@@ -41,14 +42,14 @@ The real product path currently provides:
 
 An assistant is good at interpreting open-ended language. It should not also hold the downstream credential, describe the permission surface, approve itself, execute, and narrate its own success. Bander separates those jobs.
 
-OpenClaw receives only the three bounded Bander tools and minimal lifecycle statuses. The Google OAuth credential, deterministic action construction, human approval surface, conditional write, and human outcome stay inside Bander.
+OpenClaw receives a small exact inventory of four bounded Bander tools. Read-only schedule facts intentionally enter its model trajectory so it can answer the parent. The Google OAuth credential, Calendar identifiers and ETags, deterministic action construction, human approval surface, conditional write, and Bander outcome stay inside Bander.
 
 ## How OpenClaw and Bander work together
 
 ```mermaid
 flowchart LR
     P["Parent in Telegram"] --> O["OpenClaw reasoning<br/>protected profile"]
-    O -->|"exactly 3 Bander tools"| B["Bander"]
+    O -->|"exactly 4 bounded Bander tools"| B["Bander"]
     B -->|"minimal MCP status only"| O
     B -->|"Card + owner approval"| T["Bander Telegram identity"]
     T --> P
@@ -57,7 +58,7 @@ flowchart LR
     B -->|"independent outcome"| T
 ```
 
-OpenClaw and Bander are deliberately different Telegram identities: OpenClaw converses; Bander asks for authority and reports outcomes. Human Card, callback, Calendar detail, refusal, and outcome content do not enter OpenClaw's model trajectory.
+OpenClaw and Bander are deliberately different Telegram identities: OpenClaw converses; Bander asks for authority and reports outcomes. For schedule questions, only sanitized titles, human-relevant intervals, all-day state, timezone, requested range, and honest empty/truncated state enter OpenClaw's trajectory. Human Cards, callbacks, writable Calendar identifiers and preconditions, refusal details, and Bander outcomes do not.
 
 ## Quick start
 
@@ -157,7 +158,7 @@ Multiple eligible title matches fail closed and ask for the source date. Zero ma
 npm run real
 ```
 
-The command validates the real mode, Google adapter, live model provider, paired Telegram installation, exact three-tool inventory, credential separation, and absence of fixture routes before reporting:
+The command validates the real mode, Google adapter, live model provider, paired Telegram installation, exact four-tool inventory, credential separation, and absence of fixture routes before reporting:
 
 ```text
 Bander real product is ready.
@@ -197,6 +198,7 @@ npm run verify:demo
 npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
+npm run verify:read-sol
 npm audit
 ```
 
@@ -219,14 +221,15 @@ The suite covers changed-world preconditions, malformed and broadened model outp
 
 ## Security boundary and limitations
 
-> In the Bander-protected OpenClaw profile, the model can converse and propose through three bounded Bander tools. It does not receive the connected Google credential, cannot approve its own proposal, and cannot author Bander’s Card or outcome. Bander does not protect a host already compromised at the operating-system/user-account level.
+> In the Bander-protected OpenClaw profile, the model can converse, read a bounded schedule DTO, and propose through four bounded Bander tools. It does not receive the connected Google credential, cannot approve its own proposal, and cannot author Bander’s Card or outcome. Bander does not protect a host already compromised at the operating-system/user-account level.
 
 The strong route claim applies only inside the dedicated protected OpenClaw profile and only to effects routed through Bander. It does not restrict a user's other OpenClaw agents, tools, credentials, or applications.
 
 Current limitations are material:
 
-- the real path only reschedules the narrow Google Calendar event shape described above;
-- it does not generally read or summarize a schedule;
+- the real action path only reschedules the narrow Google Calendar event shape described above;
+- schedule reads are limited to the connected primary Calendar, one explicit range of at most 31 days, and at most 50 sanitized events; locations, descriptions, conference links, attachments, attendees, identifiers, and ETags are omitted;
+- Calendar titles are untrusted text. Bander strips control and bidirectional-control characters and the OpenClaw prompt treats titles only as quoted data, but this reduces rather than eliminates model prompt-injection risk;
 - it does not send email or messages, make reservations or purchases, control transportation, perform medical actions, or control locks or smart-home devices;
 - the current repository does not provide a production installer for an arbitrary existing OpenClaw configuration;
 - real authority state is in memory and is not restart-durable; Telegram installation/callback delivery state is file-backed, while the deterministic sandbox contains the broader recovery demonstrations;
@@ -237,7 +240,7 @@ Current limitations are material:
 
 Codex was the primary builder and verification partner throughout Build Week. It helped turn the product claim into executable invariants, wrote red-first regressions for authority and recovery gaps, integrated the real OpenClaw/Telegram/Google path, ran the attack and privacy suites, and maintained [BUILD_WITH_CODEX.md](BUILD_WITH_CODEX.md) as an evidence ledger of decisions and observed failures.
 
-In the real product, `gpt-5.6-sol` plays two deliberately bounded roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander makes a separate Responses API call that compiles only a natural rescheduling request into strict intent fields. It cannot choose a Calendar ID, event ID, ETag, final end time, effects, authority, or execution parameters. Deterministic Bander code resolves the one real event, preserves duration, constructs the exact action, and fails closed on malformed, missing, ambiguous, or broadened output.
+In the real product, `gpt-5.6-sol` plays three deliberately bounded roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander makes separate strict Responses API calls for action intent and read-range intent. The read compiler may select only a start local date, exclusive end local date, and a short clarification; the action compiler may select only the bounded rescheduling hints described above. Neither can choose a Calendar ID, event ID, ETag, credential, final end time, effects, authority, or execution parameters. Deterministic Bander code resolves the authoritative timezone and event data, enforces range and eligibility limits, constructs the exact action, and fails closed on malformed, missing, ambiguous, or broadened output.
 
 ## Roadmap
 

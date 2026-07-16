@@ -10,6 +10,32 @@ export interface CalendarEvent {
   etag: string;
 }
 
+export type ScheduleReadEvent =
+  | {
+      title: string;
+      allDay: true;
+      startLocalDate: string;
+      endLocalDateExclusive: string;
+    }
+  | {
+      title: string;
+      allDay: false;
+      start: { localDate: string; localTime: string };
+      end: { localDate: string; localTime: string };
+    };
+
+export interface ScheduleReadResult {
+  requestedRange: {
+    startLocalDate: string;
+    endLocalDateExclusive: string;
+  };
+  timeZone: string;
+  events: ScheduleReadEvent[];
+  empty: boolean;
+  truncated: boolean;
+  maxEvents: number;
+}
+
 export interface Person {
   id: string;
   displayName: string;

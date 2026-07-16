@@ -31,11 +31,13 @@ The production service does not trust owner or group IDs from environment variab
 
 ## Required OpenClaw policy
 
-The spike generates an ignored local OpenClaw config that maps `OPENCLAW_TELEGRAM_BOT_TOKEN` to OpenClaw's `TELEGRAM_BOT_TOKEN` without exposing the Bander token. It allows only the numeric owner in only the configured group, sets that group's `requireMention` to `false`, sets `contextVisibility` to `allowlist`, and sets `historyLimit` to `0`. The effective tool inventory remains exactly:
+The historical privacy/Hero verifier generates an ignored sandbox OpenClaw config that maps `OPENCLAW_TELEGRAM_BOT_TOKEN` to OpenClaw's `TELEGRAM_BOT_TOKEN` without exposing the Bander token. It allows only the numeric owner in only the configured group, sets that group's `requireMention` to `false`, sets `contextVisibility` to `allowlist`, and sets `historyLimit` to `0`. That sandbox inventory remains exactly:
 
 - `bander__list_capabilities`
 - `bander__propose_action`
 - `bander__get_receipt`
+
+The canonical real product separately exposes `bander__read_schedule` as a fourth bounded tool. Its schedule DTO intentionally enters OpenClaw's trajectory for parent-requested reads; credentials, identifiers, ETags, Cards, callbacks, writable action details, and Bander outcomes remain excluded. The sandbox verifier does not claim to exercise that real Google read lane.
 
 The Bander bot token and persisted installation remain Bander-side. MCP callers cannot choose or replace the owner or destination.
 
@@ -65,7 +67,7 @@ If any privacy condition fails, the shared group gets only a minimal Bander noti
 
 `npm run verify:telegram-privacy` now exercises `TelegramService`, not a second implementation inside the harness. The live run observed private token consumption and private group selection, then one continuous natural request through real OpenClaw, minimal MCP status, service-owned Card delivery, callback authorization, idempotent execution, and service-owned Receipt delivery.
 
-The real-service run rejected the non-owner, wrong chat, wrong Bander message, wrong callback value, and OpenClaw imitation. Owner replay returned the same Receipt. Exactly one Draft, one one-time Band, one Permit, one downstream execution, and one Receipt existed. The complete model input and exported trajectory contained no human Card, genuine Bander callback, or Receipt details. OpenClaw had exactly three Bander tools and no Bander bot token.
+The historical sandbox-backed real-service run rejected the non-owner, wrong chat, wrong Bander message, wrong callback value, and OpenClaw imitation. Owner replay returned the same Receipt. Exactly one Draft, one one-time Band, one Permit, one downstream execution, and one Receipt existed. The complete model input and exported trajectory contained no human Card, genuine Bander callback, or Receipt details. That verifier's OpenClaw profile had exactly three Bander tools and no Bander bot token.
 
 The follow-up `npm run verify:telegram-conflict` journey also passed. It changed the seeded Calendar after the real service delivered the Card, then observed two owner callbacks. Bander dispatched once, committed no requested mutation, created no Receipt, and posted exactly one human refusal across replay. The agent-visible status was only `conflict`; the full refusal explanation was absent from OpenClaw's model input and exported trajectory.
 
