@@ -14,6 +14,21 @@ import {
   KeyedLock,
 } from "@bander/core";
 import type { DraftFixture, StandingRunResult } from "@bander/core";
+import {
+  acceptFamilyContactChallenge,
+  callbackMatchesHash,
+  claimFamilyContactChallenge,
+  createFamilyContactChallenge,
+  FamilyContactError,
+  isRevokedContactSurface,
+  revokeActiveFamilyContact,
+  tokenMatchesFamilyChallenge,
+  validateFamilyContactState,
+  type ActiveFamilyContact,
+  type FamilyContactPairingChallenge,
+  type ProtectedGroupMemberStatus,
+  type RevokedFamilyContactAudit,
+} from "./family-contact.js";
 
 export interface TelegramUser {
   id: number;
@@ -50,6 +65,10 @@ export interface TelegramUpdate {
 export interface TelegramBotApi {
   getMe(): Promise<TelegramUser>;
   getChat(chatId: string): Promise<TelegramChat>;
+  getChatMember(
+    chatId: string,
+    userId: string,
+  ): Promise<{ status: ProtectedGroupMemberStatus }>;
   getUpdates(offset?: number, timeout?: number): Promise<TelegramUpdate[]>;
   sendMessage(
     chatId: string,
@@ -97,6 +116,20 @@ export class TelegramHttpApi implements TelegramBotApi {
 
   getChat(chatId: string): Promise<TelegramChat> {
     return this.#call("getChat", { chat_id: chatId });
+  }
+
+  getChatMember(
+    chatId: string,
+    userId: string,
+  ): Promise<{ status: ProtectedGroupMemberStatus }> {
+    const numericUserId = Number(userId);
+    if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) {
+      throw new Error("Telegram user ID is invalid");
+    }
+    return this.#call("getChatMember", {
+      chat_id: chatId,
+      user_id: numericUserId,
+    });
   }
 
   getUpdates(offset?: number, timeout = 25): Promise<TelegramUpdate[]> {
@@ -223,6 +256,9 @@ export interface TelegramServiceState {
   standingBand?: TelegramStandingBandBinding;
   oneTimeReviewMode?: { detachedBandId: string; activatedAt: string };
   standingOutcomes: TelegramStandingOutcomeBinding[];
+  familyPairing?: FamilyContactPairingChallenge;
+  familyContact?: ActiveFamilyContact;
+  familyContactAudit?: RevokedFamilyContactAudit;
 }
 
 export interface TelegramServiceStore {
@@ -264,10 +300,30 @@ export class FileTelegramServiceStore implements TelegramServiceStore {
 
   read(): TelegramServiceState {
     if (!fs.existsSync(this.#filePath)) return emptyState();
-    const state = JSON.parse(fs.readFileSync(this.#filePath, "utf8")) as TelegramServiceState;
-    if (state.version !== 1 || !Array.isArray(state.proposals)) {
+    const parsed = JSON.parse(fs.readFileSync(this.#filePath, "utf8")) as unknown;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      (parsed as { version?: unknown }).version !== 1 ||
+      !Array.isArray((parsed as { proposals?: unknown }).proposals)
+    ) {
       throw new Error("Unsupported Telegram service state");
     }
+    const state = parsed as TelegramServiceState;
+    if (
+      !Array.isArray(state.standingCandidates ?? []) ||
+      !Array.isArray(state.standingOutcomes ?? [])
+    ) {
+      throw new Error("Unsupported Telegram service state");
+    }
+    validateFamilyContactState({
+      ...(state.installation ? { installation: state.installation } : {}),
+      ...(state.familyPairing ? { familyPairing: state.familyPairing } : {}),
+      ...(state.familyContact ? { familyContact: state.familyContact } : {}),
+      ...(state.familyContactAudit
+        ? { familyContactAudit: state.familyContactAudit }
+        : {}),
+    });
     return copy({
       ...state,
       standingCandidates: state.standingCandidates ?? [],
@@ -298,6 +354,7 @@ interface TelegramServiceOptions {
   mode?: TelegramCopyMode;
   now?: () => Date;
   randomValue?: () => string;
+  familyPairingPath?: string;
 }
 
 function hashSecret(value: string): string {
@@ -318,6 +375,26 @@ function startToken(text: string | undefined): string | undefined {
   if (!text) return undefined;
   const match = text.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{8,64})$/);
   return match?.[1];
+}
+
+function familyStartToken(value: string): string | undefined {
+  const match = value.match(/^family_([A-Za-z0-9_-]{16,48})$/);
+  return match?.[1];
+}
+
+function knownMemberStatus(
+  value: string,
+): ProtectedGroupMemberStatus {
+  return [
+    "creator",
+    "administrator",
+    "member",
+    "restricted",
+    "left",
+    "kicked",
+  ].includes(value)
+    ? (value as ProtectedGroupMemberStatus)
+    : "unknown";
 }
 
 function cardText(
@@ -565,6 +642,7 @@ export class TelegramService {
   readonly #now: () => Date;
   readonly #randomValue: () => string;
   readonly #mode: TelegramCopyMode;
+  readonly #familyPairingPath: string | undefined;
   readonly #stateLock = new KeyedLock();
   readonly #callbackLock = new KeyedLock();
   readonly #standingRequestLock = new KeyedLock();
@@ -579,6 +657,9 @@ export class TelegramService {
     this.#now = options.now ?? (() => new Date());
     this.#randomValue =
       options.randomValue ?? (() => randomBytes(24).toString("base64url"));
+    this.#familyPairingPath = options.familyPairingPath
+      ? path.resolve(options.familyPairingPath)
+      : undefined;
   }
 
   async createPairing(ttlMinutes = 10): Promise<{ link: string; expiresAt: string }> {
@@ -603,6 +684,221 @@ export class TelegramService {
       link: `https://t.me/${bot.username}?start=${token}`,
       expiresAt,
     };
+  }
+
+  async createFamilyContactPairing(input: {
+    displayLabel: string;
+    aliases: readonly string[];
+    ttlMinutes?: number;
+  }): Promise<{ link: string; expiresAt: string }> {
+    return this.#stateLock.run("telegram-state", async () => {
+      const state = this.#store.read();
+      const installation = state.installation;
+      if (!installation) {
+        throw new FamilyContactError(
+          "installation_missing",
+          "Pair the Bander owner and group before adding a family contact",
+        );
+      }
+      if (state.familyContact) {
+        throw new FamilyContactError(
+          "family_contact_already_active",
+          "Disconnect the current family contact before adding another",
+        );
+      }
+      const now = this.#now();
+      if (
+        state.familyPairing &&
+        now.getTime() < Date.parse(state.familyPairing.expiresAt)
+      ) {
+        throw new FamilyContactError(
+          "family_pairing_already_pending",
+          "A family contact pairing link is already pending",
+        );
+      }
+      const token = this.#randomValue();
+      const challengeId = this.#randomValue();
+      const contactId = this.#randomValue();
+      const ttlMinutes = input.ttlMinutes ?? 10;
+      const challenge = createFamilyContactChallenge({
+        installationId: installation.id,
+        displayLabel: input.displayLabel,
+        aliases: input.aliases,
+        token,
+        challengeId,
+        contactId,
+        now,
+        ttlMs: ttlMinutes * 60_000,
+      });
+      const bot = await this.#api.getMe();
+      if (!bot.is_bot || !bot.username) {
+        throw new FamilyContactError(
+          "telegram_bot_unavailable",
+          "Bander could not establish its Telegram identity",
+        );
+      }
+      state.familyPairing = challenge;
+      this.#store.write(state);
+      return {
+        link: `https://t.me/${bot.username}?start=family_${token}`,
+        expiresAt: challenge.expiresAt,
+      };
+    });
+  }
+
+  familyContactStatus():
+    | { status: "not_connected" }
+    | { status: "connected"; displayLabel: string }
+    | { status: "revoked" } {
+    const state = this.#store.read();
+    if (state.familyContact) {
+      return {
+        status: "connected",
+        displayLabel: state.familyContact.displayLabel,
+      };
+    }
+    return state.familyContactAudit
+      ? { status: "revoked" }
+      : { status: "not_connected" };
+  }
+
+  async prepareForStart(): Promise<void> {
+    await this.#stateLock.run("telegram-state", async () => {
+      const state = this.#store.read();
+      const now = this.#now();
+      if (!state.familyPairing) {
+        this.#removeFamilyPairingLink();
+      } else if (
+        state.familyPairing &&
+        now.getTime() >= Date.parse(state.familyPairing.expiresAt)
+      ) {
+        delete state.familyPairing;
+        this.#removeFamilyPairingLink();
+        this.#store.write(state);
+      }
+      const active = state.familyContact;
+      const installation = state.installation;
+      if (!active) return;
+      if (!installation || active.installationId !== installation.id) {
+        throw new FamilyContactError(
+          "installation_mismatch",
+          "The active family contact does not belong to this installation",
+        );
+      }
+      const status = await this.#protectedGroupStatus(
+        installation.chatId,
+        active.telegramUserId,
+      );
+      if (status === "unknown") {
+        throw new FamilyContactError(
+          "protected_group_membership_unavailable",
+          "Bander could not verify that the family contact is outside the protected owner group",
+        );
+      }
+      if (status !== "left" && status !== "kicked") {
+        this.#revokeFamilyContactInState(state, "system");
+        return;
+      }
+      await this.#deliverFamilyContactConfirmations(state);
+    });
+  }
+
+  async #protectedGroupStatus(
+    chatId: string,
+    userId: string,
+  ): Promise<ProtectedGroupMemberStatus> {
+    try {
+      const result = await this.#api.getChatMember(chatId, userId);
+      return knownMemberStatus(result.status);
+    } catch {
+      return "unknown";
+    }
+  }
+
+  #removeFamilyPairingLink(): void {
+    if (this.#familyPairingPath) {
+      fs.rmSync(this.#familyPairingPath, { force: true });
+    }
+  }
+
+  async #deliverFamilyContactConfirmations(
+    state: TelegramServiceState,
+  ): Promise<void> {
+    let contact = state.familyContact;
+    const installation = state.installation;
+    if (!contact || !installation) return;
+    if (!contact.contactConfirmationDeliveredAt) {
+      const sent = await this.#api.sendMessage(
+        contact.privateChatId,
+        [
+          `You’re connected as ${safeDisplayText(contact.displayLabel)}.`,
+          "In a future update, Bander may send you a short update only after the person who invited you approves it.",
+          "No notifications are enabled yet.",
+          "You cannot approve anything or see their calendar or conversations.",
+          "You can disconnect anytime.",
+        ].join("\n"),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: "Disconnect",
+                callback_data: contact.contactRevokeCallbackValue,
+              },
+            ],
+          ],
+        },
+      );
+      contact = {
+        ...contact,
+        contactConfirmationMessageId: sent.message_id,
+        contactConfirmationDeliveredAt: this.#now().toISOString(),
+      };
+      state.familyContact = contact;
+      this.#store.write(state);
+    }
+    if (!contact.ownerConfirmationDeliveredAt) {
+      const sent = await this.#api.sendMessage(
+        installation.chatId,
+        [
+          `${safeDisplayText(contact.displayLabel)} is connected.`,
+          "No notifications are enabled yet.",
+          "A future approved deal may include a short update to this contact.",
+        ].join("\n"),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: `Disconnect ${safeDisplayText(contact.displayLabel)}`,
+                callback_data: contact.ownerRevokeCallbackValue,
+              },
+            ],
+          ],
+        },
+      );
+      state.familyContact = {
+        ...contact,
+        ownerConfirmationMessageId: sent.message_id,
+        ownerConfirmationDeliveredAt: this.#now().toISOString(),
+      };
+      this.#store.write(state);
+    }
+  }
+
+  #revokeFamilyContactInState(
+    state: TelegramServiceState,
+    revokedBy: "owner" | "contact" | "system",
+  ): ActiveFamilyContact | undefined {
+    const contact = state.familyContact;
+    if (!contact) return undefined;
+    state.familyContactAudit = revokeActiveFamilyContact(contact, {
+      now: this.#now(),
+      revokedBy,
+    });
+    delete state.familyContact;
+    delete state.familyPairing;
+    this.#removeFamilyPairingLink();
+    this.#store.write(state);
+    return contact;
   }
 
   async deliverProposal(card: ApprovalCard): Promise<void> {
@@ -976,10 +1272,160 @@ export class TelegramService {
     if (!from || from.is_bot) return;
     const token = startToken(message.text);
     if (token) {
+      const familyToken = familyStartToken(token);
+      if (familyToken) {
+        await this.#claimFamilyContact(message, familyToken);
+        return;
+      }
       await this.#claimPairing(message, token);
       return;
     }
     if (message.chat_shared) await this.#completePairing(message);
+    if (message.chat.type === "private" && message.chat.id === from.id) {
+      await this.#handleFamilyContactPrivateMessage(message);
+    }
+  }
+
+  async #claimFamilyContact(
+    message: TelegramMessage,
+    token: string,
+  ): Promise<void> {
+    const from = message.from!;
+    const state = this.#store.read();
+    const challenge = state.familyPairing;
+    const installation = state.installation;
+    if (
+      !challenge ||
+      !installation ||
+      !tokenMatchesFamilyChallenge(challenge, token)
+    ) {
+      await this.#api.sendMessage(
+        String(message.chat.id),
+        "That family contact link is invalid or expired.",
+      );
+      return;
+    }
+    const protectedGroupStatus = await this.#protectedGroupStatus(
+      installation.chatId,
+      String(from.id),
+    );
+    const acceptCallbackValue = `family-accept:${this.#randomValue()}`;
+    const declineCallbackValue = `family-decline:${this.#randomValue()}`;
+    try {
+      const provisional = claimFamilyContactChallenge({
+        challenge,
+        installation,
+        token,
+        now: this.#now(),
+        claimant: {
+          userId: String(from.id),
+          chatId: String(message.chat.id),
+          chatType: message.chat.type,
+          isBot: from.is_bot,
+        },
+        protectedGroupStatus,
+        acceptCallbackValue,
+        declineCallbackValue,
+      });
+      if (provisional.replayed && provisional.challenge.consentMessageId) {
+        await this.#api.sendMessage(
+          String(message.chat.id),
+          "Use the buttons on the connection request Bander already sent.",
+        );
+        return;
+      }
+      if (!provisional.replayed) {
+        state.familyPairing = provisional.challenge;
+        this.#store.write(state);
+      }
+      const claimed = provisional.challenge;
+      const sent = await this.#api.sendMessage(
+        String(message.chat.id),
+        [
+          `Connect as ${safeDisplayText(challenge.displayLabel)}?`,
+          "This is a limited family-contact role.",
+          "No notifications are enabled yet.",
+          "You will not be able to approve anything or see the person’s calendar or conversations.",
+        ].join("\n"),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: "Accept limited role",
+                callback_data: claimed.acceptCallbackValue!,
+              },
+              {
+                text: "Not now",
+                callback_data: claimed.declineCallbackValue!,
+              },
+            ],
+          ],
+        },
+      );
+      state.familyPairing = {
+        ...claimed,
+        consentMessageId: sent.message_id,
+      };
+      this.#store.write(state);
+    } catch (error) {
+      const text =
+        error instanceof FamilyContactError &&
+        error.code === "contact_in_protected_group"
+          ? "Leave the protected owner group before connecting as a family contact. Nothing was connected."
+          : error instanceof FamilyContactError &&
+              error.code === "protected_group_membership_unavailable"
+            ? "Bander couldn’t verify that this account is outside the protected owner group. Nothing was connected."
+            : error instanceof FamilyContactError &&
+                error.code === "family_pairing_already_claimed"
+              ? "That family contact link has already been claimed."
+              : "That family contact link is invalid or expired.";
+      await this.#api.sendMessage(String(message.chat.id), text);
+    }
+  }
+
+  async #handleFamilyContactPrivateMessage(
+    message: TelegramMessage,
+  ): Promise<void> {
+    const from = message.from!;
+    const state = this.#store.read();
+    const contact = state.familyContact;
+    if (
+      contact &&
+      contact.telegramUserId === String(from.id) &&
+      contact.privateChatId === String(message.chat.id)
+    ) {
+      if (message.text?.trim().toLocaleLowerCase("en-US") === "/disconnect") {
+        this.#revokeFamilyContactInState(state, "contact");
+        await this.#api.sendMessage(
+          String(message.chat.id),
+          "You’re disconnected. Bander no longer has a destination it can use for you.",
+        );
+        return;
+      }
+      await this.#api.sendMessage(
+        String(message.chat.id),
+        [
+          `You’re connected as ${safeDisplayText(contact.displayLabel)}.`,
+          "No notifications are enabled yet.",
+          "You cannot approve requests, see a calendar, or send requests to OpenClaw here.",
+          "Use /disconnect if you want to disconnect.",
+        ].join("\n"),
+      );
+      return;
+    }
+    const audit = state.familyContactAudit;
+    if (
+      audit &&
+      isRevokedContactSurface(audit, {
+        userId: String(from.id),
+        chatId: String(message.chat.id),
+      })
+    ) {
+      await this.#api.sendMessage(
+        String(message.chat.id),
+        "You’re already disconnected. Ask the person who invited you for a new link if needed.",
+      );
+    }
   }
 
   async #claimPairing(message: TelegramMessage, token: string): Promise<void> {
@@ -1082,7 +1528,188 @@ export class TelegramService {
     );
   }
 
+  async #handleFamilyContactCallback(
+    callback: TelegramCallbackQuery,
+  ): Promise<boolean> {
+    const data = callback.data;
+    if (!data?.startsWith("family-")) return false;
+    if (!callback.message || callback.from.is_bot) {
+      await this.#api.answerCallback(
+        callback.id,
+        "That family contact control isn’t valid here.",
+      );
+      return true;
+    }
+    const state = this.#store.read();
+    const installation = state.installation;
+    const challenge = state.familyPairing;
+    if (
+      challenge?.status === "claimed" &&
+      (data === challenge.acceptCallbackValue ||
+        data === challenge.declineCallbackValue)
+    ) {
+      const exactSurface =
+        installation &&
+        callback.from.id === Number(challenge.claimedTelegramUserId) &&
+        callback.message.chat.type === "private" &&
+        callback.message.chat.id === callback.from.id &&
+        callback.message.chat.id === Number(challenge.claimedPrivateChatId) &&
+        callback.message.message_id === challenge.consentMessageId;
+      if (!exactSurface) {
+        await this.#api.answerCallback(
+          callback.id,
+          "That family contact control isn’t valid here.",
+        );
+        return true;
+      }
+      if (this.#now().getTime() >= Date.parse(challenge.expiresAt)) {
+        delete state.familyPairing;
+        this.#removeFamilyPairingLink();
+        this.#store.write(state);
+        await this.#api.answerCallback(
+          callback.id,
+          "That family contact link expired.",
+        );
+        return true;
+      }
+      if (data === challenge.declineCallbackValue) {
+        delete state.familyPairing;
+        this.#removeFamilyPairingLink();
+        this.#store.write(state);
+        await this.#api.sendMessage(
+          String(callback.message.chat.id),
+          "Nothing was connected.",
+        );
+        await this.#api.answerCallback(callback.id, "Nothing was connected.");
+        return true;
+      }
+      const protectedGroupStatus = await this.#protectedGroupStatus(
+        installation!.chatId,
+        String(callback.from.id),
+      );
+      try {
+        const contact = acceptFamilyContactChallenge({
+          challenge,
+          installation: installation!,
+          now: this.#now(),
+          protectedGroupStatus,
+          callback: {
+            fromUserId: String(callback.from.id),
+            isBot: callback.from.is_bot,
+            chatId: String(callback.message.chat.id),
+            chatType: callback.message.chat.type,
+            messageId: callback.message.message_id,
+            data,
+          },
+          contactRevokeCallbackValue: `family-contact-off:${this.#randomValue()}`,
+          ownerRevokeCallbackValue: `family-owner-off:${this.#randomValue()}`,
+        });
+        if (state.familyContact) {
+          throw new FamilyContactError(
+            "family_contact_already_active",
+            "A family contact is already active",
+          );
+        }
+        state.familyContact = contact;
+        delete state.familyPairing;
+        this.#removeFamilyPairingLink();
+        this.#store.write(state);
+        await this.#deliverFamilyContactConfirmations(state);
+        await this.#api.answerCallback(callback.id, "You’re connected.");
+      } catch (error) {
+        if (state.familyContact) throw error;
+        await this.#api.answerCallback(
+          callback.id,
+          error instanceof FamilyContactError &&
+            error.code === "contact_in_protected_group"
+            ? "Leave the protected owner group first. Nothing was connected."
+            : "Bander could not safely connect this contact.",
+        );
+      }
+      return true;
+    }
+
+    const contact = state.familyContact;
+    if (contact) {
+      if (
+        data.startsWith("family-accept:") &&
+        callbackMatchesHash(data, contact.pairingAcceptCallbackHash) &&
+        callback.from.id === Number(contact.telegramUserId) &&
+        callback.message.chat.type === "private" &&
+        callback.message.chat.id === Number(contact.privateChatId) &&
+        callback.message.message_id === contact.consentMessageId
+      ) {
+        await this.#deliverFamilyContactConfirmations(state);
+        await this.#api.answerCallback(callback.id, "You’re connected.");
+        return true;
+      }
+      const contactRevoke =
+        data === contact.contactRevokeCallbackValue &&
+        callback.from.id === Number(contact.telegramUserId) &&
+        callback.message.chat.type === "private" &&
+        callback.message.chat.id === Number(contact.privateChatId) &&
+        callback.message.message_id === contact.contactConfirmationMessageId;
+      const ownerRevoke =
+        installation &&
+        data === contact.ownerRevokeCallbackValue &&
+        callback.from.id === Number(installation.ownerTelegramId) &&
+        (callback.message.chat.type === "group" ||
+          callback.message.chat.type === "supergroup") &&
+        callback.message.chat.id === Number(installation.chatId) &&
+        callback.message.message_id === contact.ownerConfirmationMessageId;
+      if (contactRevoke || ownerRevoke) {
+        this.#revokeFamilyContactInState(
+          state,
+          contactRevoke ? "contact" : "owner",
+        );
+        if (contactRevoke) {
+          await this.#api.sendMessage(
+            String(callback.message.chat.id),
+            "You’re disconnected. Bander no longer has a destination it can use for you.",
+          );
+        } else {
+          await this.#api.sendMessage(
+            installation!.chatId,
+            "Family contact disconnected. No routing destination remains.",
+          );
+        }
+        await this.#api.answerCallback(callback.id, "Family contact disconnected.");
+        return true;
+      }
+    }
+
+    const audit = state.familyContactAudit;
+    if (audit && installation) {
+      const contactReplay =
+        callbackMatchesHash(data, audit.contactRevokeCallbackHash) &&
+        audit.contactConfirmationMessageId === callback.message.message_id &&
+        callback.message.chat.type === "private" &&
+        isRevokedContactSurface(audit, {
+          userId: String(callback.from.id),
+          chatId: String(callback.message.chat.id),
+        });
+      const ownerReplay =
+        callbackMatchesHash(data, audit.ownerRevokeCallbackHash) &&
+        audit.ownerConfirmationMessageId === callback.message.message_id &&
+        callback.from.id === Number(installation.ownerTelegramId) &&
+        callback.message.chat.id === Number(installation.chatId);
+      if (contactReplay || ownerReplay) {
+        await this.#api.answerCallback(
+          callback.id,
+          "Family contact is already disconnected.",
+        );
+        return true;
+      }
+    }
+    await this.#api.answerCallback(
+      callback.id,
+      "That family contact control isn’t valid here.",
+    );
+    return true;
+  }
+
   async #handleCallback(callback: TelegramCallbackQuery): Promise<void> {
+    if (await this.#handleFamilyContactCallback(callback)) return;
     if (!callback.message || !callback.data) {
       await this.#api.answerCallback(callback.id, "That control isn’t valid here.");
       return;

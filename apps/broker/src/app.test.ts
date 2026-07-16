@@ -175,6 +175,7 @@ describe("broker approval boundary", () => {
       expect(text).not.toContain("Messages");
       expect(text).not.toContain("standing");
       expect(text).not.toContain(fixture.claimedUserRequest);
+      expect(text).not.toMatch(/family|contact|alias|telegram|chat id|user id/i);
     } finally {
       await client.close();
       await server.close();

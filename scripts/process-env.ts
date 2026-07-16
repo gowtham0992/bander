@@ -86,6 +86,13 @@ export function createRuntimeEnvironments(
             ? ".bander/real/telegram-service/pairing-link.txt"
             : ".bander/telegram-service/pairing-link.txt",
         ),
+      BANDER_FAMILY_PAIRING_PATH:
+        source.BANDER_FAMILY_PAIRING_PATH ??
+        path.resolve(
+          runtimeMode === "real"
+            ? ".bander/real/telegram-service/family-contact-link.txt"
+            : ".bander/telegram-service/family-contact-link.txt",
+        ),
     },
     web: {
       ...common,

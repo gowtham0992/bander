@@ -27,6 +27,19 @@ describe("runtime mode isolation", () => {
       telegramToken: "local-test-telegram-token",
       telegramStatePath: ".bander/real/telegram-service/state.json",
       telegramPairingPath: ".bander/real/telegram-service/pairing-link.txt",
+      familyContactPairingPath:
+        ".bander/real/telegram-service/family-contact-link.txt",
+    });
+  });
+
+  it("keeps a custom family pairing link path inside real runtime configuration", () => {
+    expect(
+      parseRuntimeConfiguration({
+        ...realEnvironment,
+        BANDER_FAMILY_PAIRING_PATH: ".private/family-link.txt",
+      }),
+    ).toMatchObject({
+      familyContactPairingPath: ".private/family-link.txt",
     });
   });
 

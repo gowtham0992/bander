@@ -101,6 +101,10 @@ class RecordingTelegramApi implements TelegramBotApi {
     return this.#delegate.getChat(chatId);
   }
 
+  getChatMember(chatId: string, userId: string) {
+    return this.#delegate.getChatMember(chatId, userId);
+  }
+
   getUpdates(offset?: number, timeout?: number) {
     return this.#delegate.getUpdates(offset, timeout);
   }

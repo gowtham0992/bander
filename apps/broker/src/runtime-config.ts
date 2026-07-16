@@ -17,6 +17,7 @@ export type BanderRuntimeConfiguration =
       telegramToken: string;
       telegramStatePath: string;
       telegramPairingPath: string;
+      familyContactPairingPath: string;
     };
 
 function required(
@@ -72,6 +73,9 @@ export function parseRuntimeConfiguration(
       telegramPairingPath:
         environment.BANDER_TELEGRAM_PAIRING_PATH?.trim() ||
         ".bander/real/telegram-service/pairing-link.txt",
+      familyContactPairingPath:
+        environment.BANDER_FAMILY_PAIRING_PATH?.trim() ||
+        ".bander/real/telegram-service/family-contact-link.txt",
     };
   }
 

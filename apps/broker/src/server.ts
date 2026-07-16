@@ -88,6 +88,13 @@ const telegramService =
         engine,
         store: telegramStore,
         ...(configuration.mode === "real" ? { mode: "real" as const } : {}),
+        ...(configuration.mode === "real"
+          ? {
+              familyPairingPath: path.resolve(
+                configuration.familyContactPairingPath,
+              ),
+            }
+          : {}),
       })
     : undefined;
 const app = buildBrokerApp({
@@ -174,6 +181,17 @@ if (telegramService && telegramStore) {
     );
     fs.chmodSync(pairingPath, 0o600);
     console.log(`Bander Telegram pairing link written to ${pairingPath}`);
+  }
+  if (configuration.mode === "real") {
+    await telegramService.prepareForStart();
+    const family = telegramService.familyContactStatus();
+    console.log(
+      family.status === "connected"
+        ? `Family contact: connected as ${family.displayLabel}`
+        : family.status === "revoked"
+          ? "Family contact: revoked"
+          : "Family contact: not connected",
+    );
   }
   telegramService.start();
   console.log("Bander Telegram service started");

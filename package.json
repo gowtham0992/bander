@@ -22,6 +22,7 @@
     "demo": "npm run build && tsx scripts/demo.ts",
     "hero": "npm run build && tsx scripts/hero.ts",
     "pair:real": "BANDER_RUNTIME_MODE=real node --env-file=.env --import tsx apps/broker/src/server.ts",
+    "pair:family": "tsx scripts/pair-family.ts",
     "real": "tsx scripts/real.ts",
     "openclaw": "./node_modules/node/bin/node scripts/openclaw.mjs",
     "verify:demo": "tsx scripts/verify-demo.ts",

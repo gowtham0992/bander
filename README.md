@@ -140,7 +140,35 @@ On first Google use, finish the browser OAuth prompt. Bander then writes an expi
 
 When Telegram says **“Bander is ready. Only you can approve what I'm allowed to do.”**, stop the pairing service with `Ctrl-C`.
 
-### 7. Stage one eligible fictional event
+### 7. Optionally pair one family contact for a future approved update
+
+This optional setup creates one revocable, authenticated Telegram destination. It
+does **not** enable notifications, Calendar sharing, or another approver.
+
+Stop `npm run real`, then run the local operator-only command:
+
+```bash
+npm run pair:family -- --name Gil --alias "my son" --alias son
+```
+
+Bander stores only a hash of a short-lived link, writes the raw link to an
+ignored owner-only file, and sends the same link to the authenticated owner's
+private Bander chat. Open it only after switching Telegram to the invited
+person's account. That account must not be in the protected OpenClaw group.
+The contact explicitly accepts a limited role in a private Bander chat.
+
+The contact cannot approve or decline requests, see the owner's Calendar or
+conversations, call OpenClaw, add another contact, or change their label or
+aliases. The owner can disconnect the contact from Bander's group confirmation;
+the contact can send `/disconnect` privately. Either action immediately erases
+the routable destination. A revoked contact requires a new operator-created
+link. If Telegram cannot verify the contact is outside the protected group,
+Bander refuses the pairing or startup check.
+
+This checkpoint deliberately does not send any family notification. It only
+prepares a future route that a separately approved deal may use.
+
+### 8. Stage one eligible fictional event
 
 In the connected primary Calendar, create a fictional event that is:
 
@@ -152,7 +180,7 @@ In the connected primary Calendar, create a fictional event that is:
 
 Multiple eligible title matches fail closed and ask for the source date. Zero matches, missing destination details, cancellations, attendee-bearing events, recurring events, and all-day events create no authority.
 
-### 8. Start the complete real product
+### 9. Start the complete real product
 
 ```bash
 npm run real

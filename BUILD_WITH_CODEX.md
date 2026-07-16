@@ -1698,3 +1698,79 @@ permission. Transcript blob hashes remain
 `920eb1a862a20debe214af9915401facc23aeb6b` and
 `3c30cae54d4efba1a7a6aa025199d68435dab348`; both files remain ignored,
 untracked and untouched. `/feedback` remains deferred.
+
+## July 16, 2026 — production single-family-contact pairing
+
+This checkpoint adds only authenticated, revocable routing setup for one family
+contact. It does not send a family notification, expose Calendar information,
+add a compound action, create another owner, add an MCP tool, or change the
+real four-tool OpenClaw inventory.
+
+The red-first initial boundary test failed because the production
+`family-contact` module did not yet exist. The resulting state machine uses the
+existing owner-only Telegram service state file: one pending hashed challenge,
+one active contact, and minimum opaque revoked audit. The local
+`npm run pair:family -- --name Gil --alias "my son" --alias son` command is
+operator-only, requires the real product to be stopped, writes the raw link to
+an ignored `0600` file, and sends the same short-lived link to the authenticated
+owner's private Bander chat. Only the hash is persisted.
+
+The first valid human private claimant is persisted before the consent message
+is sent, closing an interrupted-send takeover window. Claim and consent both
+require a private chat whose sender and chat match, a non-owner human, the
+correct installation and unexpired token, explicit consent, and Telegram proof
+that the contact is outside the protected group. Membership is rechecked at
+real startup. Unknown membership fails closed; membership in the protected
+group rejects or system-revokes the contact. Raw Telegram routing IDs, contact
+label and aliases never enter OpenClaw, MCP results, public logs, fixtures, or
+committed evidence.
+
+Focused red evidence also exposed a supervised-runtime path bug during the live
+revocation run: `npm run real` projected an absolute Telegram state path into
+the workspace broker but omitted the family-link path. The broker therefore
+looked for a relative sibling and a revoked raw-link file could remain. A
+process-environment test failed with an undefined family-link path; a service
+restart test failed because a stale link remained. The runtime now projects the
+absolute path and startup removes a link whenever no pending challenge exists.
+The real restarted product then reported `Family contact: revoked` and the
+ignored link file was absent.
+
+The two-account empirical run used the configured invited account outside the
+protected group. It opened Bander's private link, explicitly accepted the
+limited role, received `You’re connected as Gil`, and the owner group received
+`Gil is connected`; no notification capability was claimed. A real restart
+reported `Family contact: connected as Gil`. The contact's private request to
+see the calendar and approve everything received only bounded role help; a
+sanitized OpenClaw gateway/trajectory search found zero contact text, aliases,
+or routing terms, while proposal count remained at its six-item pre-test
+baseline and no standing state changed. The contact was outside the owner group
+and therefore had no physical owner Card callback to tap; exact wrong-user,
+wrong-chat, wrong-message and wrong-callback authorization remains covered by
+the automated service tests. Contact `/disconnect` erased the active route;
+the old private link then returned `invalid or expired` in the invited account.
+
+Restored-green verification:
+
+```text
+focused family/service/runtime/process tests: passed
+typecheck: passed
+functional suite: 21 files, 254 tests passed
+attack suite: 2 files, 20 tests passed
+demo verifier: all 6 outcomes passed
+one-time HTTP recovery: 1 mutation, Band, Permit and Receipt
+standing HTTP recovery: 1 Draft, Permit, mutation, Receipt and counter entry
+real OpenClaw verifier: sandbox reference 3 tools; real configuration 4 tools
+live read Sol evidence: 7/7 cases passed
+production build: passed
+dependency audit: 0 vulnerabilities
+tracked and proposed-file token-shaped secret scan: 0 matches
+```
+
+Residual limitation: Telegram documents `getChatMember` support for other
+users most strongly when the bot is an administrator. The configured live bot
+returned the required membership state in this run; Bander does not rely on
+that always being available and fails closed if Telegram cannot verify it.
+The family-contact relationship is currently revoked after the empirical test.
+Creating a new route requires a fresh explicit operator command and consent.
+Both transcripts remain ignored, untracked and unchanged; `/feedback` remains
+deferred.

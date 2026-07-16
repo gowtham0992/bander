@@ -30,6 +30,9 @@ describe("canonical process credential projection", () => {
     expect(environments.broker.GOOGLE_OAUTH_TOKEN_PATH).toMatch(
       /\.bander\/google-token\.json$/,
     );
+    expect(environments.broker.BANDER_FAMILY_PAIRING_PATH).toMatch(
+      /\.bander\/real\/telegram-service\/family-contact-link\.txt$/,
+    );
     expect(environments.broker).not.toHaveProperty("MOCK_SERVICE_TOKEN");
     expect(environments.broker).not.toHaveProperty("MOCK_SERVICE_URL");
     expect(environments.openclaw).not.toHaveProperty("GOOGLE_OAUTH_CLIENT_PATH");

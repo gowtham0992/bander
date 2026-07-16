@@ -89,6 +89,39 @@ Downstream execution is idempotent. Human Telegram notification is at least once
 
 Changed-world refusal follows the same delivery rule. A failed refusal send stays pending; retry sends the same deterministic human explanation while OpenClaw retains only minimal `conflict` status.
 
+## ADR-011: One family contact is a Bander-owned routing setup, not authority
+
+**Status:** accepted for the current prototype
+
+The real Telegram installation may contain at most one active family contact.
+The local technical owner configures the contact's display label and normalized
+aliases before pairing; Bander never derives them from the model or the
+contact's Telegram profile. A high-entropy, short-lived token is hashed in the
+existing owner-only Telegram state file. The raw deep link is written to an
+ignored `0600` file and sent only to the already authenticated owner's private
+Bander chat.
+
+The invited person must claim the link in a private human Telegram chat, where
+the chat ID equals the sender ID, explicitly accept the limited role, differ
+from the owner, and be outside the protected owner group. The first claimant is
+persisted before consent delivery, so a second claimant cannot take over after
+an interrupted send. Bander checks membership again at acceptance and real
+startup. An unknown Telegram membership result fails closed; a contact found in
+the protected group is rejected or system-revoked.
+
+The contact receives no authority. They cannot approve, decline, replay owner
+callbacks, view the group, query a schedule, call OpenClaw, add or redirect a
+contact, or alter aliases. Contact private messages stay in Bander and receive
+only bounded role help. No MCP tool exposes routing identifiers; the real
+OpenClaw inventory remains four tools.
+
+Either the contact's private `/disconnect` or the owner's Bander-owned group
+control revokes the relationship idempotently. Revocation removes the raw
+Telegram destination and invalidates pending links, retaining only opaque audit
+hashes needed to recognize replay. Startup removes any stale local link file.
+This slice does not deliver family notifications, Calendar facts, Cards,
+Receipts, or compound actions; it establishes only a future routing boundary.
+
 ## ADR-008: Standing autonomy remains sandbox-only in the current product claim
 
 **Status:** accepted scope boundary

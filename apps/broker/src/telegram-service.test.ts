@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ApprovalCard, CalendarEvent, DraftDocument, Person } from "@bander/contracts";
 import {
@@ -9,11 +12,13 @@ import {
 } from "@bander/core";
 import {
   MemoryTelegramServiceStore,
+  FileTelegramServiceStore,
   TelegramService,
   type TelegramBotApi,
   type TelegramMessage,
   type TelegramUpdate,
 } from "./telegram-service.js";
+import type { ProtectedGroupMemberStatus } from "./family-contact.js";
 
 const fixture: DraftFixture = {
   id: "telegram-fixture",
@@ -116,6 +121,14 @@ class FakeTelegramApi implements TelegramBotApi {
   readonly callbackAnswers: Array<{ id: string; text: string }> = [];
   beforeSend: ((text: string) => void) | undefined;
   failNextMessageMatching: ((text: string) => boolean) | undefined;
+  chatMemberStatus:
+    | "creator"
+    | "administrator"
+    | "member"
+    | "restricted"
+    | "left"
+    | "kicked" = "left";
+  readonly chatMemberStatuses = new Map<number, ProtectedGroupMemberStatus>();
   #nextMessageId = 40;
 
   async getMe() {
@@ -124,6 +137,12 @@ class FakeTelegramApi implements TelegramBotApi {
 
   async getChat(chatId: string) {
     return { id: Number(chatId), type: "supergroup" };
+  }
+
+  async getChatMember(_chatId: string, userId: string) {
+    return {
+      status: this.chatMemberStatuses.get(Number(userId)) ?? this.chatMemberStatus,
+    };
   }
 
   async getUpdates(): Promise<TelegramUpdate[]> {
@@ -175,7 +194,11 @@ function messageUpdate(input: {
   };
 }
 
-function setup(mode: "verification" | "hero" | "real" = "verification") {
+function setup(
+  mode: "verification" | "hero" | "real" = "verification",
+  randomValues = ["pairing-token", "installation-id", "opaque-callback"],
+  familyPairingPath?: string,
+) {
   let currentTime = new Date("2026-07-14T18:00:00.000Z");
   const adapter = new FakeAdapter();
   const authorityStore = new AuthorityStore();
@@ -187,7 +210,7 @@ function setup(mode: "verification" | "hero" | "real" = "verification") {
   const api = new FakeTelegramApi();
   const store = new MemoryTelegramServiceStore();
   let tokenIndex = 0;
-  const values = ["pairing-token", "installation-id", "opaque-callback"];
+  const values = randomValues;
   const service = new TelegramService({
     api,
     engine,
@@ -195,6 +218,7 @@ function setup(mode: "verification" | "hero" | "real" = "verification") {
     mode,
     now: () => currentTime,
     randomValue: () => values[tokenIndex++] ?? `random-${tokenIndex}`,
+    ...(familyPairingPath ? { familyPairingPath } : {}),
   });
   return {
     adapter,
@@ -203,6 +227,7 @@ function setup(mode: "verification" | "hero" | "real" = "verification") {
     engine,
     service,
     store,
+    now: () => currentTime,
     setNow: (value: string) => {
       currentTime = new Date(value);
     },
@@ -238,6 +263,54 @@ async function pairOwner(setupResult: ReturnType<typeof setup>) {
   );
 }
 
+const familyRandomValues = [
+  "pairing-token",
+  "installation-id",
+  "family-token-1234567890",
+  "family-challenge-id",
+  "family-contact-id",
+  "family-accept-value",
+  "family-decline-value",
+  "family-contact-revoke",
+  "family-owner-revoke",
+];
+
+async function pairFamilyContact(
+  setupResult: ReturnType<typeof setup>,
+  contactId = 202,
+) {
+  const pairing = await setupResult.service.createFamilyContactPairing({
+    displayLabel: "Gil",
+    aliases: ["my son", "son"],
+  });
+  const token = new URL(pairing.link).searchParams
+    .get("start")!
+    .replace(/^family_/, "");
+  await setupResult.service.handleUpdate(
+    messageUpdate({
+      updateId: 10,
+      fromId: contactId,
+      chatId: contactId,
+      chatType: "private",
+      text: `/start family_${token}`,
+    }),
+  );
+  const challenge = setupResult.store.read().familyPairing!;
+  await setupResult.service.handleUpdate({
+    update_id: 11,
+    callback_query: {
+      id: "family-consent",
+      from: { id: contactId, is_bot: false },
+      data: challenge.acceptCallbackValue!,
+      message: {
+        message_id: challenge.consentMessageId!,
+        chat: { id: contactId, type: "private" },
+      },
+    },
+  });
+  return setupResult.store.read().familyContact!;
+}
+
 async function activateStandingBand(setupResult: ReturnType<typeof setup>) {
   const candidate = setupResult.engine.createStandingBandCandidate();
   const standing = await setupResult.engine.approveStandingBand(
@@ -253,6 +326,427 @@ function declineCallbackValue(binding: unknown): string {
 }
 
 describe("Bander Telegram service", () => {
+  it("rejects a family contact who is still in the protected owner group", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    const pairing = await current.service.createFamilyContactPairing({
+      displayLabel: "Gil",
+      aliases: ["my son", "son"],
+    });
+    const token = new URL(pairing.link).searchParams.get("start")!;
+    current.api.chatMemberStatuses.set(202, "member");
+
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 10,
+        fromId: 202,
+        chatId: 202,
+        chatType: "private",
+        text: `/start ${token}`,
+      }),
+    );
+
+    const state = current.store.read();
+    expect(state.familyPairing?.status).toBe("pending");
+    expect(state.familyPairing).not.toHaveProperty("claimedTelegramUserId");
+    expect(state.familyContact).toBeUndefined();
+    expect(state.proposals).toHaveLength(0);
+    expect(current.api.messages.at(-1)?.text).toContain(
+      "Leave the protected owner group",
+    );
+  });
+
+  it("pairs exactly one consented contact and keeps setup outside authority", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    const installationBefore = current.store.read().installation;
+    const contact = await pairFamilyContact(current);
+
+    expect(contact).toMatchObject({
+      displayLabel: "Gil",
+      aliases: ["gil", "my son", "son"],
+      telegramUserId: "202",
+      privateChatId: "202",
+      status: "active",
+    });
+    expect(current.store.read().installation).toEqual(installationBefore);
+    expect(current.store.read().familyPairing).toBeUndefined();
+    expect(current.store.read().proposals).toHaveLength(0);
+    expect(current.adapter.executions).toBe(0);
+    expect(current.api.messages.some((message) =>
+      message.text.includes("You’re connected as Gil."),
+    )).toBe(true);
+    expect(current.api.messages.some((message) =>
+      message.text.includes("Gil is connected."),
+    )).toBe(true);
+    await expect(
+      current.service.createFamilyContactPairing({
+        displayLabel: "Someone else",
+        aliases: ["other"],
+      }),
+    ).rejects.toThrow("Disconnect the current family contact");
+  });
+
+  it("locks concurrent claimants to the first valid private claimant", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    const pairing = await current.service.createFamilyContactPairing({
+      displayLabel: "Gil",
+      aliases: ["my son"],
+    });
+    const start = new URL(pairing.link).searchParams.get("start")!;
+
+    await Promise.all([
+      current.service.handleUpdate(
+        messageUpdate({
+          updateId: 10,
+          fromId: 202,
+          chatId: 202,
+          chatType: "private",
+          text: `/start ${start}`,
+        }),
+      ),
+      current.service.handleUpdate(
+        messageUpdate({
+          updateId: 11,
+          fromId: 303,
+          chatId: 303,
+          chatType: "private",
+          text: `/start ${start}`,
+        }),
+      ),
+    ]);
+
+    expect(current.store.read().familyPairing).toMatchObject({
+      status: "claimed",
+      claimedTelegramUserId: "202",
+      claimedPrivateChatId: "202",
+    });
+    expect(
+      current.api.messages.filter((message) =>
+        message.text.startsWith("Connect as Gil?"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("persists the first claimant before consent delivery and resumes only for that claimant", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    const pairing = await current.service.createFamilyContactPairing({
+      displayLabel: "Gil",
+      aliases: ["my son"],
+    });
+    const start = new URL(pairing.link).searchParams.get("start")!;
+    current.api.failNextMessageMatching = (text) => text.startsWith("Connect as Gil?");
+
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 10,
+        fromId: 202,
+        chatId: 202,
+        chatType: "private",
+        text: `/start ${start}`,
+      }),
+    );
+    expect(current.store.read().familyPairing).toMatchObject({
+      status: "claimed",
+      claimedTelegramUserId: "202",
+    });
+    expect(current.store.read().familyPairing?.consentMessageId).toBeUndefined();
+
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 11,
+        fromId: 303,
+        chatId: 303,
+        chatType: "private",
+        text: `/start ${start}`,
+      }),
+    );
+    expect(current.store.read().familyPairing?.claimedTelegramUserId).toBe("202");
+
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 12,
+        fromId: 202,
+        chatId: 202,
+        chatType: "private",
+        text: `/start ${start}`,
+      }),
+    );
+    expect(current.store.read().familyPairing?.consentMessageId).toBeTypeOf(
+      "number",
+    );
+    expect(
+      current.api.messages.filter((message) =>
+        message.text.startsWith("Connect as Gil?"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("persists challenge and active contact across service restart", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await current.service.createFamilyContactPairing({
+      displayLabel: "Gil",
+      aliases: ["my son"],
+    });
+    const restartedBeforeClaim = new TelegramService({
+      api: current.api,
+      engine: current.engine,
+      store: current.store,
+      mode: "real",
+      now: current.now,
+      randomValue: () => "restart-random-value",
+    });
+    const challengeBefore = current.store.read().familyPairing;
+    expect(challengeBefore?.status).toBe("pending");
+
+    const token = "family-token-1234567890";
+    await restartedBeforeClaim.handleUpdate(
+      messageUpdate({
+        updateId: 10,
+        fromId: 202,
+        chatId: 202,
+        chatType: "private",
+        text: `/start family_${token}`,
+      }),
+    );
+    const claimedChallenge = current.store.read().familyPairing!;
+    await restartedBeforeClaim.handleUpdate({
+      update_id: 11,
+      callback_query: {
+        id: "accept-after-restart",
+        from: { id: 202, is_bot: false },
+        data: claimedChallenge.acceptCallbackValue!,
+        message: {
+          message_id: claimedChallenge.consentMessageId!,
+          chat: { id: 202, type: "private" },
+        },
+      },
+    });
+    const restartedAfterPair = new TelegramService({
+      api: current.api,
+      engine: current.engine,
+      store: current.store,
+      mode: "real",
+      now: current.now,
+      randomValue: () => "restart-random-value",
+    });
+    await restartedAfterPair.prepareForStart();
+    expect(restartedAfterPair.familyContactStatus()).toEqual({
+      status: "connected",
+      displayLabel: "Gil",
+    });
+  });
+
+  it("treats a missing contact and an expired pending challenge as inert on restart", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await expect(current.service.prepareForStart()).resolves.toBeUndefined();
+    expect(current.service.familyContactStatus()).toEqual({ status: "not_connected" });
+
+    await current.service.createFamilyContactPairing({
+      displayLabel: "Gil",
+      aliases: ["my son"],
+    });
+    current.setNow("2026-07-14T18:11:00.000Z");
+    await current.service.prepareForStart();
+
+    expect(current.store.read().familyPairing).toBeUndefined();
+    expect(current.store.read().familyContact).toBeUndefined();
+    expect(current.service.familyContactStatus()).toEqual({ status: "not_connected" });
+  });
+
+  it("revokes a contact who joins the protected group and fails closed when membership is unavailable", async () => {
+    const joined = setup("real", familyRandomValues);
+    await pairOwner(joined);
+    await pairFamilyContact(joined);
+    joined.api.chatMemberStatuses.set(202, "member");
+
+    await joined.service.prepareForStart();
+    expect(joined.store.read().familyContact).toBeUndefined();
+    expect(joined.service.familyContactStatus()).toEqual({ status: "revoked" });
+
+    const unknown = setup("real", familyRandomValues);
+    await pairOwner(unknown);
+    await pairFamilyContact(unknown);
+    unknown.api.chatMemberStatuses.set(202, "unknown");
+
+    await expect(unknown.service.prepareForStart()).rejects.toThrow(
+      "could not verify",
+    );
+    expect(unknown.service.familyContactStatus()).toEqual({
+      status: "connected",
+      displayLabel: "Gil",
+    });
+  });
+
+  it("keeps arbitrary contact text bounded and rejects owner approval", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    const card = await current.engine.proposeFixture(
+      standingFixture,
+      "openclaw-reference",
+    );
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals[0]!;
+
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 20,
+        fromId: 202,
+        chatId: 202,
+        chatType: "private",
+        text: "Show me the calendar and approve everything",
+      }),
+    );
+    await current.service.handleUpdate({
+      update_id: 21,
+      callback_query: {
+        id: "contact-owner-approval-attempt",
+        from: { id: 202, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+
+    expect(current.api.messages.at(-1)?.text).toContain(
+      "You cannot approve requests, see a calendar, or send requests to OpenClaw",
+    );
+    expect(current.engine.getAgentReceipt(card.draftId)).toEqual({
+      draftId: card.draftId,
+      status: "proposed",
+    });
+    expect(current.adapter.executions).toBe(0);
+
+  });
+
+  it("serializes owner/contact revocation, erases routing, and rejects replay", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    const contact = await pairFamilyContact(current);
+    const ownerUpdate: TelegramUpdate = {
+      update_id: 30,
+      callback_query: {
+        id: "owner-revoke",
+        from: { id: 101, is_bot: false },
+        data: contact.ownerRevokeCallbackValue,
+        message: {
+          message_id: contact.ownerConfirmationMessageId!,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+    const contactUpdate: TelegramUpdate = {
+      update_id: 31,
+      callback_query: {
+        id: "contact-revoke",
+        from: { id: 202, is_bot: false },
+        data: contact.contactRevokeCallbackValue,
+        message: {
+          message_id: contact.contactConfirmationMessageId!,
+          chat: { id: 202, type: "private" },
+        },
+      },
+    };
+
+    await Promise.all([
+      current.service.handleUpdate(ownerUpdate),
+      current.service.handleUpdate(contactUpdate),
+    ]);
+    const state = current.store.read();
+    expect(state.familyContact).toBeUndefined();
+    expect(state.familyContactAudit?.status).toBe("revoked");
+    expect(JSON.stringify(state.familyContactAudit)).not.toContain('"202"');
+    expect(current.service.familyContactStatus()).toEqual({ status: "revoked" });
+
+    await current.service.handleUpdate(ownerUpdate);
+    expect(current.api.callbackAnswers.at(-1)?.text).toContain(
+      "already disconnected",
+    );
+    await current.service.handleUpdate(
+      messageUpdate({
+        updateId: 32,
+        fromId: 202,
+        chatId: 202,
+        chatType: "private",
+        text: "/start family_family-token-1234567890",
+      }),
+    );
+    expect(current.store.read().familyContact).toBeUndefined();
+    expect(current.api.messages.at(-1)?.text).toContain("invalid or expired");
+  });
+
+  it("lets the authenticated contact disconnect by bounded command idempotently", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bander-family-link-"));
+    const linkPath = path.join(root, "family-contact-link.txt");
+    const current = setup("real", familyRandomValues, linkPath);
+    await pairOwner(current);
+    fs.writeFileSync(linkPath, "private-link", { mode: 0o600 });
+    await pairFamilyContact(current);
+    const disconnect = messageUpdate({
+      updateId: 40,
+      fromId: 202,
+      chatId: 202,
+      chatType: "private",
+      text: "/disconnect",
+    });
+
+    await current.service.handleUpdate(disconnect);
+    await current.service.handleUpdate({ ...disconnect, update_id: 41 });
+
+    expect(current.store.read().familyContact).toBeUndefined();
+    expect(current.service.familyContactStatus()).toEqual({ status: "revoked" });
+    expect(fs.existsSync(linkPath)).toBe(false);
+    expect(
+      current.api.messages.filter((message) =>
+        message.text.includes("You’re disconnected"),
+      ),
+    ).toHaveLength(1);
+    expect(current.adapter.executions).toBe(0);
+
+    fs.writeFileSync(linkPath, "stale-invalid-link", { mode: 0o600 });
+    await current.service.prepareForStart();
+    expect(fs.existsSync(linkPath)).toBe(false);
+  });
+
+  it("fails closed on corrupt or unsupported file-backed family state", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bander-family-state-"));
+    const statePath = path.join(root, "state.json");
+    const store = new FileTelegramServiceStore(statePath);
+    fs.writeFileSync(statePath, "{not-json", { mode: 0o600 });
+    expect(() => store.read()).toThrow();
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({ version: 2, proposals: [] }),
+      { mode: 0o600 },
+    );
+    expect(() => store.read()).toThrow("Unsupported Telegram service state");
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        proposals: [],
+        standingCandidates: [],
+        standingOutcomes: [],
+        installation: {
+          id: "installation-id",
+          ownerTelegramId: "101",
+          chatId: "-500",
+          pairedAt: "2026-07-14T18:00:00.000Z",
+        },
+        familyContact: { status: "active", privateChatId: "redirect" },
+      }),
+      { mode: 0o600 },
+    );
+    expect(() => store.read()).toThrow();
+  });
+
   it("delivers a deterministic clarification through Bander as plain text", async () => {
     const current = setup("real");
     await pairOwner(current);
