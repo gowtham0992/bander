@@ -1011,3 +1011,56 @@ production build, and a moderate dependency audit with zero vulnerabilities.
 A high-confidence scan of all 92 tracked and checkpoint files found zero
 OpenAI keys, Telegram bot tokens, Google client secrets or Google refresh
 tokens. `transcription_day2.md` remains untracked and untouched.
+
+## Checkpoint 24 — explicit sandbox and real Calendar runtime modes
+
+**Status:** implemented; final deterministic matrix pending
+
+Runtime isolation was implemented red-first. The initial configuration test
+could not import `runtime-config.js` at all. After the configuration boundary
+was added, eight tests pass: sandbox remains the default, real mode requires
+the OpenAI key, Google client/token paths and Bander Telegram credential, real
+and mock service configuration cannot coexist, unknown modes fail closed, and
+real Telegram state defaults to a separate `.bander/real/` tree.
+
+Two broker/MCP acceptance tests were then observed red. The unimplemented real
+mode still reported fixture mode, left sandbox routes reachable, and advertised
+Messages and standing authority. The restored tests prove real mode reports
+itself explicitly, returns 404 for demo and standing entrypoints, advertises no
+Messages, fixtures or standing authority, and retains exactly the same three
+Bander MCP tools. One-time proposal, approval, execution and status routes are
+unchanged.
+
+Credential projection was separately observed red because the broker received
+neither the real-mode marker nor Google paths. It now projects Google OAuth
+paths and the Bander bot token only into Bander; neither Google credential path
+nor the Bander bot token enters OpenClaw. Mock-service credentials are absent
+from the real broker environment. The sandbox projection remains unchanged.
+
+The first real-process startup was also usefully red before any external
+action: npm starts a workspace from `apps/broker`, so repository-relative
+Google paths incorrectly resolved beneath that workspace. The projection now
+resolves paths once at the repository root. The restored real process obtained
+OAuth, started the isolated Telegram service, wrote a private pairing link
+under `.bander/real/`, and reported:
+
+```text
+product: Bander
+status: ready
+runtimeMode: real
+fixtureMode: false
+modelCompiler: available
+heroMode: false
+```
+
+No proposal was created and no Calendar mutation occurred during the startup
+check. `npm run real` starts only the real Bander broker; it does not start the
+mock Calendar/Messages service and does not alter the deterministic Hero path.
+
+The restored matrix passed: typecheck, 140 functional tests, 20 attack tests,
+the six-outcome demo verifier, one-time recovery, standing recovery, the real
+OpenClaw verifier with exactly the three Bander tools, production build, and a
+moderate dependency audit with zero vulnerabilities. A high-confidence scan
+of all 95 tracked and checkpoint files found zero OpenAI keys, Telegram bot
+tokens, Google client secrets or Google refresh tokens. The untracked
+`transcription_day2.md` remains untouched.

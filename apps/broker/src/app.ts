@@ -15,6 +15,7 @@ import { registerMcpRoutes } from "./mcp.js";
 interface BrokerAppOptions {
   engine: AuthorityEngine;
   fixtures: Map<string, DraftFixture>;
+  runtimeMode?: "sandbox" | "real";
   compiler?: DraftCompiler;
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
@@ -53,7 +54,8 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
   app.get("/api/status", async () => ({
     product: "Bander",
     status: "ready",
-    fixtureMode: true,
+    runtimeMode: options.runtimeMode ?? "sandbox",
+    fixtureMode: options.runtimeMode !== "real",
     modelCompiler: options.compiler ? "available" : "not_configured",
     heroMode: options.heroMode === true,
   }));
@@ -116,6 +118,11 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
       },
     },
     async (request, reply) => {
+      if (options.runtimeMode === "real") {
+        return reply.code(404).send({
+          error: { code: "not_found", message: "API route not found" },
+        });
+      }
       const fixture = options.fixtures.get(request.body.fixtureId);
       if (!fixture) {
         return reply.code(404).send({
@@ -131,6 +138,11 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
   );
 
   app.post("/api/demo/reset", async (_request, reply) => {
+    if (options.runtimeMode === "real") {
+      return reply.code(404).send({
+        error: { code: "not_found", message: "API route not found" },
+      });
+    }
     if (!options.resetDemo) {
       return reply.code(501).send({
         error: { code: "demo_reset_unavailable", message: "Demo reset is unavailable" },
@@ -145,6 +157,11 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
   });
 
   app.post("/api/demo/standing-band-candidates", async (_request, reply) => {
+    if (options.runtimeMode === "real") {
+      return reply.code(404).send({
+        error: { code: "not_found", message: "API route not found" },
+      });
+    }
     try {
       return options.engine.createStandingBandCandidate();
     } catch (error) {
@@ -170,6 +187,11 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
       },
     },
     async (request, reply) => {
+      if (options.runtimeMode === "real") {
+        return reply.code(404).send({
+          error: { code: "not_found", message: "API route not found" },
+        });
+      }
       try {
         const standing = await options.engine.approveStandingBand(
           request.params.candidateId,
@@ -207,6 +229,11 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
       },
     },
     async (request, reply) => {
+      if (options.runtimeMode === "real") {
+        return reply.code(404).send({
+          error: { code: "not_found", message: "API route not found" },
+        });
+      }
       const fixture = options.fixtures.get(request.body.fixtureId);
       if (!fixture) {
         return reply.code(404).send({
@@ -235,6 +262,11 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
   app.post<{ Params: { bandId: string } }>(
     "/api/bands/:bandId/revoke",
     async (request, reply) => {
+      if (options.runtimeMode === "real") {
+        return reply.code(404).send({
+          error: { code: "not_found", message: "API route not found" },
+        });
+      }
       try {
         await options.engine.revokeBand(request.params.bandId);
         return reply.code(204).send();
@@ -294,6 +326,11 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
       },
     },
     async (request, reply) => {
+      if (options.runtimeMode === "real") {
+        return reply.code(404).send({
+          error: { code: "not_found", message: "API route not found" },
+        });
+      }
       if (!options.simulateCalendarChange) {
         return reply.code(501).send({
           error: { code: "demo_conflict_unavailable", message: "Conflict demo is unavailable" },

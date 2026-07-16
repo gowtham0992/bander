@@ -2,6 +2,40 @@ import { describe, expect, it } from "vitest";
 import { createRuntimeEnvironments } from "./process-env.js";
 
 describe("canonical process credential projection", () => {
+  it("projects Google credentials only into Bander in real mode", () => {
+    const environments = createRuntimeEnvironments(
+      {
+        PATH: "/usr/bin",
+        HOME: "/tmp/demo-owner",
+        OPENAI_API_KEY: "live-sol-key",
+        GOOGLE_OAUTH_CLIENT_PATH: ".bander/google-client.json",
+        GOOGLE_OAUTH_TOKEN_PATH: ".bander/google-token.json",
+        BANDER_TELEGRAM_BOT_TOKEN: "bander-only-token",
+        OPENCLAW_TELEGRAM_BOT_TOKEN: "openclaw-only-token",
+      },
+      "real",
+    );
+
+    expect(environments.broker).toMatchObject({
+      BANDER_RUNTIME_MODE: "real",
+      OPENAI_API_KEY: "live-sol-key",
+      BANDER_TELEGRAM_BOT_TOKEN: "bander-only-token",
+    });
+    expect(environments.broker.GOOGLE_OAUTH_CLIENT_PATH).toMatch(
+      /\.bander\/google-client\.json$/,
+    );
+    expect(environments.broker.GOOGLE_OAUTH_TOKEN_PATH).toMatch(
+      /\.bander\/google-token\.json$/,
+    );
+    expect(environments.broker).not.toHaveProperty("MOCK_SERVICE_TOKEN");
+    expect(environments.broker).not.toHaveProperty("MOCK_SERVICE_URL");
+    expect(environments.openclaw).not.toHaveProperty("GOOGLE_OAUTH_CLIENT_PATH");
+    expect(environments.openclaw).not.toHaveProperty("GOOGLE_OAUTH_TOKEN_PATH");
+    expect(environments.openclaw).not.toHaveProperty(
+      "BANDER_TELEGRAM_BOT_TOKEN",
+    );
+  });
+
   it("does not place downstream credentials in the OpenClaw environment", () => {
     const environments = createRuntimeEnvironments({
       PATH: "/usr/bin",

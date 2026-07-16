@@ -20,6 +20,7 @@
     "dev": "tsx scripts/dev.ts",
     "demo": "npm run build && tsx scripts/demo.ts",
     "hero": "npm run build && tsx scripts/hero.ts",
+    "real": "tsx scripts/real.ts",
     "openclaw": "./node_modules/node/bin/node scripts/openclaw.mjs",
     "verify:demo": "tsx scripts/verify-demo.ts",
     "verify:recovery": "tsx scripts/verify-http-recovery.ts",

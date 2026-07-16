@@ -17,6 +17,7 @@ import {
 interface McpRoutesOptions {
   engine: AuthorityEngine;
   fixtures: Map<string, DraftFixture>;
+  runtimeMode?: "sandbox" | "real";
   agentCompiler?: DraftCompiler;
   deliverAgentProposal?: (card: ApprovalCard) => Promise<void>;
   proposeAgentStandingOptIn?: (
@@ -49,6 +50,7 @@ function asToolError(error: unknown) {
 
 export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
   const server = new McpServer({ name: "bander", version: "0.1.0" });
+  const realMode = options.runtimeMode === "real";
   const compiler =
     options.agentCompiler ?? createDeterministicDraftCompiler(options.fixtures);
 
@@ -65,21 +67,30 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
         {
           type: "text",
           text: JSON.stringify({
-            capabilities: [
-              "Prepare a bounded Calendar reschedule for human review",
-              "Prepare one bounded Messages send as part of the same reviewed deal",
-              "Run an eligible Calendar reschedule under a previously approved standing Band",
-              "Read only the minimal status of a previously proposed Draft",
-            ],
-            supportedProposalRequests: [...options.fixtures.values()].map(
-              (fixture) => fixture.claimedUserRequest,
-            ).concat(
-              options.proposeAgentStandingOptIn
-                ? ["Handle my focus time automatically."]
-                : [],
-            ),
+            capabilities: realMode
+              ? [
+                  "Prepare one bounded owner-only Calendar reschedule for human review",
+                  "Read only the minimal status of a previously proposed action",
+                ]
+              : [
+                  "Prepare a bounded Calendar reschedule for human review",
+                  "Prepare one bounded Messages send as part of the same reviewed deal",
+                  "Run an eligible Calendar reschedule under a previously approved standing Band",
+                  "Read only the minimal status of a previously proposed Draft",
+                ],
+            supportedProposalRequests: realMode
+              ? []
+              : [...options.fixtures.values()]
+                  .map((fixture) => fixture.claimedUserRequest)
+                  .concat(
+                    options.proposeAgentStandingOptIn
+                      ? ["Handle my focus time automatically."]
+                      : [],
+                  ),
             executionBoundary:
-              "OpenClaw cannot approve authority. Eligible execution can occur only inside a standing Band the person previously approved.",
+              realMode
+                ? "OpenClaw can propose but cannot approve or execute. The person must approve the exact Calendar change on Bander."
+                : "OpenClaw cannot approve authority. Eligible execution can occur only inside a standing Band the person previously approved.",
           }),
         },
       ],
@@ -91,7 +102,9 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
     {
       title: "Propose an action through Bander",
       description:
-        "Pass the person's natural request verbatim. Bander either creates a human review Card or, when the request fits an existing standing Band, executes only within that pre-approved authority. Reuse the same requestId when recovering an ambiguous standing result.",
+        realMode
+          ? "Pass the person's natural Calendar request verbatim. Bander can only prepare a one-time human review; OpenClaw cannot approve or execute it."
+          : "Pass the person's natural request verbatim. Bander either creates a human review Card or, when the request fits an existing standing Band, executes only within that pre-approved authority. Reuse the same requestId when recovering an ambiguous standing result.",
       inputSchema: {
         request: z
           .string()
@@ -157,7 +170,7 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
     {
       title: "Get minimal Bander status",
       description:
-        "Return only the Draft ID and lifecycle status. This never returns Calendar or Messages data.",
+        "Return only the proposal ID and lifecycle status. This never returns private effect details.",
       inputSchema: {
         draftId: z.string().min(1).max(100).describe("The Bander Draft ID"),
       },

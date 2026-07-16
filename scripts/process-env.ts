@@ -13,7 +13,10 @@ const agentAllowlist = [
   "ANTHROPIC_API_KEY",
 ] as const;
 
-export function createRuntimeEnvironments(source = process.env): Record<Role, NodeJS.ProcessEnv> {
+export function createRuntimeEnvironments(
+  source = process.env,
+  runtimeMode: "sandbox" | "real" = "sandbox",
+): Record<Role, NodeJS.ProcessEnv> {
   const serviceToken = randomBytes(32).toString("hex");
   const common: NodeJS.ProcessEnv = {
     PATH: source.PATH,
@@ -43,17 +46,37 @@ export function createRuntimeEnvironments(source = process.env): Record<Role, No
     },
     broker: {
       ...common,
-      MOCK_SERVICE_TOKEN: serviceToken,
-      MOCK_SERVICE_URL: `http://127.0.0.1:${source.MOCK_SERVICE_PORT ?? "4311"}`,
+      BANDER_RUNTIME_MODE: runtimeMode,
       BANDER_PORT: source.BANDER_PORT ?? "4310",
       OPENAI_API_KEY: source.OPENAI_API_KEY,
       BANDER_TELEGRAM_BOT_TOKEN: source.BANDER_TELEGRAM_BOT_TOKEN,
+      ...(runtimeMode === "real"
+        ? {
+            GOOGLE_OAUTH_CLIENT_PATH: source.GOOGLE_OAUTH_CLIENT_PATH
+              ? path.resolve(source.GOOGLE_OAUTH_CLIENT_PATH)
+              : undefined,
+            GOOGLE_OAUTH_TOKEN_PATH: source.GOOGLE_OAUTH_TOKEN_PATH
+              ? path.resolve(source.GOOGLE_OAUTH_TOKEN_PATH)
+              : undefined,
+          }
+        : {
+            MOCK_SERVICE_TOKEN: serviceToken,
+            MOCK_SERVICE_URL: `http://127.0.0.1:${source.MOCK_SERVICE_PORT ?? "4311"}`,
+          }),
       BANDER_TELEGRAM_STATE_PATH:
         source.BANDER_TELEGRAM_STATE_PATH ??
-        path.resolve(".bander/telegram-service/state.json"),
+        path.resolve(
+          runtimeMode === "real"
+            ? ".bander/real/telegram-service/state.json"
+            : ".bander/telegram-service/state.json",
+        ),
       BANDER_TELEGRAM_PAIRING_PATH:
         source.BANDER_TELEGRAM_PAIRING_PATH ??
-        path.resolve(".bander/telegram-service/pairing-link.txt"),
+        path.resolve(
+          runtimeMode === "real"
+            ? ".bander/real/telegram-service/pairing-link.txt"
+            : ".bander/telegram-service/pairing-link.txt",
+        ),
     },
     web: {
       ...common,

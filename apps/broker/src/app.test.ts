@@ -82,6 +82,80 @@ function createApp() {
 }
 
 describe("broker approval boundary", () => {
+  it("keeps real mode Calendar-only and makes sandbox routes unreachable", async () => {
+    const setup = createApp();
+    await setup.app.close();
+    app = buildBrokerApp({
+      engine: setup.engine,
+      fixtures: new Map(),
+      runtimeMode: "real",
+      compiler: {
+        compile: async () => fixture,
+      },
+      agentCompiler: {
+        compile: async () => fixture,
+      },
+    });
+
+    const status = await app.inject({ method: "GET", url: "/api/status" });
+    const demo = await app.inject({
+      method: "POST",
+      url: "/api/demo/proposals",
+      payload: { fixtureId: fixture.id },
+    });
+    const standing = await app.inject({
+      method: "POST",
+      url: "/api/demo/standing-band-candidates",
+    });
+
+    expect(status.json()).toMatchObject({
+      runtimeMode: "real",
+      fixtureMode: false,
+      modelCompiler: "available",
+    });
+    expect(demo.statusCode).toBe(404);
+    expect(standing.statusCode).toBe(404);
+    expect(setup.adapter.executions).toBe(0);
+  });
+
+  it("advertises no Messages, fixtures or standing authority in real MCP mode", async () => {
+    const setup = createApp();
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: new Map(),
+      runtimeMode: "real",
+      agentCompiler: { compile: async () => fixture },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "bander-real-test", version: "1.0.0" });
+
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const tools = await client.listTools();
+      const capabilities = await client.callTool({
+        name: "list_capabilities",
+        arguments: {},
+      });
+      const text = (
+        capabilities.content as Array<{ type: string; text?: string }>
+      )[0]?.text ?? "";
+
+      expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+        "get_receipt",
+        "list_capabilities",
+        "propose_action",
+      ]);
+      expect(text).toContain("Calendar");
+      expect(text).not.toContain("Messages");
+      expect(text).not.toContain("standing");
+      expect(text).not.toContain(fixture.claimedUserRequest);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("serves sanitized Hero state only when Hero mode is explicitly enabled", async () => {
     const setup = createApp();
     const verificationResponse = await setup.app.inject({
