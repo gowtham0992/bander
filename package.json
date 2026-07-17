@@ -34,7 +34,7 @@
     "openclaw": "./node_modules/node/bin/node scripts/openclaw.mjs",
     "verify:demo": "tsx scripts/verify-demo.ts",
     "build:pages": "node --import tsx scripts/build-pages.ts",
-    "verify:pages": "npm run verify:pages:artifact && npm run verify:pages:parity",
+    "verify:pages": "npm run build:pages && npm run verify:pages:artifact && npm run verify:pages:parity",
     "verify:pages:artifact": "node --import tsx scripts/verify-pages.ts",
     "verify:pages:parity": "vitest run apps/web/src/backend/browser-parity.test.ts",
     "verify:pages:browser": "node --import tsx scripts/verify-pages-browser.ts",
@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@types/node": "26.1.1",
+    "axe-core": "^4.10.3",
     "node": "24.15.0",
     "openclaw": "2026.7.1",
     "tsx": "4.23.1",

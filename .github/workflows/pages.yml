@@ -25,16 +25,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run build:pages
-        env:
-          OPENAI_API_KEY: ""
-          BANDER_TELEGRAM_BOT_TOKEN: ""
-          OPENCLAW_TELEGRAM_BOT_TOKEN: ""
-          GOOGLE_OAUTH_CLIENT_PATH: ""
-          GOOGLE_OAUTH_TOKEN_PATH: ""
-          GMAIL_OAUTH_CLIENT_PATH: ""
-          GMAIL_OAUTH_TOKEN_PATH: ""
-          MOCK_SERVICE_TOKEN: ""
       - run: npm run verify:pages
         env:
           OPENAI_API_KEY: ""

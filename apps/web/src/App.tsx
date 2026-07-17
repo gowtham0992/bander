@@ -134,8 +134,8 @@ const localSandboxNotice = "Deterministic sandbox — uses seeded data through a
 const uncertaintySandboxPreface = "The Calendar provider’s response will be deliberately lost after approval, so Bander must report only what it can prove.";
 const realServicesEvidenceUrl = "https://github.com/gowtham0992/bander#real-services-and-evidence";
 
-function RealServicesLink() {
-  return <a className="real-services-link" href={realServicesEvidenceUrl} target="_blank" rel="noreferrer">See how this works with real services →</a>;
+function RealServicesLink({ label = "See how this works with real services →" }: { label?: string }) {
+  return <a className="real-services-link" href={realServicesEvidenceUrl} target="_blank" rel="noreferrer">{label}</a>;
 }
 
 function SandboxNotice({ browserOnly }: { browserOnly: boolean }) {
@@ -505,7 +505,7 @@ function GuidedEpisode() {
         <aside className="evidence-strip">
           <strong>The real Bander has done this with real services.</strong>
           <span>A real OpenClaw conversation, Google Calendar, Gmail, and a separate Telegram phone—while OpenClaw held none of those credentials.</span>
-          <RealServicesLink />
+          <RealServicesLink label="See how this works for real →" />
         </aside>
       )}
     </section>
@@ -536,13 +536,13 @@ function Welcome({
         Your assistant can read your calendar and mail and talk like a person. Bander holds the keys—calendar changes, email replies, and family messages happen only as exact deals you approve, and Bander reports only what it can prove.
       </p>
       <section className="lane-grid" aria-label="Main sandbox journeys">
-        <button className="lane-card read-lane" onClick={onSchedule}>
+        <button className="lane-card read-lane" aria-label="Just ask" onClick={onSchedule}>
           <span>JUST ASK</span><strong>“What’s on tomorrow? What did Ruth say?”</strong><small>Harmless reading flows without an approval toll.</small>
         </button>
-        <button className="lane-card compound-lane" onClick={() => onStart("compound")}>
+        <button className="lane-card compound-lane" aria-label="Approve a change" onClick={() => onStart("compound")}>
           <span>APPROVE A CHANGE</span><strong>“Answer the email, update the calendar, tell Gil.”</strong><small>Exact effects. One decision at a time.</small>
         </button>
-        <button className="lane-card uncertain-lane" onClick={() => onStart("ambiguous")}>
+        <button className="lane-card uncertain-lane" aria-label="When Bander isn’t sure" onClick={() => onStart("ambiguous")}>
           <span>WHEN BANDER ISN’T SURE</span><strong>See a truthful uncertain outcome.</strong><small>No reassuring guess. No blind retry.</small>
         </button>
       </section>

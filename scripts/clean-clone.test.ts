@@ -14,7 +14,6 @@ describe("clean-clone acceptance contract", () => {
     expect(source).toContain("delete sanitizedEnvironment.OPENAI_API_KEY");
     expect(source).toContain("delete sanitizedEnvironment.BANDER_TELEGRAM_BOT_TOKEN");
     expect(source).toContain("delete sanitizedEnvironment.GOOGLE_OAUTH_TOKEN_PATH");
-    expect(source).toContain('run("npm", ["run", "build:pages"]');
     expect(source).toContain('run("npm", ["run", "verify:pages"]');
   });
 });

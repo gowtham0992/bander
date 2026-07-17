@@ -32,14 +32,13 @@ describe("final sandbox microcopy", () => {
     expect(source).toContain('<DealCard\n            card={screen.card}');
   });
 
-  it("keeps meaningful native lane-button names and keyboard focus", () => {
-    expect(source).toContain('<button className="lane-card read-lane"');
+  it("keeps concise explicit lane-button names and keyboard focus", () => {
+    expect(source).toContain('<button className="lane-card read-lane" aria-label="Just ask"');
     expect(source).toContain("What’s on tomorrow? What did Ruth say?");
-    expect(source).toContain('<button className="lane-card compound-lane"');
+    expect(source).toContain('<button className="lane-card compound-lane" aria-label="Approve a change"');
     expect(source).toContain("Answer the email, update the calendar, tell Gil.");
-    expect(source).toContain('<button className="lane-card uncertain-lane"');
+    expect(source).toContain('<button className="lane-card uncertain-lane" aria-label="When Bander isn’t sure"');
     expect(source).toContain("See a truthful uncertain outcome.");
-    expect(source).not.toMatch(/<button className="lane-card[^>]*aria-label=/);
     expect(styles).toContain("button:focus-visible");
     expect(styles).toContain(".lane-card { width: 100%;");
   });

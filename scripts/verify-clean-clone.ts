@@ -260,7 +260,6 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
     });
     run("npm", ["run", "typecheck"], { cwd: clone, env: environment });
     run("npm", ["run", "build"], { cwd: clone, env: environment });
-    run("npm", ["run", "build:pages"], { cwd: clone, env: environment });
     run("npm", ["run", "verify:pages"], { cwd: clone, env: environment });
     const doctor = run("npm", ["run", "doctor"], { cwd: clone, env: environment });
     if (!doctor.stdout.includes("Copy .env.example to .env") || doctor.stdout.includes("Error:")) {

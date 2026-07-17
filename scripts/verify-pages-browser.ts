@@ -1,5 +1,7 @@
 import fs from "node:fs";
 
+const axeSource = fs.readFileSync(new URL("../node_modules/axe-core/axe.min.js", import.meta.url), "utf8");
+
 const endpoint = process.env.BANDER_CDP_ENDPOINT ?? "http://127.0.0.1:9333";
 const pages = await fetch(`${endpoint}/json/list`).then((response) => response.json()) as Array<{ type: string; url: string; webSocketDebuggerUrl: string }>;
 const target = pages.find((page) => page.type === "page" && page.url.includes("/bander/"));
@@ -52,6 +54,13 @@ async function key(key: string, code: string, keyCode: number): Promise<void> {
   await command("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
 }
 
+async function clickButton(label: string): Promise<void> {
+  const clicked = await evaluate<boolean>(
+    `(()=>{const button=[...document.querySelectorAll("button")].find(candidate=>candidate.textContent?.replace(/\\s+/g," ").trim()===${JSON.stringify(label)});if(!button)return false;button.click();return true})()`,
+  );
+  if (!clicked) throw new Error(`Could not find the “${label}” button during guided Pages QA`);
+}
+
 async function reload(): Promise<void> {
   await command("Page.reload", { ignoreCache: true });
   await new Promise((resolve) => setTimeout(resolve, 120));
@@ -71,9 +80,17 @@ try {
   const mainHeading = headings.filter((node) => node.name?.value === "Ask freely. Approve changes.");
   if (mainHeading.length !== 1) throw new Error("The Pages accessibility tree does not contain one clear product heading");
   if (buttons.some((node) => !node.name?.value?.trim())) throw new Error("The Pages accessibility tree contains an unnamed button");
-  for (const phrase of ["JUST ASK", "APPROVE A CHANGE", "WHEN BANDER ISN’T SURE"]) {
-    if (!buttons.some((node) => node.name?.value?.includes(phrase))) throw new Error(`The Pages accessibility tree is missing the ${phrase} lane name`);
+  for (const name of ["Just ask", "Approve a change", "When Bander isn’t sure"]) {
+    if (!buttons.some((node) => node.name?.value === name)) {
+      const observed = buttons.map((node) => node.name?.value ?? "<unnamed>");
+      throw new Error(`The Pages accessibility tree is missing the exact “${name}” lane name; observed ${JSON.stringify(observed)}`);
+    }
   }
+  await evaluate(`(()=>{${axeSource};return true})()`);
+  const axeViolations = await evaluate<Array<{ id: string; impact: string | null; nodes: number }>>(
+    `globalThis.axe.run(document.querySelector(".lane-grid"), {runOnly:{type:"rule",values:["button-name","nested-interactive","aria-allowed-attr"]}}).then(result => result.violations.map(violation => ({id:violation.id,impact:violation.impact,nodes:violation.nodes.length})))`,
+  );
+  if (axeViolations.length > 0) throw new Error(`axe found primary-lane accessibility violations: ${JSON.stringify(axeViolations)}`);
   if (!(await evaluate<boolean>(`document.body.textContent.includes("Bander can also stop when the world changed—or admit when a result cannot be confirmed. Explore those cases below.")`))) {
     throw new Error("The Pages episode does not route evaluators to the changed-world and uncertain cases");
   }
@@ -88,8 +105,8 @@ try {
 
   await key("Tab", "Tab", 9);
   await key("Tab", "Tab", 9);
-  const focusedRead = await evaluate<{ text: string; outline: string }>(`({text:document.activeElement?.textContent?.replace(/\\s+/g," ").trim()??"",outline:getComputedStyle(document.activeElement).outlineStyle})`);
-  if (!focusedRead.text.includes("JUST ASK") || focusedRead.outline === "none") throw new Error("The first lane is not visibly keyboard focusable");
+  const focusedRead = await evaluate<{ name: string | null; outline: string }>(`({name:document.activeElement?.getAttribute("aria-label")??null,outline:getComputedStyle(document.activeElement).outlineStyle})`);
+  if (focusedRead.name !== "Just ask" || focusedRead.outline === "none") throw new Error("The first lane is not visibly keyboard focusable under its explicit accessible name");
   await key("Enter", "Enter", 13);
   if (!(await waitFor(`document.body.textContent.includes("Here’s tomorrow.")`))) throw new Error("Enter did not activate the native read-lane button");
 
@@ -111,6 +128,24 @@ try {
   await command("Page.navigate", { url: `${origin}/bander/` });
   await new Promise((resolve) => setTimeout(resolve, 120));
 
+  await clickButton("Ask without approval");
+  if (!(await waitFor(`document.body.textContent.includes("Prepare the exact reply")`))) throw new Error("The guided read step did not complete");
+  await clickButton("Prepare the exact reply");
+  if (!(await waitFor(`document.body.textContent.includes("Do exactly this")`))) throw new Error("The guided email Card did not appear");
+  await clickButton("Do exactly this");
+  if (!(await waitFor(`document.body.textContent.includes("Prepare the calendar + family deal")`))) throw new Error("The guided email approval did not complete");
+  await clickButton("Prepare the calendar + family deal");
+  if (!(await waitFor(`document.body.textContent.includes("Do exactly this")`))) throw new Error("The guided Calendar Card did not appear");
+  await clickButton("Do exactly this");
+  if (!(await waitFor(`document.body.textContent.includes("See how this works for real →")`))) throw new Error("The guided final real-evidence link did not appear");
+  const guidedLink = await evaluate<{ text: string; href: string }>(`(()=>{const link=document.querySelector(".evidence-strip .real-services-link");return{text:link?.textContent?.trim()??"",href:link?.getAttribute("href")??""}})()`);
+  if (guidedLink.text !== "See how this works for real →" || guidedLink.href !== "https://github.com/gowtham0992/bander#real-services-and-evidence") {
+    throw new Error(`The guided final real-evidence link is incorrect: ${JSON.stringify(guidedLink)}`);
+  }
+
+  await command("Page.navigate", { url: `${origin}/bander/` });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
   for (const [width, height] of [[1440, 900], [1280, 720], [500, 900], [375, 812]] as const) {
     await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 });
     await reload();
@@ -122,7 +157,7 @@ try {
     fs.writeFileSync(`/private/tmp/bander-pages-${width}x${height}.png`, Buffer.from(screenshot.data, "base64"), { mode: 0o600 });
   }
 
-  console.log(`Pages browser QA verified: ${buttons.length} named buttons, one main heading, keyboard Enter/Space, deep-link single-flight approval, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.`);
+  console.log(`Pages browser QA verified: ${buttons.length} named buttons, three exact lane names, scoped axe with zero lane violations, one main heading, keyboard Enter/Space, guided final real-evidence link, deep-link single-flight approval, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.`);
 } finally {
   socket.close();
 }
