@@ -132,6 +132,11 @@ function Brand() {
 const browserSandboxNotice = "This is a deterministic sandbox using seeded data, running entirely in your browser. It cannot touch Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts. It uses the same Bander authority engine and Card rendering as the real product.";
 const localSandboxNotice = "Deterministic sandbox — uses seeded data through a local Bander demo service. It does not connect to Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts.";
 const uncertaintySandboxPreface = "The Calendar provider’s response will be deliberately lost after approval, so Bander must report only what it can prove.";
+const realServicesEvidenceUrl = "https://github.com/gowtham0992/bander#real-services-and-evidence";
+
+function RealServicesLink() {
+  return <a className="real-services-link" href={realServicesEvidenceUrl} target="_blank" rel="noreferrer">See how this works with real services →</a>;
+}
 
 function SandboxNotice({ browserOnly }: { browserOnly: boolean }) {
   return <p className="sandbox-notice">{browserOnly ? browserSandboxNotice : localSandboxNotice}</p>;
@@ -154,6 +159,7 @@ function ScheduleReadView({ result, onBack }: { result: ScheduleReadResult; onBa
       )}
       <p className="zero-authority-note">No Bander Card appeared. Nothing was approved or changed.</p>
       <button className="secondary" onClick={onBack}>Back to the sandbox</button>
+      <RealServicesLink />
     </main>
   );
 }
@@ -171,6 +177,7 @@ function InboxReadView({ messages, onBack }: { messages: DemoSandboxState["inbox
       ))}
       <p className="zero-authority-note">No Bander Card appeared. Nothing was approved or sent.</p>
       <button className="secondary" onClick={onBack}>Back to the sandbox</button>
+      <RealServicesLink />
     </main>
   );
 }
@@ -200,7 +207,7 @@ function CompoundResult({ screen, onReplay, onBack }: { screen: Extract<Screen, 
             : "The exact approved action completed.";
   return (
     <main className="compound-result" aria-live="polite">
-      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>{outcome}</p>{screen.receipt.familyNotification && <p>Gil’s phone received the exact text shown on the Card.</p>}<button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
+      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>{outcome}</p>{screen.receipt.familyNotification && <p>Gil’s phone received the exact text shown on the Card.</p>}<button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button><RealServicesLink /></section>
       {screen.receipt.emailReply ? (
         <aside className="sandbox-phone" aria-label="Seeded Sent mail"><span>Sent mail — sandbox</span>{screen.state.sentEmails.map((email) => <article key={`${email.sentAt}-${email.subject}`}><strong>To {email.recipient}</strong><pre>{email.body}</pre></article>)}</aside>
       ) : <FamilyPhone state={screen.state} />}
@@ -213,7 +220,7 @@ function AmbiguousOutcome({ screen, onReplay, onBack }: { screen: Extract<Screen
   const hasFamily = screen.card.effectPreviews.some((effect) => effect.kind === "family.telegram_notification");
   return (
     <main className="compound-result" aria-live="polite">
-      <section className="result-shell uncertain-result"><span className="deal-kicker">Deliberately simulated lost response</span><h1>{emailOnly ? "Email result unknown." : "Calendar result unknown."}</h1><p className="preserve-lines">{screen.message}</p><p>The sandbox deliberately makes the external result unknowable.</p><button className="secondary" onClick={onReplay}>Replay safely</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
+      <section className="result-shell uncertain-result"><span className="deal-kicker">Deliberately simulated lost response</span><h1>{emailOnly ? "Email result unknown." : "Calendar result unknown."}</h1><p className="preserve-lines">{screen.message}</p><p>The sandbox deliberately makes the external result unknowable.</p><button className="secondary" onClick={onReplay}>Replay safely</button><button className="quiet" onClick={onBack}>Back to the sandbox</button><RealServicesLink /></section>
       {emailOnly ? (
         <aside className="sandbox-phone" aria-label="Seeded Sent mail"><span>Sent mail — sandbox</span>{screen.state.sentEmails.length === 0 ? <p>No confirmed reply appears.</p> : screen.state.sentEmails.map((email) => <article key={`${email.sentAt}-${email.subject}`}><strong>To {email.recipient}</strong><pre>{email.body}</pre></article>)}</aside>
       ) : hasFamily ? <FamilyPhone state={screen.state} /> : null}
@@ -498,6 +505,7 @@ function GuidedEpisode() {
         <aside className="evidence-strip">
           <strong>The real Bander has done this with real services.</strong>
           <span>A real OpenClaw conversation, Google Calendar, Gmail, and a separate Telegram phone—while OpenClaw held none of those credentials.</span>
+          <RealServicesLink />
         </aside>
       )}
     </section>
@@ -539,6 +547,7 @@ function Welcome({
         </button>
       </section>
       <GuidedEpisode />
+      <p className="episode-router">Bander can also stop when the world changed—or admit when a result cannot be confirmed. Explore those cases below.</p>
       <section className="more-behaviors">
         <h2>More things Bander gets right</h2>
         <div className="behavior-grid">
@@ -581,7 +590,7 @@ function Welcome({
         <strong>Set it up for someone you love.</strong>
         <p>The code, complete setup guide, architecture, evidence ledger, honest limitations, and MIT license are public.</p>
         <nav className="project-links" aria-label="Project resources">
-          <a href="https://github.com/gowtham0992/bander" target="_blank" rel="noreferrer">Repository</a>
+          <a className="repository-link" href="https://github.com/gowtham0992/bander" target="_blank" rel="noreferrer">Repository</a>
           <a href="https://github.com/gowtham0992/bander/blob/main/SETUP.md" target="_blank" rel="noreferrer">Setup guide</a>
           <a href="https://github.com/gowtham0992/bander/blob/main/docs/architecture.md" target="_blank" rel="noreferrer">Architecture</a>
           <a href="https://github.com/gowtham0992/bander/blob/main/BUILD_WITH_CODEX.md" target="_blank" rel="noreferrer">Evidence</a>

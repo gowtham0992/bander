@@ -82,7 +82,18 @@ describe("unified Bander doctor", () => {
   });
 
   it("doctor_distinguishes_optional_family_contact", async () => {
-    const report = await collectDoctorReport({ cwd: process.cwd(), environment: {}, live: false });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bander-doctor-no-family-"));
+    const statePath = path.join(root, "state.json");
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({ version: 1, proposals: [], standingCandidates: [], standingOutcomes: [], familyNotifications: [] }),
+      { mode: 0o600 },
+    );
+    const report = await collectDoctorReport({
+      cwd: process.cwd(),
+      environment: { BANDER_TELEGRAM_STATE_PATH: statePath },
+      live: false,
+    });
     const family = report.checks.find((check) => check.check === "Family contact");
     expect(family?.status).toBe("WARN");
     expect(family?.meaning).toContain("Calendar-only use remains available");

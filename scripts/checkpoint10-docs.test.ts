@@ -6,9 +6,9 @@ const read = (file: string) => fs.readFileSync(file, "utf8");
 describe("Checkpoint 10 evaluator and owner surface", () => {
   it("documents the no-account judge paths and measured timing honestly", () => {
     const source = read("README.md");
-    expect(source).toContain("Judges: two commands, no accounts");
+    expect(source).toContain("Judge quickstart");
     expect(source).toContain("27 deterministic outcomes");
-    expect(source).toContain("observed range: 13–13 seconds");
+    expect(source).toContain("both measured warm-cache runs completed in 13 seconds");
     expect(source).toContain("No shared judge account is provided");
     expect(source).toContain("90-second hosted experience");
     expect(source).toContain("Clone + deterministic verification");

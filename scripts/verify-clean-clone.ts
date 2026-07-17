@@ -83,7 +83,14 @@ function assertNoPrivateArtifacts(cwd: string): void {
     }
   }
   const files = trackedAndProposedFiles(cwd);
-  if (files.some((file) => /\.(?:png|jpe?g|webp)$/i.test(file) && file !== "production/bander-og.png")) {
+  const approvedImages = new Set([
+    "production/bander-og.png",
+    "docs/assets/screenshots/bander-social-preview.png",
+    "docs/assets/screenshots/real-compound-family.png",
+    "docs/assets/screenshots/real-changed-world.png",
+    "docs/assets/screenshots/real-read-two-identities.png",
+  ]);
+  if (files.some((file) => /\.(?:png|jpe?g|webp)$/i.test(file) && !approvedImages.has(file))) {
     throw new Error("The isolated clone contains a personal or generated screenshot");
   }
   if (!fs.existsSync(path.join(cwd, "LICENSE"))) {
@@ -260,7 +267,7 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
       throw new Error("The no-account doctor was not actionable");
     }
     const setup = run("npm", ["run", "setup"], { cwd: clone, env: environment });
-    if (!setup.stdout.toLocaleLowerCase("en-US").includes("edit it locally") || !fs.existsSync(path.join(clone, ".env")) || !fs.existsSync(path.join(clone, ".bander", "setup-state.json"))) {
+    if (!setup.stdout.toLocaleLowerCase("en-US").includes("edit .env locally") || !fs.existsSync(path.join(clone, ".env")) || !fs.existsSync(path.join(clone, ".bander", "setup-state.json"))) {
       throw new Error("The repository-local setup guide did not create a private resumable starting point");
     }
     run("npx", ["vitest", "run", "scripts/setup-and-recovery.test.ts"], { cwd: clone, env: environment });
@@ -277,7 +284,7 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
     process.stdout.write(
       [
         "Clean-clone acceptance: PASS",
-        "- no credentials, generated state, transcripts, or screenshots",
+        "- no credentials, generated state, transcripts, or unapproved/private screenshots",
         "- npm ci, typecheck, production build, and credential-free Pages build passed",
         `- npm ci completed in ${installSeconds}s; total clean-clone proof completed in ${Math.ceil((Date.now() - startedAt) / 1000)}s`,
         "- no-account doctor reported actionable real-setup gaps",

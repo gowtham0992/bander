@@ -29,13 +29,17 @@ function pagesImportBoundary(): Plugin {
 }
 
 function approvedBrandAssets(): Plugin {
-  const assets = ["bander_mark_transparent.svg", "bander_favicon_1783950200580.svg", "bander-og.png"];
+  const assets = [
+    { fileName: "bander_mark_transparent.svg", sourcePath: path.resolve("../../production/bander_mark_transparent.svg") },
+    { fileName: "bander_favicon_1783950200580.svg", sourcePath: path.resolve("../../production/bander_favicon_1783950200580.svg") },
+    { fileName: "bander-og.png", sourcePath: path.resolve("../../docs/assets/screenshots/bander-social-preview.png") },
+  ];
   return {
     name: "bander-approved-brand-assets",
     buildStart() {
-      for (const fileName of assets) {
-        const source = fs.readFileSync(path.resolve("../../production", fileName));
-        this.emitFile({ type: "asset", fileName, source });
+      for (const asset of assets) {
+        const source = fs.readFileSync(asset.sourcePath);
+        this.emitFile({ type: "asset", fileName: asset.fileName, source });
       }
     },
   };

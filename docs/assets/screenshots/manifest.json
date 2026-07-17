@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "label": "REAL INTEGRATION · FICTIONAL TEST DATA",
+  "manualPrivacyReview": true,
+  "metadataClean": true,
+  "reviewedOn": "2026-07-17",
+  "review": "Manually checked the four fictional Telegram sources and final crops for personal names or photos, phone numbers, email addresses, handles, numeric identifiers, invite or pairing links, callback data, real Calendar or email content, unrelated conversations, account-switching UI, and secret configuration. Automated checks are supplementary, not the privacy claim.",
+  "assets": [
+    {
+      "file": "real-compound-family.png",
+      "caption": "One Card. The exact Calendar change and the exact sentence Gil will receive. A separate phone receives precisely that sentence.",
+      "sources": ["real owner Telegram capture", "real family-contact Telegram capture"]
+    },
+    {
+      "file": "real-changed-world.png",
+      "caption": "Approval binds a state of the world, not merely an intention.",
+      "sources": ["real owner Telegram capture"]
+    },
+    {
+      "file": "real-read-two-identities.png",
+      "caption": "Reading flows freely. Bander speaks when something real is about to change.",
+      "sources": ["real protected-group Telegram capture"]
+    },
+    {
+      "file": "bander-social-preview.png",
+      "caption": "She read the exact sentence. She tapped once. Her son’s phone told the truth.",
+      "sources": ["curated compound-family evidence"]
+    }
+  ]
+}

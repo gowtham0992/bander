@@ -218,6 +218,11 @@ header {
 .evidence-strip { margin-top: 18px; display: flex; gap: 18px; align-items: center; padding: 18px 20px; border-radius: 14px; background: #143f3c; color: #f8f4eb; }
 .evidence-strip strong { flex: 0 0 260px; }
 .evidence-strip span { color: #cbdcd8; line-height: 1.5; }
+.evidence-strip .real-services-link { flex: 0 0 auto; margin: 0; color: #fff; border-color: #6da6a0; }
+.episode-router { max-width: 760px; margin: 22px auto 0; color: #536965; line-height: 1.55; text-align: center; }
+.real-services-link { display: inline-flex; min-height: 44px; align-items: center; margin-top: 16px; padding: 0 2px; border-bottom: 1px solid #84a8a4; color: #176d66; font-size: 14px; font-weight: 800; text-decoration: none; }
+.real-services-link:hover { color: #0e4f4a; border-color: #0e4f4a; }
+.real-services-link:focus-visible { outline: 3px solid #ef695d; outline-offset: 4px; }
 .identity-rule { margin: 92px 0 0; padding: 48px; border-radius: 24px; background: #e7eeea; }
 .identity-rule > div:first-child { max-width: 760px; }
 .identity-rule p { color: #536965; font-size: 18px; line-height: 1.6; }
@@ -236,6 +241,8 @@ header {
 .project-links a { display: inline-flex; min-height: 44px; align-items: center; padding: 0 14px; border: 1px solid #b8cbc7; border-radius: 999px; color: #165d57; font-size: 14px; font-weight: 800; text-decoration: none; transition: background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out; }
 .project-links a:hover { border-color: #178d82; background: #eef8f6; color: #0d4c47; }
 .project-links a:focus-visible { outline: 3px solid #ef695d; outline-offset: 3px; }
+.project-links .repository-link { border-color: #123f3c; background: #123f3c; color: #fffdf8; box-shadow: 0 8px 20px rgba(18, 63, 60, .15); }
+.project-links .repository-link:hover { border-color: #0e6964; background: #0e6964; color: #fff; }
 
 @media (max-width: 640px) {
   .app-frame { padding: 19px 16px 34px; }
@@ -252,6 +259,9 @@ header {
   .lane-card span { margin-bottom: 18px; }
   .uncertainty-preface { display: block; margin: 14px 16px 0; font-size: 13px; }
   .uncertainty-preface strong { display: block; margin-bottom: 3px; }
+  .evidence-strip { align-items: flex-start; flex-direction: column; }
+  .evidence-strip strong { flex-basis: auto; }
+  .episode-router { text-align: left; }
   .sandbox-notice { text-align: left; }
   .compiler-entry > div { flex-direction: column; }
   .deal-shell { margin-top: 5vh; }

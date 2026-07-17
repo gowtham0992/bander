@@ -37,6 +37,15 @@ async function evaluate<T>(expression: string): Promise<T> {
   return result.result.value;
 }
 
+async function waitFor(expression: string, timeoutMs = 2_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (await evaluate<boolean>(expression)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  } while (Date.now() < deadline);
+  return false;
+}
+
 async function key(key: string, code: string, keyCode: number): Promise<void> {
   const text = key === "Enter" ? "\r" : key === " " ? " " : undefined;
   await command("Input.dispatchKeyEvent", { type: "keyDown", key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode, ...(text ? { text, unmodifiedText: text } : {}) });
@@ -65,6 +74,13 @@ try {
   for (const phrase of ["JUST ASK", "APPROVE A CHANGE", "WHEN BANDER ISN’T SURE"]) {
     if (!buttons.some((node) => node.name?.value?.includes(phrase))) throw new Error(`The Pages accessibility tree is missing the ${phrase} lane name`);
   }
+  if (!(await evaluate<boolean>(`document.body.textContent.includes("Bander can also stop when the world changed—or admit when a result cannot be confirmed. Explore those cases below.")`))) {
+    throw new Error("The Pages episode does not route evaluators to the changed-world and uncertain cases");
+  }
+  const repositoryStyle = await evaluate<{ background: string; foreground: string }>(`(()=>{const link=document.querySelector(".project-links .repository-link");const style=link?getComputedStyle(link):null;return{background:style?.backgroundColor??"",foreground:style?.color??""}})()`);
+  if (!repositoryStyle.background || repositoryStyle.background === "rgba(0, 0, 0, 0)" || repositoryStyle.background === repositoryStyle.foreground) {
+    throw new Error("The repository is not the visually primary footer destination");
+  }
 
   const origin = new URL(target.url).origin;
   const externalRequests = requests.filter((url) => new URL(url).origin !== origin);
@@ -75,14 +91,12 @@ try {
   const focusedRead = await evaluate<{ text: string; outline: string }>(`({text:document.activeElement?.textContent?.replace(/\\s+/g," ").trim()??"",outline:getComputedStyle(document.activeElement).outlineStyle})`);
   if (!focusedRead.text.includes("JUST ASK") || focusedRead.outline === "none") throw new Error("The first lane is not visibly keyboard focusable");
   await key("Enter", "Enter", 13);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  if (!(await evaluate<boolean>(`document.body.textContent.includes("Here’s tomorrow.")`))) throw new Error("Enter did not activate the native read-lane button");
+  if (!(await waitFor(`document.body.textContent.includes("Here’s tomorrow.")`))) throw new Error("Enter did not activate the native read-lane button");
 
   await reload();
   for (let index = 0; index < 4; index += 1) await key("Tab", "Tab", 9);
   await key(" ", "Space", 32);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  if (!(await evaluate<boolean>(`document.body.textContent.includes("Sandbox scenario")`))) throw new Error("Space did not activate the native uncertainty-lane button");
+  if (!(await waitFor(`document.body.textContent.includes("Sandbox scenario")`))) throw new Error("Space did not activate the native uncertainty-lane button");
 
   await command("Page.navigate", { url: `${origin}/bander/?scenario=compound` });
   await new Promise((resolve) => setTimeout(resolve, 120));
@@ -97,7 +111,7 @@ try {
   await command("Page.navigate", { url: `${origin}/bander/` });
   await new Promise((resolve) => setTimeout(resolve, 120));
 
-  for (const [width, height] of [[1280, 720], [375, 812], [500, 900]] as const) {
+  for (const [width, height] of [[1440, 900], [1280, 720], [500, 900], [375, 812]] as const) {
     await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 });
     await reload();
     const metrics = await evaluate<{ width: number; scrollWidth: number; minTarget: number; nested: number }>(`(()=>{const buttons=[...document.querySelectorAll("button")];return{width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,minTarget:Math.min(...buttons.map(button=>Math.min(button.getBoundingClientRect().width,button.getBoundingClientRect().height))),nested:document.querySelectorAll("button button, button a, a button, a a").length}})()`);
@@ -108,7 +122,7 @@ try {
     fs.writeFileSync(`/private/tmp/bander-pages-${width}x${height}.png`, Buffer.from(screenshot.data, "base64"), { mode: 0o600 });
   }
 
-  console.log(`Pages browser QA verified: ${buttons.length} named buttons, one main heading, keyboard Enter/Space, deep-link single-flight approval, zero external requests, and 1280×720 / 375×812 / 500×900 layouts.`);
+  console.log(`Pages browser QA verified: ${buttons.length} named buttons, one main heading, keyboard Enter/Space, deep-link single-flight approval, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.`);
 } finally {
   socket.close();
 }
