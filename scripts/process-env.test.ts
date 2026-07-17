@@ -11,6 +11,9 @@ describe("canonical process credential projection", () => {
         ANTHROPIC_API_KEY: "unrelated-provider-key",
         GOOGLE_OAUTH_CLIENT_PATH: ".bander/google-client.json",
         GOOGLE_OAUTH_TOKEN_PATH: ".bander/google-token.json",
+        GMAIL_OAUTH_CLIENT_PATH: ".bander/gmail-client.json",
+        GMAIL_OAUTH_TOKEN_PATH: ".bander/gmail-token.json",
+        BANDER_GMAIL_LIVE_EVIDENCE_DROP_RESPONSE: "1",
         BANDER_CALENDAR_TIME_ZONE: "America/Denver",
         BANDER_TELEGRAM_BOT_TOKEN: "bander-only-token",
         OPENCLAW_TELEGRAM_BOT_TOKEN: "openclaw-only-token",
@@ -30,6 +33,10 @@ describe("canonical process credential projection", () => {
     expect(environments.broker.GOOGLE_OAUTH_TOKEN_PATH).toMatch(
       /\.bander\/google-token\.json$/,
     );
+    expect(environments.broker.GMAIL_OAUTH_TOKEN_PATH).toMatch(
+      /\.bander\/gmail-token\.json$/,
+    );
+    expect(environments.broker.BANDER_GMAIL_LIVE_EVIDENCE_DROP_RESPONSE).toBe("1");
     expect(environments.broker.BANDER_FAMILY_PAIRING_PATH).toMatch(
       /\.bander\/real\/telegram-service\/family-contact-link\.txt$/,
     );
@@ -37,6 +44,8 @@ describe("canonical process credential projection", () => {
     expect(environments.broker).not.toHaveProperty("MOCK_SERVICE_URL");
     expect(environments.openclaw).not.toHaveProperty("GOOGLE_OAUTH_CLIENT_PATH");
     expect(environments.openclaw).not.toHaveProperty("GOOGLE_OAUTH_TOKEN_PATH");
+    expect(environments.openclaw).not.toHaveProperty("GMAIL_OAUTH_TOKEN_PATH");
+    expect(environments.openclaw).not.toHaveProperty("BANDER_GMAIL_LIVE_EVIDENCE_DROP_RESPONSE");
     expect(environments.openclaw).not.toHaveProperty(
       "BANDER_TELEGRAM_BOT_TOKEN",
     );

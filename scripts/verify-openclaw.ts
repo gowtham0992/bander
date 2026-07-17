@@ -113,7 +113,7 @@ try {
     JSON.stringify(realConfiguredTools) !==
     JSON.stringify([...BANDER_REAL_OPENCLAW_TOOLS].sort())
   ) {
-    throw new Error("The real OpenClaw profile does not expose exactly four Bander tools");
+    throw new Error("The real OpenClaw profile does not expose exactly five Bander tools");
   }
   await provider.app.listen({ host: "127.0.0.1", port: 4313 });
   children.push(

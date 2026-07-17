@@ -12,7 +12,7 @@ OpenClaw helps. Bander holds the keys and independently confirms what happened.
 
 ## What Bander is
 
-Bander is a confidence layer for personal AI agents. OpenClaw can understand a natural request and ask Bander to prepare an action. Bander independently resolves the real Calendar action, shows the person the exact event details, and acts only if that person approves that exact deal.
+Bander is a confidence layer for personal AI agents. OpenClaw can understand a natural request and ask Bander to prepare an action. Bander independently resolves the real Calendar or communication action, shows the person the exact details, and acts only if that person approves that exact deal.
 
 The claim is intentionally narrow: Bander does not decide whether an agent's goal is wise. For effects routed through Bander, it ensures nothing happens beyond the specific deal the person saw and approved.
 
@@ -30,6 +30,7 @@ The real product path currently provides:
 
 - ordinary OpenClaw conversation without invoking Bander for greetings or unrelated chat;
 - bounded read-only answers about the connected primary Calendar, including timed, all-day, and recurring occurrences, without an approval Card;
+- bounded read-only answers about one clearly identified message in the connected Gmail inbox, with sanitized email content intentionally entering the model trajectory;
 - natural-language rescheduling of Google Calendar events on the connected primary calendar;
 - natural-language creation of one timed Google Calendar event with a disclosed 60-minute default or an explicit duration from 15 minutes through 12 hours;
 - natural-language cancellation of one narrowly eligible Google Calendar event under its approved ETag;
@@ -40,6 +41,8 @@ The real product path currently provides:
 - a stable cryptographically random client event ID committed inside each approved create action, with no blind insert retry after dispatch;
 - one immutable compound deal that can bind an exact Calendar create, reschedule, or cancellation and exact paired-family update before approval;
 - Calendar-first execution and replay-safe family delivery through Bander's own Telegram identity;
+- exact plain-text replies to one resolved inbound Gmail thread, pinned before approval with byte-stable MIME, a stable Message-ID, and an opaque Bander reconciliation header;
+- exact independent plain-text messages to the one consented family contact, with the Card text delivered unchanged;
 - Google ETag preconditions and a changed-world refusal with no retry against a changed plan; and
 - a separate, truthful Bander outcome after Google reports the authoritative state.
 
@@ -47,18 +50,19 @@ The real product path currently provides:
 
 An assistant is good at interpreting open-ended language. It should not also hold the downstream credential, describe the permission surface, approve itself, execute, and narrate its own success. Bander separates those jobs.
 
-OpenClaw receives a small exact inventory of four bounded Bander tools. Read-only schedule facts intentionally enter its model trajectory so it can answer the parent. The Google OAuth credential, Calendar identifiers and ETags, deterministic action construction, human approval surface, conditional write, and Bander outcome stay inside Bander.
+OpenClaw receives a small exact inventory of five bounded Bander tools. Read-only schedule and bounded email facts intentionally enter its model trajectory so it can answer the parent. Google credentials, writable identifiers and preconditions, family routing, deterministic action construction, human approval surfaces, writes, and Bander outcomes stay inside Bander.
 
 ## How OpenClaw and Bander work together
 
 ```mermaid
 flowchart LR
     P["Parent in Telegram"] --> O["OpenClaw reasoning<br/>protected profile"]
-    O -->|"exactly 4 bounded Bander tools"| B["Bander"]
+    O -->|"exactly 5 bounded Bander tools"| B["Bander"]
     B -->|"minimal MCP status only"| O
     B -->|"Card + owner approval"| T["Bander Telegram identity"]
     T --> P
     B -->|"OAuth credential stays here<br/>conditional event update"| G["Google Calendar"]
+    B -->|"separate OAuth credential<br/>bounded read + exact reply"| M["Gmail"]
     G -->|"authoritative event + ETag"| B
     B -->|"exact approved update<br/>bound private route"| F["Paired family contact"]
     B -->|"independent outcome"| T
@@ -72,7 +76,7 @@ Choose the path that matches what you want to verify:
 
 | Path | What it uses | Command |
 | --- | --- | --- |
-| **Real product** | Live conversational OpenClaw, live `gpt-5.6-sol`, real Google Calendar, real Telegram | `npm run real` after the one-time setup below |
+| **Real product** | Live conversational OpenClaw, live `gpt-5.6-sol`, real Google Calendar, bounded Gmail, real Telegram | `npm run real` after the one-time setup below |
 | **Hero sandbox** | Deterministic provider, seeded mock Calendar and Messages services, real Telegram | `npm run hero` |
 | **Local judge sandbox** | Deterministic browser demo with schedule read, add/move/remove deals, compound family updates, ambiguous outcomes, and seeded mock services | `npm run demo` |
 
@@ -92,7 +96,7 @@ npm run doctor -- --live
 npm run real
 ```
 
-The detailed reference below records the current Build Week configuration. `npm run doctor` is read-only and works before `.env` exists; expected setup gaps are actionable `FAIL` rows, not crashes. `npm run doctor -- --live` adds read-only Telegram, primary-Calendar timezone, and exact four-tool probes. It never verifies BotFather privacy by inference—use the empirical procedure in [SETUP.md](SETUP.md).
+The detailed reference below records the current Build Week configuration. `npm run doctor` is read-only and works before `.env` exists; expected setup gaps are actionable `FAIL` rows, not crashes. `npm run doctor -- --live` adds read-only Telegram, primary-Calendar timezone, Gmail identity/scope, and exact five-tool probes. It never verifies BotFather privacy by inference—use the empirical procedure in [SETUP.md](SETUP.md).
 
 ### 1. Install the supported runtime
 
@@ -216,7 +220,7 @@ Creation does not require an existing staged event. It supports one timed defaul
 npm run real
 ```
 
-The command validates the real mode, Google adapter, live model provider, paired Telegram installation, exact four-tool inventory, credential separation, and absence of fixture routes before reporting:
+The command validates the real mode, Google Calendar and Gmail adapters, live model provider, paired Telegram installation, exact five-tool inventory, credential separation, and absence of fixture routes before reporting:
 
 ```text
 Bander real product is ready.
@@ -242,7 +246,7 @@ For a fully local, no-Telegram judge path:
 npm run demo
 ```
 
-Open `http://127.0.0.1:4310`. Every page is labelled as seeded and not live. The three leading journeys demonstrate a free schedule read with zero authority, one Calendar-plus-family deal whose Card text exactly matches Gil’s simulated phone, and an unknowable Calendar result that sends no family update. Seeded add and remove journeys—including decline, replay, exact family text, and changed-world cancellation—sit under **More verified behaviors** beside recovery and narrow standing limits. `npm run verify:demo` independently reports all 18 outcomes.
+Open `http://127.0.0.1:4310`. Every page is labelled as seeded and not live. The journeys demonstrate frictionless schedule and email reads, exact Calendar/email/family deals, and truthful uncertain outcomes. Seeded decline, replay, changed-world, recovery, and narrow standing proofs remain under **More verified behaviors**. `npm run verify:demo` independently reports all 27 outcomes.
 
 ## Verification and attack suite
 
@@ -259,6 +263,7 @@ npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
 npm run verify:read-sol
+npm run verify:gmail-sol
 npm run verify:create-sol
 npm run verify:cancel-sol
 npm audit
@@ -283,11 +288,11 @@ npm run verify:cancel-live -- --title='Fictional title' --date=2026-07-23
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-The fresh Checkpoint 7C matrix passes **409 runtime functional cases**, **22 adversarial tests**, and all **18 deterministic demo outcomes**. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+Fresh Checkpoint 8 totals are recorded after the combined final matrix. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 
-> In the Bander-protected OpenClaw profile, the model can converse, read a bounded schedule DTO, and propose through four bounded Bander tools. It does not receive the connected Google credential, cannot approve its own proposal, and cannot author Bander’s Card or outcome. Bander does not protect a host already compromised at the operating-system/user-account level.
+> In the Bander-protected OpenClaw profile, the model can converse, read bounded schedule and inbox DTOs, and propose through five bounded Bander tools. It does not receive Google credentials or family routing, cannot approve its own proposal, and cannot author Bander’s Card or outcome. Bander does not protect a host already compromised at the operating-system/user-account level.
 
 The strong route claim applies only inside the dedicated protected OpenClaw profile and only to effects routed through Bander. It does not restrict a user's other OpenClaw agents, tools, credentials, or applications.
 
@@ -295,8 +300,10 @@ Current limitations are material:
 
 - the real action path only creates one narrow timed default event or reschedules or cancels the narrow eligible Google Calendar event shape described above; it does not provide full Calendar management;
 - schedule reads are limited to the connected primary Calendar, one explicit range of at most 31 days, and at most 50 sanitized events; locations, descriptions, conference links, attachments, attendees, identifiers, and ETags are omitted;
+- Gmail reads require one bounded sender/subject/date search, exclude spam and trash, and disclose sanitized sender, subject, date, and a bounded plain-text excerpt to OpenClaw by design;
+- Gmail rewrites caller-supplied RFC Message-IDs in the observed Sent copy. Bander therefore keeps the approved Message-ID inside the immutable MIME but reconciles an ambiguous send only by one exact opaque Bander header plus recipient, thread, subject, and body in a bounded recent Sent scan; it never sends again automatically;
 - Calendar titles are untrusted text. Bander strips control and bidirectional-control characters and the OpenClaw prompt treats titles only as quoted data, but this reduces rather than eliminates model prompt-injection risk;
-- it can send only the exact deterministic Telegram family update displayed on an approved compound Card; it cannot send arbitrary messages or email, make reservations or purchases, control transportation, perform medical actions, or control locks or smart-home devices;
+- it can send one exact approved plain-text reply to one resolved inbound Gmail thread and one exact approved Telegram message to the single consented family contact; it cannot start arbitrary outbound email threads, reply-all, forward, attach files, add recipients, make reservations or purchases, control transportation, perform medical actions, or control locks or smart-home devices;
 - the current repository does not provide a production installer for an arbitrary existing OpenClaw configuration;
 - real authority state is in memory and is not restart-durable; Telegram installation/callback delivery state is file-backed, while the deterministic sandbox contains the broader recovery demonstrations;
 - Bander's local MCP endpoint is unauthenticated and loopback-only; it must not be exposed to a LAN or the public internet; and
@@ -306,7 +313,7 @@ Current limitations are material:
 
 Codex was the primary builder and verification partner throughout Build Week. It helped turn the product claim into executable invariants, wrote red-first regressions for authority and recovery gaps, integrated the real OpenClaw/Telegram/Google path, ran the attack and privacy suites, and maintained [BUILD_WITH_CODEX.md](BUILD_WITH_CODEX.md) as an evidence ledger of decisions and observed failures.
 
-In the real product, `gpt-5.6-sol` plays three deliberately bounded roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander makes separate strict Responses API calls for action intent and read-range intent. The read compiler may select only a start local date, exclusive end local date, and a short clarification. The action compiler may select only the bounded action kind, title/date/time hints needed by that kind, an optional create duration, whether a family update was requested, and the human alias used. It cannot choose a recipient address, message body, Calendar ID, event ID, ETag, credential, timezone, final end time, effects, authority, or execution parameters. Deterministic Bander code resolves an authoritative existing event or generates one stable opaque create identity, resolves the exact active contact pairing, constructs the effects, and fails closed on malformed, missing, ambiguous, or broadened output.
+In the real product, `gpt-5.6-sol` has bounded conversational, Calendar, Gmail-read, and action-routing roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander uses strict Structured Outputs to extract only the minimum Calendar, inbox-search, reply-body, or family-message hints from the parent’s newest request. It cannot choose Gmail or Calendar identities, recipient addresses, Telegram routing, MIME headers, credentials, effects, authority, or execution parameters. The exact email reply or independent family text is stored, hashed, shown, and later reproduced unchanged; Calendar-bound family updates remain deterministic renderings of authoritative Calendar state.
 
 ## Roadmap
 

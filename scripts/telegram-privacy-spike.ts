@@ -343,7 +343,7 @@ function receiptText(receipt: HumanReceipt, receiptCanary: string): string {
     `Done · ${receiptCanary}`,
     receipt.summary,
     receipt.detail,
-    `Calendar: ${receipt.calendar.title}`,
+    `Calendar: ${receipt.calendar!.title}`,
     ...(receipt.message
       ? [
           `Message to ${receipt.message.recipientDisplayName}: “${receipt.message.body}”`,
@@ -566,7 +566,7 @@ try {
   gateway.stderr?.pipe(gatewayLog);
   await new Promise((resolve) => setTimeout(resolve, 5_000));
   assert.equal(gateway.exitCode, null, "OpenClaw gateway exited during startup");
-  console.log("PASS OpenClaw gateway: real Telegram channel running with three tools");
+  console.log("PASS OpenClaw gateway: Telegram privacy sandbox running with its historical three-tool profile");
 
   await banderTelegram.sendMessage(
     identities.chatId,

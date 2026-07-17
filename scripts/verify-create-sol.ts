@@ -103,7 +103,7 @@ async function main() {
         timeZone,
       );
       const fixture = await compiler.compile(testCase.request);
-      if (fixture.calendar.kind !== "create") throw new Error("not_create_fixture");
+      if (fixture.calendar?.kind !== "create") throw new Error("not_create_fixture");
       if (!/^[0-9a-v]{5,1024}$/.test(fixture.calendar.eventId)) {
         throw new Error("invalid_client_event_id");
       }

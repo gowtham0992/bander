@@ -32,6 +32,7 @@
     "allow": [
       "bander__list_capabilities",
       "bander__read_schedule",
+      "bander__read_inbox",
       "bander__propose_action",
       "bander__get_receipt"
     ]
@@ -48,6 +49,7 @@
           "include": [
             "list_capabilities",
             "read_schedule",
+            "read_inbox",
             "propose_action",
             "get_receipt"
           ]

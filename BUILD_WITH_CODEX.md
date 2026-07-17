@@ -1821,6 +1821,103 @@ secret scan with zero matches. Transcript hashes remain
 `3c30cae54d4efba1a7a6aa025199d68435dab348`. The family contact is revoked.
 `/feedback` remains deferred.
 
+## 2026-07-16 — Checkpoint 8: Family Coordination Concierge
+
+Checkpoint 8 expands the canonical real product from four to exactly five MCP
+tools by adding `bander__read_inbox`. Gmail uses a separate ignored OAuth token
+with exactly `gmail.readonly` and `gmail.send`; the Calendar token remains
+unchanged. The real OpenClaw process receives neither Google credential path.
+The bounded read lane accepts only the newest natural request, lets Sol extract
+sender, subject, date range and explicit-latest intent, and returns a separate
+sanitized DTO without Gmail message/thread IDs, raw headers, attachments or
+hidden HTML. Email facts intentionally enter the model trajectory for answering
+the parent; this is documented as exposure reduction, not prompt-injection
+detection. Reads create no Card, authority or mutation.
+
+One exact Gmail reply and one independent family message remain behind the
+existing `bander__propose_action` tool. An email reply pins the resolved source
+and latest thread identities, one Reply-To/From recipient, subject and threading
+headers, exact bounded plain text, stable Message-ID, opaque reconciliation
+header, canonical MIME bytes and digest before approval. Execution rereads the
+thread and refuses if a newer message exists. Direct family text is derived from
+the parent's request, sanitized, bound to the exact active contact revision,
+shown on the Card, hashed and delivered unchanged. The model cannot choose an
+email address, Telegram destination, MIME/header value, approval or authority.
+
+The initial focused runs were meaningfully red: Gmail read/reply modules and the
+direct-family document did not exist, the real product had no fifth tool, and
+the sandbox had no inbox/reply/direct-family journeys. Four deliberate mutations
+were then observed failing and restored: choosing an arbitrary Gmail match
+returned two private records; retrying an ambiguous Gmail send made two send
+attempts; skipping the latest-thread check sent against stale context; and
+changing the family renderer broke Card/delivery byte equality. The attack suite
+keeps the arbitrary-selection, header/recipient injection, ambiguous no-retry,
+and family link/command/bidirectional-text cases.
+
+Live evidence exposed and closed four additional defects. First, OAuth consent
+succeeded but the Gmail API returned `accessNotConfigured`; enabling the API in
+the same Cloud project made the sanitized read-only probe find exactly one
+fictional message. Second, the action router had no injected current date, so
+Sol resolved “today” to March 24 instead of July 16 and a known email could not
+be found. The router now receives the explicit `America/Denver` local date from
+an injected clock; the live diagnostic then returned July 16–17 and the Card was
+created. Third, the real supervisor still asserted the pre-Gmail status shape;
+startup failed red until it required the Google Gmail backend, `real_product`
+compiler, inbox-read availability and exact five-tool inventory. Fourth, the
+one-shot response-loss evidence flag was initially isolated from both OpenClaw
+and Bander; it is now projected only into Bander's broker and remains absent
+from OpenClaw.
+
+The first real lost-response spike also disproved a design assumption rather
+than being rationalized away. Gmail accepted exactly one reply and preserved
+its body, but rewrote the caller-supplied RFC Message-ID, so an exact
+`rfc822msgid` search could not reconcile it. Bander correctly reported the
+outcome as unconfirmed and did not resend. The smallest safe correction keeps
+the stable Message-ID inside the immutable MIME but adds an opaque
+`X-Bander-Operation` value derived before approval. Recovery scans at most 25
+recent Sent messages and accepts only one exact header, recipient, thread,
+subject and body match. A fresh live probe deliberately discarded Gmail's
+successful response, found that exact match, returned “Your Sent folder now
+shows the approved reply,” and replayed with zero additional sends. Any zero,
+multiple or unreadable result remains terminally ambiguous.
+
+The genuine Telegram/OpenClaw/Gmail evidence used only fictional subjects. One
+bounded inbox question returned the expected lunch sentence with no Card. One
+normal approval produced one exact Gmail reply; a repeated tap reported already
+done and produced no duplicate. The corrected lost-response approval produced
+one Sent message, observation-safe wording and no replay send. For changed-world
+evidence, a Card was prepared, a newer inbound message was added to the same
+thread, and approval sent zero replies. Its chronology copy was corrected from
+“since you approved” to “since Bander prepared this reply.” No Calendar mutation
+or family delivery occurred during the Gmail evidence. The family contact
+remains revoked; live direct-family delivery remains an explicit pre-film gate,
+while the deterministic exact-text, revocation, ambiguity and replay tests are
+green and prior live Bander-owned transport evidence remains valid.
+
+The browser sandbox now reports 27 outcomes: the previous 18 plus bounded seeded
+inbox read; exact email reply approval, decline and replay; thread-changed and
+ambiguous-email outcomes; and independent family approval, decline and replay.
+Every page remains visibly deterministic and disconnected from Google, Gmail,
+Telegram, OpenAI and real people. Desktop and mobile inspection at 1280×720,
+375×812 and 500×900 found meaningful native button names, logical order,
+visible focus styling, 48-pixel controls, no horizontal overflow and complete
+Card text reachable by scrolling.
+
+Final restored-green evidence: 36 functional files with 437 cases; 3
+adversarial files with 26 cases; all 27 deterministic demo outcomes; one-time
+and standing HTTP recovery; exact five-tool OpenClaw verification; production
+typecheck/build; live Sol compound 18/18, schedule read 7/7, create 8/8,
+cancellation chunks 8/8 and Gmail/direct-family 7/7 with zero false accepts;
+clean-clone installation/build/doctor/demo with credentials stripped; dependency
+audit with zero vulnerabilities; and tracked/proposed secret scan with zero
+matches. The live doctor reported 13 PASS, 4 expected WARN and 0 FAIL, including
+Gmail and exact-tool PASS; the Telegram state checksum was unchanged. BotFather
+privacy remains an honest empirical WARN. Transcript hashes remain
+`7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
+and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
+both files remain ignored and untracked. `/feedback`, parent testing, filming,
+Devpost and submission work remain deferred.
+
 ## 2026-07-16 — Checkpoint 7C: Calendar-complete product integration
 
 Checkpoint 7C did not change the production authority lifecycle, conditional

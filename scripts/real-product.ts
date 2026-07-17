@@ -150,9 +150,11 @@ export async function runRealProduct(): Promise<void> {
       runtimeMode: "real",
       fixtureMode: false,
       calendarBackend: "google",
-      compilerKind: "real_calendar",
+      gmailBackend: "google",
+      compilerKind: "real_product",
       modelCompiler: "available",
       scheduleRead: "available",
+      inboxRead: "available",
       heroMode: false,
     });
     const fixtureResponse = await fetch(`${brokerUrl}/api/demo/proposals`, {
@@ -198,7 +200,7 @@ export async function runRealProduct(): Promise<void> {
       "Another Telegram gateway is already polling the OpenClaw bot",
     );
     console.log("Bander real product is ready.");
-    console.log("Telegram → live OpenClaw → four bounded Bander tools → real Google Calendar");
+    console.log("Telegram → live OpenClaw → five bounded Bander tools → real Google Calendar and Gmail");
     console.log(`OpenClaw gateway log: ${runtime.paths.gatewayLog}`);
 
     await new Promise<void>((resolve, reject) => {

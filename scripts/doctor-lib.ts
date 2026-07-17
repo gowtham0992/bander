@@ -36,6 +36,7 @@ export interface DoctorLiveProbes {
     ownerBindingValid: boolean;
   }>;
   google(): Promise<{ timeZone: string }>;
+  gmail(): Promise<{ reachable: boolean; scopesValid: boolean }>;
   mcp(): Promise<{ tools: string[] }>;
   /** Test-only sentinel. Production code must never call it. */
   forbiddenWrite?: () => void;
@@ -56,6 +57,8 @@ const REQUIRED_REAL_ENVIRONMENT = [
   "OPENCLAW_TELEGRAM_BOT_TOKEN",
   "GOOGLE_OAUTH_CLIENT_PATH",
   "GOOGLE_OAUTH_TOKEN_PATH",
+  "GMAIL_OAUTH_CLIENT_PATH",
+  "GMAIL_OAUTH_TOKEN_PATH",
   "BANDER_CALENDAR_TIME_ZONE",
 ] as const;
 
@@ -179,16 +182,26 @@ function oauthFilesCheck(
   const configured = [
     environment.GOOGLE_OAUTH_CLIENT_PATH?.trim(),
     environment.GOOGLE_OAUTH_TOKEN_PATH?.trim(),
+    environment.GMAIL_OAUTH_CLIENT_PATH?.trim(),
+    environment.GMAIL_OAUTH_TOKEN_PATH?.trim(),
   ];
   if (configured.some((value) => !value)) {
     return check(
       "FAIL",
       "Google OAuth files",
-      "The Desktop OAuth client and token paths are not configured.",
-      "Set GOOGLE_OAUTH_CLIENT_PATH and GOOGLE_OAUTH_TOKEN_PATH in .env; keep both files outside tracked source.",
+      "The Calendar OAuth files and separate Gmail token path are not configured.",
+      "Set the GOOGLE_OAUTH_* and GMAIL_OAUTH_* paths in .env; keep all OAuth files outside tracked source.",
     );
   }
   const absolute = configured.map((value) => path.resolve(cwd, value!));
+  if (absolute[1] === absolute[3]) {
+    return check(
+      "FAIL",
+      "Google OAuth files",
+      "Calendar and Gmail are configured to use the same token file.",
+      "Set GMAIL_OAUTH_TOKEN_PATH to a separate ignored 0600 file, then complete Gmail consent.",
+    );
+  }
   if (absolute.some((filePath) => !fs.existsSync(filePath))) {
     return check(
       "FAIL",
@@ -219,7 +232,7 @@ function oauthFilesCheck(
   return check(
     "PASS",
     "Google OAuth files",
-    "Configured OAuth files exist, are private, and are not tracked.",
+    "Calendar OAuth files and the separate Gmail OAuth token exist, are private, and are not tracked.",
   );
 }
 
@@ -402,6 +415,25 @@ async function createDefaultLiveProbes(
       });
       return { timeZone: await createGoogleCalendarBoundary(client).getPrimaryTimeZone() };
     },
+    async gmail() {
+      const clientPath = path.resolve(cwd, environment.GMAIL_OAUTH_CLIENT_PATH ?? "");
+      const tokenPath = path.resolve(cwd, environment.GMAIL_OAUTH_TOKEN_PATH ?? "");
+      const desktop = parseDesktopOAuthClient(JSON.parse(fs.readFileSync(clientPath, "utf8")));
+      const stored = JSON.parse(fs.readFileSync(tokenPath, "utf8")) as Record<string, unknown>;
+      if (typeof stored.refresh_token !== "string") throw new Error("gmail oauth unavailable");
+      const client = new google.auth.OAuth2({ clientId: desktop.clientId, clientSecret: desktop.clientSecret });
+      client.setCredentials({ refresh_token: stored.refresh_token });
+      const gmail = google.gmail({ version: "v1", auth: client });
+      const profile = await gmail.users.getProfile({ userId: "me" });
+      const access = await client.getAccessToken();
+      if (!access.token) throw new Error("gmail oauth unavailable");
+      const info = await client.getTokenInfo(access.token);
+      const required = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"];
+      return {
+        reachable: Boolean(profile.data.emailAddress),
+        scopesValid: JSON.stringify([...info.scopes].sort()) === JSON.stringify([...required].sort()),
+      };
+    },
     async mcp() {
       const port = validPort(environment.BANDER_PORT, 4310);
       const client = new Client({ name: "bander-doctor", version: "1.0.0" });
@@ -445,11 +477,21 @@ async function liveChecks(
     checks.push(check("FAIL", "Live Google Calendar", "The read-only primary Calendar timezone probe failed.", "Renew Google OAuth if needed, then rerun npm run doctor -- --live."));
   }
   try {
+    const gmail = await probes.gmail();
+    checks.push(
+      gmail.reachable && gmail.scopesValid
+        ? check("PASS", "Live Gmail", "The separately authorized Gmail account is readable and has only the required read/send capability configured.")
+        : check("FAIL", "Live Gmail", "The Gmail identity or required scopes did not validate.", "Rotate the Gmail token and complete Gmail consent again."),
+    );
+  } catch {
+    checks.push(check("FAIL", "Live Gmail", "The read-only Gmail identity/scope probe failed.", "Renew the separate Gmail OAuth token, then rerun npm run doctor -- --live."));
+  }
+  try {
     const actual = (await probes.mcp()).tools.slice().sort();
     const expected = [...BANDER_REAL_OPENCLAW_TOOLS].sort();
     checks.push(
       JSON.stringify(actual) === JSON.stringify(expected)
-        ? check("PASS", "Bander tool inventory", "The running real MCP surface exposes exactly four expected tools.")
+        ? check("PASS", "Bander tool inventory", "The running real MCP surface exposes exactly five expected tools.")
         : check("FAIL", "Bander tool inventory", "The running MCP surface is missing tools or exposes an unexpected tool.", "Start npm run real from this checkout and rerun npm run doctor -- --live."),
     );
   } catch {

@@ -8,8 +8,9 @@ Target: 2:35–2:50, one continuous narrated public video. The film uses the rea
 2. Pair Gil’s phone, keep it outside the protected group, and confirm both phones are ready.
    Before filming, complete the separate combined-family evidence checklist for one fictional create, move, and remove deal. Confirm Card/delivery text equality and replay safety for each; this is a pre-film gate, not an extra video sequence.
 3. Remove “Test” from the group and bot presentation. Keep OpenClaw visually assistant-like and Bander visibly teal/protective.
-4. Stop stale gateways and run only `npm run real`. Confirm real Google, live Sol, Telegram binding, and exactly four Bander tools.
-5. Keep tokens, OAuth files, IDs, private Calendar content, terminals with environment output, and personal notifications off camera.
+4. Stop stale gateways and run only `npm run real`. Confirm real Google Calendar/Gmail, live Sol, Telegram binding, and exactly five Bander tools.
+5. Keep Gmail recovery wording precise: confirmed API success may say the reply was sent; a lost success response may say only that the exact approved reply now appears in Sent.
+6. Keep tokens, OAuth files, IDs, private Calendar content, terminals with environment output, and personal notifications off camera.
 
 ## Shot plan
 
@@ -37,11 +38,11 @@ Prepare a second Card. Change the real event independently in Google, then appro
 
 > Approval is not a blank check. Google’s ETag changed, so Bander refuses the stale plan. It performs no Bander Calendar write and sends no family update.
 
-### 1:58–2:18 — the four-tool boundary
+### 1:58–2:18 — bounded email and the five-tool boundary
 
-Show a sanitized four-tool inventory and the architecture diagram.
+Briefly show one bounded inbox answer or exact reply Card, then a sanitized five-tool inventory and the architecture diagram.
 
-> This protected OpenClaw exposes exactly four bounded Bander tools: capabilities, schedule read, action proposal, and minimal receipt status. There is no messaging tool. OpenClaw never receives Google or Bander Telegram credentials and cannot press approval for itself.
+> This protected OpenClaw exposes exactly five bounded Bander tools: capabilities, schedule read, inbox read, action proposal, and minimal receipt status. There is no send tool. OpenClaw never receives Google or Bander Telegram credentials and cannot press approval for itself.
 
 ### 2:18–2:42 — Codex red→green and Sol’s real role
 
@@ -56,6 +57,6 @@ Show the selected `calendar_outcome_ambiguous` ledger entry and the green verifi
 ## Guardrails
 
 - Keep the real and deterministic paths unmistakably separate.
-- Do not claim atomic distributed transactions, proof of human reading, restart-durable production authority, an installer, standing real autonomy, email, purchases, reservations, payments, or smart-home control.
+- Do not claim atomic distributed transactions, proof of human reading, restart-durable production authority, an installer, standing real autonomy, arbitrary email, purchases, reservations, payments, or smart-home control.
 - Do not claim zero OpenClaw network access or protection outside the dedicated profile.
 - Show only human dates and times. End by 2:50.

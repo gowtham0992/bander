@@ -17,6 +17,8 @@ const secretEnvironment = {
   OPENCLAW_TELEGRAM_BOT_TOKEN: "OPENCLAW_TELEGRAM_TEST_SECRET_SHOULD_NEVER_PRINT",
   GOOGLE_OAUTH_CLIENT_PATH: "/Users/private-person/.bander/google-client.json",
   GOOGLE_OAUTH_TOKEN_PATH: "/Users/private-person/.bander/google-token.json",
+  GMAIL_OAUTH_CLIENT_PATH: "/Users/private-person/.bander/gmail-client.json",
+  GMAIL_OAUTH_TOKEN_PATH: "/Users/private-person/.bander/gmail-token.json",
   BANDER_CALENDAR_TIME_ZONE: "America/Denver",
 } as const;
 
@@ -55,15 +57,28 @@ describe("unified Bander doctor", () => {
   });
 
   it("doctor_does_not_create_authority_write_calendar_or_send_telegram", async () => {
-    const calls = { telegramReads: 0, googleReads: 0, mcpReads: 0, writes: 0 };
+    const calls = { telegramReads: 0, googleReads: 0, gmailReads: 0, mcpReads: 0, writes: 0 };
     const probes: DoctorLiveProbes = {
       telegram: async () => { calls.telegramReads += 1; return { botReachable: true, groupReachable: true, ownerBindingValid: true }; },
       google: async () => { calls.googleReads += 1; return { timeZone: "America/Denver" }; },
-      mcp: async () => { calls.mcpReads += 1; return { tools: ["bander__get_receipt", "bander__list_capabilities", "bander__propose_action", "bander__read_schedule"] }; },
+      gmail: async () => { calls.gmailReads += 1; return { reachable: true, scopesValid: true }; },
+      mcp: async () => { calls.mcpReads += 1; return { tools: ["bander__get_receipt", "bander__list_capabilities", "bander__propose_action", "bander__read_schedule", "bander__read_inbox"] }; },
       forbiddenWrite: () => { calls.writes += 1; },
     };
     await collectDoctorReport({ cwd: process.cwd(), environment: secretEnvironment, live: true, probes });
-    expect(calls).toEqual({ telegramReads: 1, googleReads: 1, mcpReads: 1, writes: 0 });
+    expect(calls).toEqual({ telegramReads: 1, googleReads: 1, gmailReads: 1, mcpReads: 1, writes: 0 });
+  });
+
+  it("doctor_rejects_a_shared_calendar_and_gmail_token_file", async () => {
+    const report = await collectDoctorReport({
+      cwd: process.cwd(),
+      environment: {
+        ...secretEnvironment,
+        GMAIL_OAUTH_TOKEN_PATH: secretEnvironment.GOOGLE_OAUTH_TOKEN_PATH,
+      },
+      live: false,
+    });
+    expect(report.checks.find((check) => check.check === "Google OAuth files")).toMatchObject({ status: "FAIL" });
   });
 
   it("doctor_distinguishes_optional_family_contact", async () => {
@@ -92,17 +107,19 @@ describe("unified Bander doctor", () => {
     const report = await collectDoctorReport({ cwd: process.cwd(), environment: secretEnvironment, live: true, probes: {
       telegram: async () => ({ botReachable: true, groupReachable: true, ownerBindingValid: true }),
       google: async () => ({ timeZone: "America/Denver" }),
-      mcp: async () => ({ tools: ["bander__get_receipt", "bander__list_capabilities", "bander__propose_action", "bander__read_schedule"] }),
+      gmail: async () => ({ reachable: true, scopesValid: true }),
+      mcp: async () => ({ tools: ["bander__get_receipt", "bander__list_capabilities", "bander__propose_action", "bander__read_schedule", "bander__read_inbox"] }),
     } });
     const privacy = report.checks.find((check) => check.check === "BotFather privacy");
     expect(privacy).toMatchObject({ status: "WARN" });
     expect(privacy?.meaning).toContain("requires the documented empirical check");
   });
 
-  it("live_doctor_requires_exactly_four_tools", async () => {
+  it("live_doctor_requires_exactly_five_tools", async () => {
     const report = await collectDoctorReport({ cwd: process.cwd(), environment: secretEnvironment, live: true, probes: {
       telegram: async () => ({ botReachable: true, groupReachable: true, ownerBindingValid: true }),
       google: async () => ({ timeZone: "America/Denver" }),
+      gmail: async () => ({ reachable: true, scopesValid: true }),
       mcp: async () => ({ tools: ["bander__propose_action"] }),
     } });
     expect(report.checks.find((check) => check.check === "Bander tool inventory")?.status).toBe("FAIL");

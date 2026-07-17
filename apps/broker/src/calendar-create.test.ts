@@ -155,7 +155,7 @@ describe("real Calendar event creation", () => {
     );
     const first = await compiler.compile("Add lunch with Ruth next Tuesday at noon.");
     expect(first.calendar).toMatchObject({ kind: "create", eventId });
-    expect(first.calendar.eventId).toMatch(/^[0-9a-v]{5,1024}$/);
+    expect(first.calendar!.eventId).toMatch(/^[0-9a-v]{5,1024}$/);
   });
 
   it("create_defaults_to_disclosed_sixty_minute_duration", async () => {
@@ -213,7 +213,7 @@ describe("real Calendar event creation", () => {
     boundary.insertError = new Error("response lost after commit");
     const adapter = new GoogleCalendarAdapter(boundary);
     const result = await adapter.executeDraft({ draftHash: "hash", permitNonce: "permit", document: createDraft() });
-    expect(result.calendar.status).toBe("observed_target");
+    expect(result.calendar!.status).toBe("observed_target");
     expect(boundary.inserts).toHaveLength(1);
   });
 
@@ -309,9 +309,9 @@ describe("real Calendar event creation", () => {
     );
     const first = await compiler.compile("Add lunch with Ruth next Tuesday at noon.");
     const second = await compiler.compile("Add lunch with Ruth next Tuesday at noon.");
-    expect(first.calendar.eventId).not.toBe(second.calendar.eventId);
-    expect(first.calendar.eventId).toMatch(/^[0-9a-v]{5,1024}$/);
-    expect(second.calendar.eventId).toMatch(/^[0-9a-v]{5,1024}$/);
+    expect(first.calendar!.eventId).not.toBe(second.calendar!.eventId);
+    expect(first.calendar!.eventId).toMatch(/^[0-9a-v]{5,1024}$/);
+    expect(second.calendar!.eventId).toMatch(/^[0-9a-v]{5,1024}$/);
   });
 
   it.each([

@@ -89,7 +89,7 @@ async function main() {
         timeZone,
       );
       const fixture = await compiler.compile(request);
-      if (fixture.calendar.kind !== "cancel") throw new Error("not_cancel_fixture");
+      if (fixture.calendar?.kind !== "cancel") throw new Error("not_cancel_fixture");
     }
     process.stdout.write(`${JSON.stringify({ case: name, expected, observed, correct: passed })}\n`);
   }

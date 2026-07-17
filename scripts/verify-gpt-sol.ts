@@ -61,6 +61,7 @@ async function main(): Promise<void> {
   const fixture = await new RealCalendarDraftCompiler(calendar, {
     select: async () => intent,
   }).compile(request);
+  if (!fixture.calendar) throw new Error("fixture_has_no_calendar");
   const event = await calendar.resolveEvent(fixture.calendar.eventId);
   const durationMs = Date.parse(event.endTime) - Date.parse(event.startTime);
   if (

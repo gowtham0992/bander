@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type {
   CalendarEvent,
   DemoSandboxState,
+  EmailReplyEffect,
   MockSeed,
   SentMessage,
 } from "@bander/contracts";
@@ -26,7 +27,7 @@ interface SendMessageBody {
 interface ExecuteOperationBody {
   operationKey: string;
   draftHash: string;
-  calendar: {
+  calendar?: {
     kind?: "reschedule" | "create" | "cancel";
     eventId: string;
     expectedEtag?: string;
@@ -46,6 +47,7 @@ interface ExecuteOperationBody {
     recipientDisplayName: string;
     body: string;
   };
+  email?: Pick<EmailReplyEffect, "recipient" | "subject" | "body" | "rfcMessageId">;
 }
 
 function tokenMatches(actual: string | undefined, expected: string): boolean {
@@ -72,6 +74,10 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
     string,
     { recipientDisplayName: string; body: string; sentAt: string }
   >();
+  const sentEmailsByKey = new Map<
+    string,
+    { recipient: string; subject: string; body: string; sentAt: string }
+  >();
   const operationResults = new Map<
     string,
     {
@@ -87,6 +93,7 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
     people.clear();
     messagesByKey.clear();
     familyUpdatesByKey.clear();
+    sentEmailsByKey.clear();
     operationResults.clear();
     for (const event of structuredClone(options.seed.events)) events.set(event.id, event);
     for (const person of structuredClone(options.seed.people)) people.set(person.id, person);
@@ -118,6 +125,15 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
       sentAt: message.sentAt,
     })),
     familyUpdates: [...familyUpdatesByKey.values()],
+    inbox: [
+      {
+        sender: "Ruth <ruth@example.test>",
+        subject: "Lunch next week",
+        receivedAt: "2026-07-16T15:00:00.000Z",
+        excerpt: "Would Tuesday at noon work for lunch?",
+      },
+    ],
+    sentEmails: [...sentEmailsByKey.values()],
   }));
 
   app.get<{ Params: { eventId: string } }>(
@@ -309,7 +325,7 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         body: {
           type: "object",
           additionalProperties: false,
-          required: ["operationKey", "draftHash", "calendar"],
+          required: ["operationKey", "draftHash"],
           properties: {
             operationKey: { type: "string", minLength: 16, maxLength: 100 },
             draftHash: { type: "string", pattern: "^[a-f0-9]{64}$" },
@@ -348,6 +364,17 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
                 body: { type: "string", minLength: 1, maxLength: 1000 },
               },
             },
+            email: {
+              type: "object",
+              additionalProperties: false,
+              required: ["recipient", "subject", "body", "rfcMessageId"],
+              properties: {
+                recipient: { type: "string", minLength: 3, maxLength: 254 },
+                subject: { type: "string", minLength: 1, maxLength: 200 },
+                body: { type: "string", minLength: 1, maxLength: 2000 },
+                rfcMessageId: { type: "string", minLength: 5, maxLength: 250 },
+              },
+            },
           },
         },
       },
@@ -366,8 +393,37 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         return existing;
       }
 
-      const kind = request.body.calendar.kind ?? "reschedule";
-      const event = events.get(request.body.calendar.eventId);
+      const calendar = request.body.calendar;
+      const directFamily = request.body.family && !calendar;
+      if ([calendar, request.body.email, directFamily ? request.body.family : undefined].filter(Boolean).length !== 1) {
+        return reply.code(422).send({
+          error: { code: "invalid_operation_shape", message: "One primary operation is required" },
+        });
+      }
+      if (request.body.email) {
+        const sent = {
+          recipient: request.body.email.recipient,
+          subject: request.body.email.subject,
+          body: request.body.email.body,
+          sentAt: now().toISOString(),
+        };
+        sentEmailsByKey.set(request.body.operationKey, sent);
+        const result = { operationKey: request.body.operationKey, draftHash: request.body.draftHash };
+        operationResults.set(request.body.operationKey, result);
+        return reply.code(201).send(result);
+      }
+      if (directFamily && request.body.family) {
+        familyUpdatesByKey.set(request.body.operationKey, {
+          recipientDisplayName: request.body.family.recipientDisplayName,
+          body: request.body.family.body,
+          sentAt: now().toISOString(),
+        });
+        const result = { operationKey: request.body.operationKey, draftHash: request.body.draftHash };
+        operationResults.set(request.body.operationKey, result);
+        return reply.code(201).send(result);
+      }
+      const kind = calendar!.kind ?? "reschedule";
+      const event = events.get(calendar!.eventId);
       const person = request.body.message
         ? people.get(request.body.message.recipientId)
         : undefined;
@@ -377,7 +433,7 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         });
       }
       if (
-        (kind !== "create" && event!.etag !== request.body.calendar.expectedEtag) ||
+        (kind !== "create" && event!.etag !== calendar!.expectedEtag) ||
         (request.body.message &&
           person?.revision !== request.body.message.expectedRecipientRevision)
       ) {
@@ -390,10 +446,10 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
       }
       if (
         kind === "create" &&
-        (!request.body.calendar.title ||
-          !request.body.calendar.startTime ||
-          !request.body.calendar.endTime ||
-          !request.body.calendar.timeZone)
+        (!calendar!.title ||
+          !calendar!.startTime ||
+          !calendar!.endTime ||
+          !calendar!.timeZone)
       ) {
         return reply.code(422).send({
           error: {
@@ -404,10 +460,10 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
       }
       if (
         kind !== "cancel" && (
-          !Number.isFinite(new Date(kind === "create" ? request.body.calendar.startTime! : request.body.calendar.newStartTime!).getTime()) ||
-          !Number.isFinite(new Date(kind === "create" ? request.body.calendar.endTime! : request.body.calendar.newEndTime!).getTime()) ||
-          new Date(kind === "create" ? request.body.calendar.endTime! : request.body.calendar.newEndTime!).getTime() <=
-            new Date(kind === "create" ? request.body.calendar.startTime! : request.body.calendar.newStartTime!).getTime()
+          !Number.isFinite(new Date(kind === "create" ? calendar!.startTime! : calendar!.newStartTime!).getTime()) ||
+          !Number.isFinite(new Date(kind === "create" ? calendar!.endTime! : calendar!.newEndTime!).getTime()) ||
+          new Date(kind === "create" ? calendar!.endTime! : calendar!.newEndTime!).getTime() <=
+            new Date(kind === "create" ? calendar!.startTime! : calendar!.newStartTime!).getTime()
         )
       ) {
         return reply.code(422).send({
@@ -422,20 +478,20 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         ? undefined
         : kind === "create"
           ? {
-              id: request.body.calendar.eventId,
-              title: request.body.calendar.title!,
-              startTime: request.body.calendar.startTime!,
-              endTime: request.body.calendar.endTime!,
-              timeZone: request.body.calendar.timeZone!,
+              id: calendar!.eventId,
+              title: calendar!.title!,
+              startTime: calendar!.startTime!,
+              endTime: calendar!.endTime!,
+              timeZone: calendar!.timeZone!,
               organizerId: "person-owner",
               attendeeIds: ["person-owner"],
               revision: 1,
-              etag: `${request.body.calendar.eventId}-r1`,
+              etag: `${calendar!.eventId}-r1`,
             }
           : {
               ...event!,
-              startTime: request.body.calendar.newStartTime!,
-              endTime: request.body.calendar.newEndTime!,
+              startTime: calendar!.newStartTime!,
+              endTime: calendar!.newEndTime!,
               revision: event!.revision + 1,
               etag: `${event!.id}-r${event!.revision + 1}`,
             };
@@ -458,7 +514,7 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         : undefined;
 
       // Both seeded effects commit together after every precondition has passed.
-      if (kind === "cancel") events.delete(request.body.calendar.eventId);
+      if (kind === "cancel") events.delete(calendar!.eventId);
       else events.set(updatedEvent!.id, updatedEvent!);
       if (message) messagesByKey.set(request.body.operationKey, message);
       if (familyUpdate) familyUpdatesByKey.set(request.body.operationKey, familyUpdate);

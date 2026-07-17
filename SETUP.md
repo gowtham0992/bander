@@ -1,6 +1,6 @@
 # Set up Bander for a parent or family member
 
-This guide is for the person setting up Bander on a computer for a parent or family member. When setup is complete, the parent can ask OpenClaw about their real Google Calendar, approve one exact appointment move, and optionally approve the exact appointment update sent to one connected family member.
+This guide is for the person setting up Bander on a computer for a parent or family member. When setup is complete, the parent can ask OpenClaw about their real Google Calendar and bounded Gmail inbox, approve exact Calendar changes or one exact Gmail reply, and optionally approve one exact message to a connected family member.
 
 ## Keep the three participants straight
 
@@ -16,8 +16,10 @@ This guide is for the person setting up Bander on a computer for a parent or fam
 - The parent may approve a real move of one narrowly eligible Calendar event.
 - The parent may approve one timed Calendar event after seeing its exact title and complete interval; Bander uses a disclosed 60-minute default unless the parent states a duration.
 - One connected family member may receive only the deterministic appointment update shown on the same approval Card.
+- The parent can read one bounded matching Gmail message and approve one exact plain-text reply in its existing thread.
+- The parent can approve one exact plain-text message to the connected family member.
 
-Bander does not provide arbitrary messaging, email, purchases, reservations, payments, smart-home control, or general Calendar editing.
+Bander does not provide new outbound email threads, reply-all, forwarding, attachments, arbitrary recipients, purchases, reservations, payments, smart-home control, or general Calendar editing.
 
 ## Fast judge sandbox: no accounts or keys
 
@@ -79,17 +81,17 @@ Follow its empirical owner/non-owner/imitation procedure. The parent’s natural
 
 Create a project key with access to exact model `gpt-5.6-sol`. Store it as `OPENAI_API_KEY` in `.env`. Bander uses the model only for bounded intent compilation; the model cannot select Calendar IDs, ETags, recipient routing, notification text, approval, or execution authority.
 
-### 4. Configure narrow Google Desktop OAuth
+### 4. Configure separate narrow Google Desktop OAuth clients
 
 On the **setup computer**:
 
 1. Create or select a dedicated Google Cloud project.
-2. Enable the Google Calendar API.
+2. Enable the Google Calendar API and Gmail API in the same Cloud project as the Desktop OAuth client. A valid Gmail token still returns `accessNotConfigured` until the Gmail API itself is enabled.
 3. Configure an External OAuth consent screen in Testing and add the dedicated Calendar account as a test user.
 4. Create an OAuth client of type **Desktop app**.
-5. Download the client JSON into ignored local storage, such as `.bander/google-oauth-client.json`.
-6. Set `GOOGLE_OAUTH_CLIENT_PATH` to that file and `GOOGLE_OAUTH_TOKEN_PATH` to an ignored path such as `.bander/google-oauth-token.json`.
-7. Restrict both files to the local user (`chmod 600 …`).
+5. Configure a separate Gmail token path. The same Desktop client JSON may be reused, but the Calendar and Gmail token files must never be the same file.
+6. Store client JSON and generated tokens only in ignored local storage, then configure `GOOGLE_OAUTH_CLIENT_PATH`, `GOOGLE_OAUTH_TOKEN_PATH`, `GMAIL_OAUTH_CLIENT_PATH`, and `GMAIL_OAUTH_TOKEN_PATH`.
+7. Restrict all four files to the local user (`chmod 600 …`).
 
 Bander requests only:
 
@@ -98,6 +100,23 @@ https://www.googleapis.com/auth/calendar.events.owned
 ```
 
 It fixes Calendar access to `primary`. Set `BANDER_RUNTIME_MODE=real` and set `BANDER_CALENDAR_TIME_ZONE` to the primary Calendar’s authoritative IANA timezone, such as `America/Denver`.
+
+The separate Gmail consent requests only:
+
+```text
+https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/gmail.send
+```
+
+If scopes, account, or test-user configuration changes, stop Bander, remove only the ignored Gmail token file, rerun `npm run real`, and complete consent again. Never delete or replace the Calendar token as part of Gmail rotation.
+
+Authorize Gmail separately before starting the full stack:
+
+```bash
+npm run oauth:gmail
+```
+
+This opens Google's consent flow and writes only the ignored Gmail token file. It does not read a message, send a reply, create authority, or change Calendar state.
 
 ### 5. Pair the parent and protected group
 
@@ -200,7 +219,9 @@ Use `Ctrl-C` once in the terminal running `npm run real`, wait for both supervis
 
 - Real writes are limited to adding one timed default event or moving or cancelling one timed, non-recurring, owner-organized, attendee-free event in the connected primary Calendar. Creation has no attendees, recurrence, location, description, conferencing, attachments, custom reminders, or reservation; rescheduling preserves exact duration; cancellation removes only the exact event version shown on the Card and never contacts an external clinic, restaurant, or service.
 - Schedule reads are capped at 31 days and 50 sanitized events. Calendar titles remain untrusted model input; sanitization and prompting reduce but do not eliminate prompt-injection or mis-summary risk.
-- Exactly one family contact is supported. Bander can send only the deterministic appointment update shown on the approved compound Card.
+- Exactly one family contact is supported. Bander can send a deterministic appointment update or one independent plain-text message only when its exact content appears on the approved Card.
+- Gmail reply is limited to one resolved inbound thread, one valid Reply-To/From address, plain text, and no CC/BCC/reply-all/forwarding/attachments/new thread. Email contents enter OpenClaw’s model trajectory only when the parent asks for a bounded inbox read; sanitization and prompting do not constitute prompt-injection detection.
+- Gmail and Telegram have permanent no-automatic-retry behavior after an ambiguous dispatched send. A provider acceptance is not proof the human read the message.
 - Telegram delivery is not exactly once. A confirmed response is replay-safe; an ambiguous response is reported as unconfirmed and never retried automatically. Acceptance is not proof of reading.
 - Core production authority is process-local and not restart-durable. Do not approve while intentionally restarting the broker.
 - The Streamable HTTP MCP endpoint is loopback-only and has no application-level authentication. Do not expose it to a LAN or the public internet.

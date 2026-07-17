@@ -32,12 +32,14 @@ describe("OpenClaw reference tool manifest", () => {
     expect(config.tools.allow).toEqual([
       "bander__list_capabilities",
       "bander__read_schedule",
+      "bander__read_inbox",
       "bander__propose_action",
       "bander__get_receipt",
     ]);
     expect(config.mcp.servers.bander.toolFilter.include).toEqual([
       "list_capabilities",
       "read_schedule",
+      "read_inbox",
       "propose_action",
       "get_receipt",
     ]);
@@ -125,8 +127,7 @@ describe("OpenClaw reference tool manifest", () => {
     expect(prompt).toContain(
       "I can tell you what’s coming up on your connected calendar",
     );
-    expect(prompt).toContain(
-      "Removing it affects only the Calendar—it does not cancel an appointment or reservation with a business.",
-    );
+    expect(prompt).toContain("untrusted email data");
+    expect(prompt).toContain("reply to a clearly identified inbound email");
   });
 });

@@ -84,7 +84,7 @@ function createApp() {
 }
 
 describe("broker approval boundary", () => {
-  it("keeps real mode Calendar-only and makes sandbox routes unreachable", async () => {
+  it("keeps real mode live-only and makes sandbox routes unreachable", async () => {
     const setup = createApp();
     await setup.app.close();
     app = buildBrokerApp({
@@ -107,6 +107,13 @@ describe("broker approval boundary", () => {
         empty: true,
         truncated: false,
         maxEvents: 50,
+      }),
+      readInbox: async () => ({
+        requestedRange: { startLocalDate: "2026-07-17", endLocalDateExclusive: "2026-07-18" },
+        messages: [],
+        empty: true,
+        truncated: false,
+        maxMessages: 10,
       }),
     });
 
@@ -169,6 +176,7 @@ describe("broker approval boundary", () => {
         "get_receipt",
         "list_capabilities",
         "propose_action",
+        "read_inbox",
         "read_schedule",
       ]);
       expect(text).toContain("Calendar");
@@ -308,8 +316,10 @@ describe("broker approval boundary", () => {
           timeZone: "America/Denver",
         },
       ],
-        messages: [],
-        familyUpdates: [],
+      messages: [],
+      familyUpdates: [],
+      inbox: [],
+      sentEmails: [],
     };
     app = buildBrokerApp({
       engine: setup.engine,

@@ -4,6 +4,7 @@ import type {
   CalendarCreateEffect,
   CalendarRescheduleEffect,
   DraftDocument,
+  EmailReplyEffect,
   FamilyNotificationDocument,
   FamilyTelegramNotificationEffect,
   HumanReceipt,
@@ -87,6 +88,7 @@ function messageLine(effect: MessageSendEffect): string {
 export function renderFamilyNotificationDocument(
   document: FamilyNotificationDocument,
 ): string {
+  if (document.kind === "direct_message") return document.body;
   const interval =
     document.kind === "calendar_transition"
       ? formatCalendarIntervalWithContext(
@@ -108,6 +110,25 @@ export function renderFamilyNotificationDocument(
     stateLine,
     "This is the exact update your family approved Bander to send.",
   ].join("\n");
+}
+
+export function createDirectFamilyDocument(body: string): FamilyNotificationDocument {
+  const safe = body
+    .normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (
+    !safe ||
+    safe.length > 500 ||
+    /(?:https?:\/\/|www\.|\b(?:t\.me|telegram\.me)\/)/i.test(safe) ||
+    /^\s*\//.test(safe) ||
+    /^(?:bander|openclaw)\b\s*[:—-]?/i.test(safe) ||
+    /(?:approved by bander|do exactly this|nothing has happened yet|already done|done\s*[✓✔])/i.test(safe)
+  ) {
+    throw new Error("Invalid direct family message");
+  }
+  return { kind: "direct_message", body: safe };
 }
 
 export function sanitizeFamilyNotificationTitle(value: string): string {
@@ -201,6 +222,9 @@ export function renderApprovalCard(
       return `add “${effect.title}” to Calendar for ${formatCalendarIntervalWithContext(effect.startTime, effect.endTime, effect.timeZone)}`;
     }
     if (effect.type === "messages.send") return messageLine(effect);
+    if (effect.type === "email.reply") {
+      return `reply by email to ${effect.recipient} about “${effect.subject}”: “${effect.body}”`;
+    }
     return familyNotificationLine(effect);
   });
   const connections = [
@@ -214,6 +238,8 @@ export function renderApprovalCard(
             ? "Calendar"
           : effect.type === "messages.send"
             ? "Messages"
+            : effect.type === "email.reply"
+              ? "Gmail"
             : "Family Telegram",
       ),
     ),
@@ -268,6 +294,13 @@ export function renderApprovalCard(
           recipientDisplayName: effect.expected.displayName,
           body: effect.body,
         }
+        : effect.type === "email.reply"
+          ? {
+              kind: effect.type,
+              recipient: effect.recipient,
+              subject: effect.subject,
+              body: effect.body,
+            }
         : {
             kind: effect.type,
             recipientDisplayName: effect.binding.displayLabel,
@@ -317,10 +350,60 @@ export function renderHumanReceipt(
     (effect): effect is FamilyTelegramNotificationEffect =>
       effect.type === "family.telegram_notification",
   );
+  const emailReply = document.effects.find(
+    (effect): effect is EmailReplyEffect => effect.type === "email.reply",
+  );
+  if (emailReply) {
+    if (!observed?.emailReply || document.effects.length !== 1) {
+      throw new Error("Email reply cannot be rendered without an observed result");
+    }
+    return {
+      id,
+      draftId,
+      title: "Done",
+      summary:
+        observed.emailReply.status === "observed_target"
+          ? `Your Sent folder now shows the approved reply to ${emailReply.recipient}.`
+          : `Sent the approved reply to ${emailReply.recipient}.`,
+      detail: `Subject: ${emailReply.subject}. No one else was included.`,
+      emailReply: {
+        recipient: emailReply.recipient,
+        subject: emailReply.subject,
+        body: emailReply.body,
+        status: observed.emailReply.status,
+      },
+      completedAt,
+    };
+  }
+  if (familyNotification?.document.kind === "direct_message") {
+    if (!observed?.familyNotification || document.effects.length !== 1) {
+      throw new Error("Family message cannot be rendered without an observed result");
+    }
+    const status = observed.familyNotification.status;
+    return {
+      id,
+      draftId,
+      title: "Done",
+      summary:
+        status === "delivered"
+          ? `Sent the approved message to ${familyNotification.binding.displayLabel}.`
+          : status === "ambiguous"
+            ? `Bander could not confirm whether ${familyNotification.binding.displayLabel} received the approved message and will not send it again automatically.`
+            : `${familyNotification.binding.displayLabel} was no longer connected, so no message was sent.`,
+      detail: status === "delivered" ? "Telegram accepted the message; that does not prove it was read." : "Nothing will be retried automatically.",
+      familyNotification: {
+        recipientDisplayName: familyNotification.binding.displayLabel,
+        status,
+        body: renderFamilyNotificationDocument(familyNotification.document),
+      },
+      completedAt,
+    };
+  }
   if ([calendar, createdCalendar, cancelledCalendar].filter(Boolean).length !== 1) {
     throw new Error("Draft cannot be rendered as a receipt");
   }
-  const completed = observed?.calendar.completed ?? (calendar ? {
+  const calendarObservation = observed?.calendar;
+  const completed = calendarObservation?.completed ?? (calendar ? {
     startTime: calendar.changes.startTime,
     endTime: calendar.changes.endTime,
     timeZone: calendar.expected.timeZone,
@@ -343,10 +426,10 @@ export function renderHumanReceipt(
     summary: calendar
       ? `Completed as agreed: “${calendar.expected.title}” moved from ${formatInterval(calendar.expected.startTime, calendar.expected.endTime, calendar.expected.timeZone)} to ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
       : cancelledCalendar
-        ? observed?.calendar.status === "observed_target"
+        ? calendarObservation?.status === "observed_target"
           ? `Your calendar no longer shows the approved event: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
           : `Removed as agreed: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
-      : observed?.calendar.status === "observed_target"
+      : calendarObservation?.status === "observed_target"
         ? `Your calendar now shows the approved event: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
         : `Added as agreed: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`,
     detail: familyNotification
@@ -370,8 +453,8 @@ export function renderHumanReceipt(
             endTime: completed.endTime,
           },
           timeZone,
-          ...(observed?.calendar.status
-            ? { executionStatus: observed.calendar.status }
+          ...(calendarObservation?.status
+            ? { executionStatus: calendarObservation.status }
             : {}),
         }
       : cancelledCalendar
@@ -383,7 +466,7 @@ export function renderHumanReceipt(
               endTime: cancelledCalendar.expected.endTime,
             },
             timeZone,
-            executionStatus: observed?.calendar.status ?? "committed",
+            executionStatus: calendarObservation?.status ?? "committed",
           }
       : {
           created: true,
@@ -393,7 +476,7 @@ export function renderHumanReceipt(
             endTime: completed.endTime,
           },
           timeZone,
-          executionStatus: observed?.calendar.status ?? "committed",
+          executionStatus: calendarObservation?.status ?? "committed",
         },
     ...(message
       ? {

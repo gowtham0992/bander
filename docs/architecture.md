@@ -11,7 +11,7 @@ The repository has two deliberately distinct product paths:
 - **Real:** live conversational OpenClaw, exact model `gpt-5.6-sol`, Bander's Google Calendar adapter, one bound Telegram owner/group, and no fixture or mock-service routes.
 - **Sandbox:** deterministic provider, versioned fixtures, seeded credential-protected mock services, and no claim of Google access.
 
-`npm run real` supervises a fresh broker and OpenClaw gateway. Before printing ready, it verifies `runtimeMode: real`, the Google backend, real action and read compilers, paired Telegram installation, exact four-tool inventory, live model configuration, credential separation, and missing fixture/standing demo routes. It refuses an existing broker rather than attaching to a possibly stale sandbox.
+`npm run real` supervises a fresh broker and OpenClaw gateway. Before printing ready, it verifies `runtimeMode: real`, the Google Calendar and Gmail backends, real action and read compilers, paired Telegram installation, exact five-tool inventory, live model configuration, credential separation, and missing fixture/standing demo routes. It refuses an existing broker rather than attaching to a possibly stale sandbox.
 
 ## ADR-002: The protected OpenClaw profile has a small exact tool inventory
 
@@ -129,7 +129,7 @@ The contact receives no authority. They cannot approve, decline, replay owner
 callbacks, view the group, query a schedule, call OpenClaw, add or redirect a
 contact, or alter aliases. Contact private messages stay in Bander and receive
 only bounded role help. No MCP tool exposes routing identifiers; the real
-OpenClaw inventory remains four tools.
+This pairing boundary does not add an MCP tool; after Checkpoint 8 the real OpenClaw inventory remains exactly five tools.
 
 Either the contact's private `/disconnect` or the owner's Bander-owned group
 control revokes the relationship idempotently. Revocation removes the raw
@@ -207,7 +207,17 @@ The Google boundary performs only a primary-Calendar event listing for this lane
 
 Calendar titles are untrusted data. Bander normalizes them, strips control and bidirectional-control characters, bounds them to 120 characters, and tells OpenClaw to treat them only as quoted data—not instructions or a reason to call an action tool. This narrows exposure but does not claim to solve prompt injection: schedule facts intentionally enter the model trajectory, and a model can still mis-summarize benign or adversarial text. Consequential execution remains structurally unreachable from the read handler, and action tools require a later genuine human request.
 
-The Hero/reference sandbox remains on its historically verified three-tool profile. The canonical real product has exactly four Bander tools; the distinction is asserted at startup and in the real-process verifier.
+The Hero/reference sandbox remains on its historically verified three-tool profile. The canonical real product has exactly five Bander tools, adding `bander__read_inbox`; the distinction is asserted at startup and in the real-process verifier.
+
+## ADR-016: Gmail is a separate bounded read/reply boundary
+
+**Status:** accepted for Checkpoint 8
+
+Gmail uses a separate OAuth token path with exactly `gmail.readonly` and `gmail.send`; it may reuse the Desktop client document but never broadens or replaces the Calendar token. `bander__read_inbox` accepts only the newest natural request. Sol extracts sender, subject, bounded date range, and explicit-latest intent; deterministic Bander code constructs the Gmail search, excludes spam/trash, requires a unique match unless latest was explicit, and returns a separate sanitized DTO without Gmail identities, raw headers, attachments, or hidden HTML. Email facts intentionally enter OpenClaw’s trajectory for answering the parent. Sanitization and an untrusted-data prompt reduce exposure but are not prompt-injection detection.
+
+`email.reply` remains behind `bander__propose_action`. One immutable deal pins the source/thread/latest-message identities, one valid Reply-To or From address, subject/threading headers, exact plain text, stable RFC Message-ID, an opaque `X-Bander-Operation` value derived from that identity, canonical MIME bytes, and digests. Execution rereads the thread and refuses if a newer message exists. Dispatch is recorded before Gmail send. Live evidence showed that Gmail rewrites the caller-supplied RFC Message-ID, so it is not a reliable recovery key. An ambiguous send is never repeated: Bander scans at most 25 recent Sent messages, accepts only one exact opaque-header/recipient/thread/subject/body match as observation-safe, and otherwise remains terminally ambiguous. The opaque header is deterministic Bander state, never model-authored or exposed through MCP.
+
+Independent family messages use the existing `family.telegram_notification` effect with a separate `direct_message` document. The parent-requested plain text is sanitized, stored, hashed, shown, and delivered unchanged to only the exact active pairing revision. This differs from Calendar-bound family updates, whose text is deterministically rendered from authoritative Calendar state.
 
 ## ADR-014: Parent explanation is Bander-owned and delivered once
 
@@ -253,7 +263,7 @@ empirical-check warning instead of inferring a pass.
 
 `npm run verify:clean-clone` copies only tracked and proposed non-ignored files
 into a generated directory under `/private/tmp`, installs from the lockfile,
-and proves the no-account doctor and eighteen-outcome deterministic sandbox. Product
+and proves the no-account doctor and 27-outcome deterministic sandbox. Product
 credentials are removed from the verifier subprocess environment, and outbound
 Google, Telegram, and OpenAI product endpoints are blocked while local loopback
 services remain available. Cleanup is restricted to the verifier's own

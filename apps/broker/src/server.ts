@@ -4,6 +4,9 @@ import fastifyStatic from "@fastify/static";
 import {
   AuthorityEngine,
   AuthorityStore,
+  ExecutionAmbiguousError,
+  ExecutionConflictError,
+  ExecutionEmailRejectedError,
   type DraftFixture,
   type ExecutionAdapter,
 } from "@bander/core";
@@ -19,6 +22,17 @@ import {
   createGoogleCalendarBoundary,
 } from "./google-calendar.js";
 import { loadGoogleCalendarOAuth } from "./google-oauth.js";
+import { loadGoogleGmailOAuth } from "./google-gmail-oauth.js";
+import { GoogleGmailBoundary } from "./google-gmail.js";
+import { GmailReplyAdapter, GmailReplyError } from "./gmail.js";
+import {
+  GmailReadService,
+  OpenAISolGmailReadIntentSelector,
+} from "./gmail-read.js";
+import {
+  OpenAISolProductIntentRouter,
+  RealProductDraftCompiler,
+} from "./product-compiler.js";
 import { MockServiceClient } from "./mock-client.js";
 import { CompoundExecutionAdapter } from "./compound-action.js";
 import {
@@ -39,7 +53,9 @@ let mockAdapter: MockServiceClient | undefined;
 let fixtures: Map<string, DraftFixture>;
 let compiler: DraftCompiler | undefined;
 let readScheduleService: ReadScheduleService | undefined;
+let readInboxService: GmailReadService | undefined;
 let realGoogleAdapter: GoogleCalendarAdapter | undefined;
+let realGmailBoundary: GoogleGmailBoundary | undefined;
 let telegramService: TelegramService | undefined;
 
 if (configuration.mode === "real") {
@@ -50,6 +66,17 @@ if (configuration.mode === "real") {
   const googleAdapter = new GoogleCalendarAdapter(
     createGoogleCalendarBoundary(auth),
   );
+  const gmailAuth = await loadGoogleGmailOAuth({
+    clientPath: configuration.gmailClientPath,
+    tokenPath: configuration.gmailTokenPath,
+  });
+  const gmailBoundary = new GoogleGmailBoundary(
+    gmailAuth,
+    configuration.calendarTimeZone,
+    { dropSuccessfulSendResponseOnce: configuration.gmailDropSuccessfulResponseForEvidence },
+  );
+  realGmailBoundary = gmailBoundary;
+  const gmailReply = new GmailReplyAdapter(gmailBoundary);
   realGoogleAdapter = googleAdapter;
   const authoritativeTimeZone = await googleAdapter.getAuthoritativeTimeZone();
   if (authoritativeTimeZone !== configuration.calendarTimeZone) {
@@ -65,11 +92,28 @@ if (configuration.mode === "real") {
       }
       return telegramService.deliverBoundFamilyNotification(input);
     },
+    reply: async ({ requestId, effect }) => {
+      try {
+        return await gmailReply.execute(requestId, effect);
+      } catch (error) {
+        if (error instanceof GmailReplyError) {
+          if (error.code === "thread_changed") throw new ExecutionConflictError("email");
+          if (error.code === "send_ambiguous") throw new ExecutionAmbiguousError("email");
+          if (error.code === "send_rejected") throw new ExecutionEmailRejectedError();
+        }
+        throw error;
+      }
+    },
   });
   fixtures = new Map();
   readScheduleService = new ReadScheduleService({
     selector: new OpenAISolReadScheduleIntentSelector(configuration.openaiApiKey),
     backend: googleAdapter,
+  });
+  readInboxService = new GmailReadService({
+    selector: new OpenAISolGmailReadIntentSelector(configuration.openaiApiKey),
+    backend: gmailBoundary,
+    timeZone: configuration.calendarTimeZone,
   });
 } else {
   mockAdapter = new MockServiceClient({
@@ -108,10 +152,23 @@ if (configuration.mode === "real") {
   if (!telegramService || !realGoogleAdapter) {
     throw new Error("Real Bander requires its independently paired Telegram service");
   }
-  compiler = createRealCalendarDraftCompiler({
+  const calendarCompiler = createRealCalendarDraftCompiler({
     apiKey: configuration.openaiApiKey,
     calendar: realGoogleAdapter,
     calendarTimeZone: configuration.calendarTimeZone,
+    familyContacts: {
+      resolve: (alias) => telegramService!.resolveFamilyContactAlias(alias),
+      activeDisplayLabel: () => {
+        const status = telegramService!.familyContactStatus();
+        return status.status === "connected" ? status.displayLabel : undefined;
+      },
+    },
+  });
+  if (!realGmailBoundary) throw new Error("Real Bander requires its Gmail boundary");
+  compiler = new RealProductDraftCompiler({
+    router: new OpenAISolProductIntentRouter(configuration.openaiApiKey, configuration.calendarTimeZone),
+    calendar: calendarCompiler,
+    gmail: realGmailBoundary,
     familyContacts: {
       resolve: (alias) => telegramService!.resolveFamilyContactAlias(alias),
       activeDisplayLabel: () => {
@@ -129,6 +186,9 @@ const app = buildBrokerApp({
   ...(compiler ? { agentCompiler: compiler } : {}),
   ...(readScheduleService
     ? { readSchedule: (request: string) => readScheduleService.read(request) }
+    : {}),
+  ...(readInboxService
+    ? { readInbox: (request: string) => readInboxService.read(request) }
     : {}),
   ...(telegramService
     ? {
@@ -167,6 +227,11 @@ const app = buildBrokerApp({
           mockAdapter.simulateCalendarChange("event-dentist"),
         prepareAmbiguousCalendarOutcome: () =>
           mockAdapter.prepareAmbiguousCalendarOutcome(),
+        prepareAmbiguousEmailOutcome: () =>
+          mockAdapter.prepareAmbiguousEmailOutcome(),
+        simulateEmailThreadChange: () =>
+          mockAdapter.simulateEmailThreadChange(),
+        readDemoInbox: async () => (await mockAdapter.readDemoState()).inbox,
         readDemoSchedule: async () => {
           const state = await mockAdapter.readDemoState();
           const events = state.calendar

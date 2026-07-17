@@ -242,7 +242,7 @@ describe("real Calendar intent compiler", () => {
         newStartTime: "2026-07-20T17:15:00.000Z",
       },
     });
-    if (fixture.calendar.kind !== "reschedule") throw new Error("expected reschedule");
+    if (fixture.calendar?.kind !== "reschedule") throw new Error("expected reschedule");
     expect(
       Date.parse(fixture.calendar.newStartTime) - Date.parse(event.startTime),
     ).not.toBe(0);

@@ -47,6 +47,8 @@ describe("mock-service credential boundary", () => {
       ],
       messages: [],
       familyUpdates: [],
+      inbox: [expect.objectContaining({ sender: "Ruth <ruth@example.test>", subject: "Lunch next week" })],
+      sentEmails: [],
     });
     expect(visible.body).not.toContain("event-dinner-sarah");
     expect(visible.body).not.toContain("etag");
@@ -271,6 +273,8 @@ describe("atomic seeded deal execution", () => {
         },
       ],
       familyUpdates: [],
+      inbox: [expect.objectContaining({ sender: "Ruth <ruth@example.test>", subject: "Lunch next week" })],
+      sentEmails: [],
     });
     expect(first.statusCode).toBe(201);
     expect(retry.statusCode).toBe(200);

@@ -68,6 +68,8 @@ export function createRealProductRuntime(input: {
   for (const forbidden of [
     "GOOGLE_OAUTH_CLIENT_PATH",
     "GOOGLE_OAUTH_TOKEN_PATH",
+    "GMAIL_OAUTH_CLIENT_PATH",
+    "GMAIL_OAUTH_TOKEN_PATH",
     "BANDER_TELEGRAM_BOT_TOKEN",
     "MOCK_SERVICE_TOKEN",
     "MOCK_SERVICE_URL",

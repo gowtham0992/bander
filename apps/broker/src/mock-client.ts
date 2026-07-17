@@ -7,6 +7,7 @@ import type {
   DraftDocument,
   MessageSendEffect,
   FamilyTelegramNotificationEffect,
+  EmailReplyEffect,
   ObservedExecutionResult,
   Person,
 } from "@bander/contracts";
@@ -28,6 +29,8 @@ export class MockServiceClient implements ExecutionAdapter {
   readonly #authorization: string;
   readonly #timeoutMs: number;
   #ambiguousNextCalendar = false;
+  #ambiguousNextEmail = false;
+  #changedNextEmailThread = false;
 
   constructor(options: MockServiceClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -65,9 +68,48 @@ export class MockServiceClient implements ExecutionAdapter {
       (effect): effect is FamilyTelegramNotificationEffect =>
         effect.type === "family.telegram_notification",
     );
-    if (!calendar) {
-      throw new Error("Stored Draft does not contain a supported Calendar effect");
+    const email = input.document.effects.find(
+      (effect): effect is EmailReplyEffect => effect.type === "email.reply",
+    );
+    const directFamily = family?.document.kind === "direct_message";
+
+    if (!calendar && !email && !directFamily) {
+      throw new Error("Stored Draft does not contain a supported sandbox effect");
     }
+
+    if (email) {
+      if (input.document.effects.length !== 1) throw new Error("Stored email reply has extra effects");
+      if (this.#changedNextEmailThread) {
+        this.#changedNextEmailThread = false;
+        throw new ExecutionConflictError("email");
+      }
+      if (this.#ambiguousNextEmail) {
+        this.#ambiguousNextEmail = false;
+        throw new ExecutionAmbiguousError("email");
+      }
+      await this.#request("/operations/execute", {
+        method: "POST",
+        body: JSON.stringify({
+          operationKey: input.permitNonce,
+          draftHash: input.draftHash,
+          email: { recipient: email.recipient, subject: email.subject, body: email.body, rfcMessageId: email.rfcMessageId },
+        }),
+      });
+      return { emailReply: { status: "committed" } };
+    }
+    if (directFamily && family) {
+      if (input.document.effects.length !== 1) throw new Error("Stored direct family message has extra effects");
+      await this.#request("/operations/execute", {
+        method: "POST",
+        body: JSON.stringify({
+          operationKey: input.permitNonce,
+          draftHash: input.draftHash,
+          family: { recipientDisplayName: family.binding.displayLabel, body: renderFamilyNotificationDocument(family.document) },
+        }),
+      });
+      return { familyNotification: { status: "delivered" } };
+    }
+    if (!calendar) throw new Error("Stored Calendar effect is missing");
 
     if (message && family) throw new Error("Stored Draft has conflicting notification effects");
     if (input.document.effects.length !== (message || family ? 2 : 1)) {
@@ -189,11 +231,21 @@ export class MockServiceClient implements ExecutionAdapter {
 
   async resetDemo(): Promise<void> {
     this.#ambiguousNextCalendar = false;
+    this.#ambiguousNextEmail = false;
+    this.#changedNextEmailThread = false;
     await this.#request("/demo/reset", { method: "POST" });
   }
 
   prepareAmbiguousCalendarOutcome(): void {
     this.#ambiguousNextCalendar = true;
+  }
+
+  prepareAmbiguousEmailOutcome(): void {
+    this.#ambiguousNextEmail = true;
+  }
+
+  simulateEmailThreadChange(): void {
+    this.#changedNextEmailThread = true;
   }
 
   async simulateCalendarChange(eventId: string): Promise<void> {

@@ -8,6 +8,7 @@ import type {
   AgentReceipt,
   ApprovalCard,
   DemoSandboxState,
+  InboxReadResult,
   ScheduleReadResult,
 } from "@bander/contracts";
 import { CompilerError, type DraftCompiler } from "./compiler.js";
@@ -33,16 +34,22 @@ interface BrokerAppOptions {
   simulateCalendarChange?: () => Promise<void>;
   simulateCancellationCalendarChange?: () => Promise<void>;
   prepareAmbiguousCalendarOutcome?: () => void;
+  prepareAmbiguousEmailOutcome?: () => void;
+  simulateEmailThreadChange?: () => void;
   dropNextStandingRunResponseAfterCompletion?: () => boolean;
   heroMode?: boolean;
   readHeroState?: () => Promise<DemoSandboxState>;
   readDemoState?: () => Promise<DemoSandboxState>;
   readDemoSchedule?: () => Promise<ScheduleReadResult>;
+  readDemoInbox?: () => Promise<DemoSandboxState["inbox"]>;
   readSchedule?: (
     request: string,
   ) => Promise<
     ScheduleReadResult | { status: "clarification_required"; question: string }
   >;
+  readInbox?: (
+    request: string,
+  ) => Promise<InboxReadResult | { status: "clarification_required"; question: string }>;
 }
 
 function sendError(error: unknown, reply: { code(status: number): { send(body: unknown): unknown } }) {
@@ -57,14 +64,15 @@ function sendError(error: unknown, reply: { code(status: number): { send(body: u
 }
 
 export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
-  if (options.runtimeMode === "real" && !options.readSchedule) {
-    throw new Error("Real Bander requires the bounded schedule reader");
+  if (options.runtimeMode === "real" && (!options.readSchedule || !options.readInbox)) {
+    throw new Error("Real Bander requires bounded Calendar and inbox readers");
   }
   const app = Fastify({
     logger: false,
     ajv: { customOptions: { removeAdditional: false } },
   });
   const ambiguousDemoDrafts = new Set<string>();
+  const ambiguousEmailDemoDrafts = new Set<string>();
   const ambiguousSandboxOutcome = {
     status: "calendar_outcome_ambiguous" as const,
     message: [
@@ -81,10 +89,15 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     runtimeMode: options.runtimeMode ?? "sandbox",
     fixtureMode: options.runtimeMode !== "real",
     calendarBackend: options.runtimeMode === "real" ? "google" : "sandbox",
-    compilerKind: options.runtimeMode === "real" ? "real_calendar" : "fixture",
+    gmailBackend: options.runtimeMode === "real" ? "google" : "sandbox",
+    compilerKind: options.runtimeMode === "real" ? "real_product" : "fixture",
     modelCompiler: options.compiler ? "available" : "not_configured",
     scheduleRead:
       options.runtimeMode === "real" && options.readSchedule
+        ? "available"
+        : "not_configured",
+    inboxRead:
+      options.runtimeMode === "real" && options.readInbox
         ? "available"
         : "not_configured",
     heroMode: options.heroMode === true,
@@ -182,6 +195,13 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     return options.readDemoSchedule();
   });
 
+  app.get("/api/demo/inbox/important", async (_request, reply) => {
+    if (options.runtimeMode === "real" || !options.readDemoInbox) {
+      return reply.code(404).send({ error: { code: "not_found", message: "API route not found" } });
+    }
+    return { messages: await options.readDemoInbox(), seeded: true };
+  });
+
   app.post("/api/demo/reset", async (_request, reply) => {
     if (options.runtimeMode === "real") {
       return reply.code(404).send({
@@ -195,12 +215,50 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     }
     try {
       ambiguousDemoDrafts.clear();
+      ambiguousEmailDemoDrafts.clear();
       await options.resetDemo();
       return reply.code(204).send();
     } catch (error) {
       return sendError(error, reply);
     }
   });
+
+  app.post<{ Params: { draftId: string }; Body: { draftHash: string } }>(
+    "/api/demo/drafts/:draftId/approve-email-ambiguous",
+    async (request, reply) => {
+      if (options.runtimeMode === "real" || !options.prepareAmbiguousEmailOutcome) {
+        return reply.code(404).send({ error: { code: "not_found", message: "API route not found" } });
+      }
+      const message = "I couldn’t confirm whether the approved email reply was sent.\nI won’t send it again automatically.\nPlease check your Sent folder before asking your assistant again.";
+      if (ambiguousEmailDemoDrafts.has(request.params.draftId)) return { status: "email_outcome_ambiguous", message };
+      options.prepareAmbiguousEmailOutcome();
+      try {
+        await options.engine.approveAndExecute(request.params.draftId, request.body.draftHash);
+        return reply.code(500).send({ error: { code: "simulation_failed", message: "Email ambiguity simulation unexpectedly completed" } });
+      } catch (error) {
+        if (error instanceof AuthorityError && error.code === "email_outcome_ambiguous") {
+          ambiguousEmailDemoDrafts.add(request.params.draftId);
+          return { status: error.code, message };
+        }
+        return sendError(error, reply);
+      }
+    },
+  );
+
+  app.post<{ Params: { draftId: string }; Body: { draftHash: string } }>(
+    "/api/demo/drafts/:draftId/approve-after-email-thread-change",
+    async (request, reply) => {
+      if (options.runtimeMode === "real" || !options.simulateEmailThreadChange) {
+        return reply.code(404).send({ error: { code: "not_found", message: "API route not found" } });
+      }
+      options.simulateEmailThreadChange();
+      try {
+        return await options.engine.approveAndExecute(request.params.draftId, request.body.draftHash);
+      } catch (error) {
+        return sendError(error, reply);
+      }
+    },
+  );
 
   app.post<{
     Params: { draftId: string };

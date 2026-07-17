@@ -10,6 +10,8 @@ const PRODUCT_SECRET_KEYS = [
   "OPENCLAW_TELEGRAM_BOT_TOKEN",
   "GOOGLE_OAUTH_CLIENT_PATH",
   "GOOGLE_OAUTH_TOKEN_PATH",
+  "GMAIL_OAUTH_CLIENT_PATH",
+  "GMAIL_OAUTH_TOKEN_PATH",
   "BANDER_TELEGRAM_STATE_PATH",
   "BANDER_TELEGRAM_PAIRING_PATH",
   "BANDER_FAMILY_PAIRING_PATH",
@@ -132,6 +134,8 @@ function sanitizedProductEnvironment(blockProductNetwork = true): NodeJS.Process
   delete sanitizedEnvironment.OPENCLAW_TELEGRAM_BOT_TOKEN;
   delete sanitizedEnvironment.GOOGLE_OAUTH_CLIENT_PATH;
   delete sanitizedEnvironment.GOOGLE_OAUTH_TOKEN_PATH;
+  delete sanitizedEnvironment.GMAIL_OAUTH_CLIENT_PATH;
+  delete sanitizedEnvironment.GMAIL_OAUTH_TOKEN_PATH;
   delete sanitizedEnvironment.BANDER_TELEGRAM_STATE_PATH;
   delete sanitizedEnvironment.BANDER_TELEGRAM_PAIRING_PATH;
   delete sanitizedEnvironment.BANDER_FAMILY_PAIRING_PATH;
@@ -249,8 +253,8 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
     const demo = run("npm", ["run", "verify:demo"], { cwd: clone, env: environment });
     const parsedStart = demo.stdout.lastIndexOf("{");
     const outcomes = parsedStart >= 0 ? JSON.parse(demo.stdout.slice(parsedStart)) as Record<string, string> : {};
-    if (Object.keys(outcomes).length !== 18 || Object.values(outcomes).some((value) => value === "unexpected")) {
-      throw new Error("The deterministic demo did not report eighteen green outcomes");
+    if (Object.keys(outcomes).length !== 27 || Object.values(outcomes).some((value) => value === "unexpected")) {
+      throw new Error("The deterministic demo did not report 27 green outcomes");
     }
     await proveDemoStarts(clone, environment);
     if (run("git", ["status", "--porcelain"], { cwd: clone }).stdout !== "") {
@@ -263,7 +267,7 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
         "- npm ci, typecheck, and production build passed",
         "- no-account doctor reported actionable real-setup gaps",
         "- deterministic sandbox started without accounts",
-        "- eighteen of eighteen demo outcomes passed",
+        "- 27 of 27 demo outcomes passed",
         "- no Google, Telegram, or OpenAI product endpoint was reachable",
         "- isolated working tree remained clean",
       ].join("\n") + "\n",

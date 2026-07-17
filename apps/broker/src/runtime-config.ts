@@ -13,6 +13,9 @@ export type BanderRuntimeConfiguration =
       openaiApiKey: string;
       googleClientPath: string;
       googleTokenPath: string;
+      gmailClientPath: string;
+      gmailTokenPath: string;
+      gmailDropSuccessfulResponseForEvidence: boolean;
       calendarTimeZone: string;
       telegramToken: string;
       telegramStatePath: string;
@@ -44,6 +47,11 @@ export function parseRuntimeConfiguration(
     ) {
       throw new Error("Real mode cannot include mock-service configuration");
     }
+    const googleTokenPath = required(environment, "GOOGLE_OAUTH_TOKEN_PATH", "real");
+    const gmailTokenPath = required(environment, "GMAIL_OAUTH_TOKEN_PATH", "real");
+    if (path.resolve(googleTokenPath) === path.resolve(gmailTokenPath)) {
+      throw new Error("Calendar and Gmail OAuth token paths must be different");
+    }
     return {
       mode: "real",
       openaiApiKey: required(environment, "OPENAI_API_KEY", "real"),
@@ -52,11 +60,11 @@ export function parseRuntimeConfiguration(
         "GOOGLE_OAUTH_CLIENT_PATH",
         "real",
       ),
-      googleTokenPath: required(
-        environment,
-        "GOOGLE_OAUTH_TOKEN_PATH",
-        "real",
-      ),
+      googleTokenPath,
+      gmailClientPath: required(environment, "GMAIL_OAUTH_CLIENT_PATH", "real"),
+      gmailTokenPath,
+      gmailDropSuccessfulResponseForEvidence:
+        environment.BANDER_GMAIL_LIVE_EVIDENCE_DROP_RESPONSE === "1",
       calendarTimeZone: required(
         environment,
         "BANDER_CALENDAR_TIME_ZONE",
@@ -96,3 +104,4 @@ export function parseRuntimeConfiguration(
       ".bander/telegram-service/pairing-link.txt",
   };
 }
+import path from "node:path";

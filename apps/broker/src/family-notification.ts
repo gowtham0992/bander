@@ -43,6 +43,14 @@ export function parseFamilyNotificationDocument(value: unknown): FamilyNotificat
   const keys = Object.keys(input).sort();
   const transitionKeys = ["eventTitle", "kind", "newEndTime", "newStartTime", "timeZone"];
   const creationKeys = ["endTime", "eventTitle", "kind", "startTime", "timeZone"];
+  const directKeys = ["body", "kind"];
+  if (JSON.stringify(keys) === JSON.stringify(directKeys) && input.kind === "direct_message" && typeof input.body === "string") {
+    const body = clean(input.body, 500);
+    if (!body || body !== input.body || /(?:https?:\/\/|www\.|\b(?:t\.me|telegram\.me)\/)/i.test(body) || /^\s*\//.test(body)) {
+      throw new FamilyNotificationError("invalid_document", "Invalid direct family message");
+    }
+    return { kind: "direct_message", body };
+  }
   if (
     JSON.stringify(keys) !== JSON.stringify(transitionKeys) &&
     JSON.stringify(keys) !== JSON.stringify(creationKeys)

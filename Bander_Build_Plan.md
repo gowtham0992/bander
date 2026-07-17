@@ -21,8 +21,8 @@ The core claim stays small and testable:
 The filmed Build Week journey is:
 
 1. A parent speaks naturally in one private Telegram group. A dedicated Bander-protected OpenClaw profile converses normally and uses genuine `gpt-5.6-sol` tool selection.
-2. The parent asks what is on their Calendar. OpenClaw calls Bander's bounded read tool and answers with minimal schedule facts; no review Card, approval authority, or mutation is created.
-3. The parent asks to move one appointment and let a connected family member know. OpenClaw sends the newest natural request through Bander's proposal tool.
+2. The parent asks what is on their Calendar or what one clearly identified sender said. OpenClaw calls Bander's bounded read tool and answers with minimal schedule or inbox facts; no review Card, approval authority, or mutation is created.
+3. The parent asks to change Calendar state, reply to one resolved email, or send one exact message to a connected family member. OpenClaw sends the newest natural request through Bander's proposal tool.
 4. Bander makes a separate live `gpt-5.6-sol` call that returns only bounded intent hints. Deterministic code resolves exactly one eligible event and the exact active family-contact pairing.
 5. The separate Bander Telegram bot posts one review Card containing the complete Calendar change and the exact deterministic family update, then asks the bound owner to approve or decline.
 6. Approval conditionally updates the Calendar first with the stored ETag. Only after confirmed Calendar success does Bander attempt the exact approved family update through its own bot.
@@ -37,6 +37,7 @@ Implemented in real mode:
 
 - conversational OpenClaw for greetings and ordinary chat, with no Bander call unless the model genuinely selects a Bander tool;
 - bounded schedule reads from the connected primary Calendar for an explicit range of at most 31 days, including timed, all-day, and recurring occurrences;
+- bounded Gmail reads through a separate Gmail token, excluding spam/trash and returning only sanitized sender, subject, received time, and a bounded plain-text excerpt;
 - a separate sanitized read DTO with at most 50 events and no Calendar identifiers, descriptions, locations, attendees, links, ETags, or OAuth data;
 - natural-language Google Calendar rescheduling;
 - natural-language creation of one timed default Calendar event;
@@ -50,6 +51,8 @@ Implemented in real mode:
 - a cryptographically strong client-supplied Google event ID generated once per create proposal and committed inside the immutable action;
 - complete source/destination disclosure, duration preservation, cross-day moves, and IANA timezone handling;
 - owner-bound Telegram approval and decline;
+- one exact approved plain-text reply to one resolved inbound Gmail thread, pinned before approval with a stable RFC Message-ID, opaque reconciliation header, and byte-stable MIME;
+- one exact approved independent family message, derived from the parent’s request and delivered unchanged through the existing consented route;
 - one durable, consented family contact with operator-defined aliases and independent owner/contact revocation;
 - one compound Calendar change plus deterministic family update, bound to the exact contact pairing before approval;
 - a single Card whose family text is rendered by the same deterministic renderer used for delivery;
@@ -58,7 +61,7 @@ Implemented in real mode:
 - replay-safe confirmed family delivery and permanent no-retry reporting after an ambiguous Telegram response; and
 - a human-only outcome constructed from observed effect results rather than intended effects.
 
-Schedule reads create no Card, approval authority, or mutation. Zero or multiple writable matches, missing action-specific fields, unknown or unconnected family references, free-form family messages, bulk or non-Calendar cancellation, unsupported event shapes, malformed or broadened model output, and Google failures create no authority.
+Schedule and inbox reads create no Card, approval authority, or mutation. Zero or multiple matches, missing action-specific fields, unknown or unconnected family references, unsupported communication shapes, malformed or broadened model output, and provider failures create no authority.
 
 ## 4. Parent-facing experience
 
@@ -81,7 +84,7 @@ The person can always tell whether anything happened:
 
 Use this statement verbatim in public materials:
 
-> In the Bander-protected OpenClaw profile, the model can converse, request bounded schedule facts, and propose through four bounded Bander tools. It does not receive the connected Google credential or family routing, cannot approve its own proposal, and cannot author Bander’s Card, family update, or outcome. Bander does not protect a host already compromised at the operating-system/user-account level.
+> In the Bander-protected OpenClaw profile, the model can converse, request bounded schedule and inbox facts, and propose through five bounded Bander tools. It does not receive Google credentials or family routing, cannot approve its own proposal, and cannot author Bander’s Card or outcome. Bander does not protect a host already compromised at the operating-system/user-account level.
 
 The strong route claim applies only to the dedicated protected profile and only to effects routed through Bander. It does not restrict another OpenClaw profile, another tool, another credential, or another process owned by the user.
 
@@ -115,7 +118,7 @@ Family delivery is bound to the opaque contact and pairing revision stored in th
 
 ## 7. GPT-5.6 Sol's bounded role
 
-Real mode uses the exact model ID `gpt-5.6-sol` in three roles:
+Real mode uses the exact model ID `gpt-5.6-sol` for conversation/tool selection plus separate bounded Calendar, Gmail-read, and product-action Structured Outputs:
 
 1. OpenClaw uses it for conversation and genuine tool selection.
 2. Bander uses a separate Responses API Structured Output call to compile a bounded schedule range.
@@ -128,7 +131,7 @@ Real mode uses the exact model ID `gpt-5.6-sol` in three roles:
    - whether a family update was requested; and
    - the human alias used.
 
-The model does not select a Calendar ID, event ID, ETag, final end, recipient address, Telegram destination, message body, effect, authority object, or execution parameter. Deterministic code resolves the real event and the one active contact alias, calculates the final end from exact duration, constructs the Draft, and renders the family update. Model refusal, ambiguity, timeout, malformed JSON, missing fields, invented fields, or broadened intent creates no authority.
+The model does not select a Calendar ID, Gmail message/thread ID, event ID, ETag, final end, recipient address, Telegram destination, MIME/header value, effect, authority object, or execution parameter. For an email reply or independent family message it may extract the parent’s requested plain text, but Bander stores, hashes, displays, and later reproduces that exact bounded text unchanged. Calendar-bound family text remains a deterministic rendering of authoritative Calendar state. Model refusal, ambiguity, timeout, malformed JSON, missing fields, invented fields, or broadened intent creates no authority.
 
 ## 8. Telegram installation and privacy
 
@@ -152,12 +155,13 @@ Every callback is independently bound to the installation, owner Telegram ID, gr
 
 ### Real product
 
-`npm run real` means live conversational OpenClaw, live `gpt-5.6-sol`, real Google Calendar, bounded schedule reads, and the genuine Bander Telegram Card/outcome/family-update path. Startup fails unless real mode, the Google adapter, active owner/group pairing, live model provider, exactly four Bander tools, credential separation, and absence of fixture routes all validate.
+`npm run real` means live conversational OpenClaw, live `gpt-5.6-sol`, real Google Calendar, bounded Gmail, and the genuine Bander Telegram Card/outcome/family path. Startup fails unless real mode, both Google adapters, active owner/group pairing, live model provider, exactly five Bander tools, credential separation, and absence of fixture routes all validate.
 
-The four real tools are:
+The five real tools are:
 
 - `bander__list_capabilities`;
 - `bander__read_schedule`;
+- `bander__read_inbox`;
 - `bander__propose_action`; and
 - `bander__get_receipt`.
 
@@ -167,7 +171,7 @@ Real authority state is currently process-local, memory-only, and not restart-du
 
 `npm run hero` is the reproducible Telegram/judge sandbox. It uses a deterministic model provider plus seeded mock Calendar and Messages services. It proves authority, privacy, replay, recovery, standing limits, and presentation without personal accounts. It never claims a Google mutation and is not the canonical parent product.
 
-`npm run demo` is the fully local browser version of the deterministic sandbox. Its primary lanes remain schedule read, one exact move-plus-family deal, and an unknowable provider result. Secondary seeded journeys demonstrate add and remove Cards, exact family-text equality, decline, replay, and changed-world cancellation without touching Google, Telegram, or OpenAI.
+`npm run demo` is the fully local browser version of the deterministic sandbox. Its seeded email read/reply and independent-family journeys join the existing schedule, Calendar, ambiguity, decline, replay, recovery, and standing proofs without touching Google, Gmail, Telegram, OpenAI, or real people.
 
 The sandbox's seeded Messages examples and standing autonomy remain valuable test surfaces. Standing autonomy remains sandbox-only and is not a current real-product capability.
 
@@ -178,7 +182,7 @@ The implementation is accepted only with executable evidence:
 - functional and type checks;
 - an authority attack suite whose important mutations were observed failing first;
 - idempotent one-time and standing recovery tests through real local HTTP processes;
-- a real OpenClaw verifier with exactly four tools and no downstream credentials;
+- a real OpenClaw verifier with exactly five tools and no downstream credentials;
 - empirical Telegram owner/non-owner, wrong-chat/message/callback, imitation, replay, decline, delivery-retry, and trajectory-privacy checks;
 - Google OAuth, authoritative timezone, conditional write, stale ETag, concurrent ETag, ambiguous matching, unsupported shape, and failure-response tests;
 - a real `gpt-5.6-sol` evidence call and malformed/broadened-output tests;
@@ -193,7 +197,7 @@ Bander does not currently claim:
 
 - arbitrary Calendar search, descriptions, locations, attendee details, or ranges longer than 31 days;
 - bulk Calendar deletion, recurring/all-day/attendee-bearing/external-organizer cancellation, recurrence creation, attendee invitations, conferencing, reservations, locations, descriptions, attachments, or custom reminders;
-- arbitrary Telegram messages, email, or model-authored family updates;
+- arbitrary Telegram messages, new outbound email threads, reply-all, forwarding, attachments, additional recipients, or model-controlled routing;
 - more than one active family contact;
 - reservations, purchases, payments, transportation, medical actions, locks, or smart-home control;
 - prompt-injection detection or model-behavior correctness;

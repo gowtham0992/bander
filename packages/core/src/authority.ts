@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   AgentReceipt,
   ApprovalCard,
@@ -22,7 +22,9 @@ import type {
 import { hashCanonical, hashDraft } from "./canonical.js";
 import {
   renderApprovalCard,
+  createDirectFamilyDocument,
   createFamilyNotificationDocument,
+  sanitizeFamilyNotificationTitle,
   renderHumanReceipt,
   renderStandingBandCard,
 } from "./card.js";
@@ -32,7 +34,7 @@ import { AuthorityStore } from "./store.js";
 export interface DraftFixture {
   id: string;
   claimedUserRequest: string;
-  calendar:
+  calendar?:
     | {
         kind: "reschedule";
         eventId: string;
@@ -52,6 +54,7 @@ export interface DraftFixture {
         eventId: string;
         expectedEtag: string;
       };
+  emailReply?: Extract<DraftEffect, { type: "email.reply" }>;
   message?: {
     recipientId: string;
     expectedRecipientRevision: number;
@@ -82,13 +85,13 @@ export interface ExecutionAdapter {
 }
 
 export class ExecutionConflictError extends Error {
-  constructor() {
+  constructor(readonly kind: "calendar" | "email" = "calendar") {
     super("A downstream resource changed");
   }
 }
 
 export class ExecutionAmbiguousError extends Error {
-  constructor() {
+  constructor(readonly kind: "calendar" | "email" | "family" = "calendar") {
     super("The downstream result could not be confirmed");
   }
 }
@@ -102,6 +105,12 @@ export class ExecutionAlreadyAbsentError extends Error {
 export class ExecutionRejectedError extends Error {
   constructor(readonly action: "create" | "cancel") {
     super(`The downstream service definitively rejected the ${action} operation`);
+  }
+}
+
+export class ExecutionEmailRejectedError extends Error {
+  constructor() {
+    super("The email service definitively rejected the approved reply");
   }
 }
 
@@ -137,6 +146,13 @@ export interface StandingBandSummary {
 }
 
 export function digestStandingRequest(fixture: DraftFixture): string {
+  if (!fixture.calendar) {
+    throw new AuthorityError(
+      "standing_communication_unsupported",
+      "Email and family messages require one-time review",
+      422,
+    );
+  }
   if (fixture.calendar.kind === "create") {
     throw new AuthorityError(
       "standing_create_unsupported",
@@ -861,26 +877,29 @@ export class AuthorityEngine {
     fixture: DraftFixture,
     bindToCurrentState = false,
   ): Promise<StoredDraft> {
-    const creating = fixture.calendar.kind === "create";
-    const cancelling = fixture.calendar.kind === "cancel";
+    const directFamily = fixture.familyNotification?.document.kind === "direct_message";
+    const primaryCount = [fixture.calendar, fixture.emailReply, directFamily ? fixture.familyNotification : undefined].filter(Boolean).length;
+    if (primaryCount !== 1 || (fixture.emailReply && (fixture.message || fixture.familyNotification))) {
+      throw new AuthorityError(
+        "invalid_deal_shape",
+        "Bander requires one bounded primary action",
+        422,
+      );
+    }
+    const creating = fixture.calendar?.kind === "create";
+    const cancelling = fixture.calendar?.kind === "cancel";
     const createFixture = creating
-      ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "create" }>)
+      ? (fixture.calendar as Extract<NonNullable<DraftFixture["calendar"]>, { kind: "create" }>)
       : undefined;
     const cancelFixture = cancelling
-      ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "cancel" }>)
+      ? (fixture.calendar as Extract<NonNullable<DraftFixture["calendar"]>, { kind: "cancel" }>)
       : undefined;
-    const rescheduleFixture = !creating && !cancelling
-      ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "reschedule" }>)
+    const rescheduleFixture = fixture.calendar && !creating && !cancelling
+      ? (fixture.calendar as Extract<NonNullable<DraftFixture["calendar"]>, { kind: "reschedule" }>)
       : undefined;
     if (creating) {
       const duration = Date.parse(createFixture!.endTime) - Date.parse(createFixture!.startTime);
-      const sanitizedTitle = createFamilyNotificationDocument({
-        kind: "calendar_creation",
-        eventTitle: createFixture!.title,
-        startTime: createFixture!.startTime,
-        endTime: createFixture!.endTime,
-        timeZone: createFixture!.timeZone,
-      }).eventTitle;
+      const sanitizedTitle = sanitizeFamilyNotificationTitle(createFixture!.title);
       if (
         !/^[0-9a-v]{5,1024}$/.test(createFixture!.eventId) ||
         sanitizedTitle !== createFixture!.title ||
@@ -894,7 +913,7 @@ export class AuthorityEngine {
         );
       }
     }
-    const event = creating
+    const event = !fixture.calendar || creating
       ? undefined
       : await this.#adapter.resolveEvent(
           cancelling ? cancelFixture!.eventId : rescheduleFixture!.eventId,
@@ -904,7 +923,7 @@ export class AuthorityEngine {
       : undefined;
 
     if (
-      !creating &&
+      fixture.calendar && !creating &&
       !bindToCurrentState &&
       event!.etag !== (cancelling ? cancelFixture!.expectedEtag : rescheduleFixture!.expectedEtag)
     ) {
@@ -925,9 +944,33 @@ export class AuthorityEngine {
         409,
       );
     }
+    if (fixture.emailReply) {
+      const reply = fixture.emailReply;
+      const mimeBytes = Buffer.from(reply.rawMimeBase64Url, "base64url");
+      if (
+        reply.type !== "email.reply" ||
+        !/^[a-f0-9]{64}$/.test(reply.mimeDigest) ||
+        createHash("sha256").update(mimeBytes).digest("hex") !== reply.mimeDigest ||
+        !/^<[^\r\n<>\s]+@[^\r\n<>\s]+>$/.test(reply.rfcMessageId) ||
+        !/^[a-f0-9]{64}$/.test(reply.reconciliationToken) ||
+        /[\r\n]/.test(reply.recipient) ||
+        /[\r\n]/.test(reply.subject) ||
+        !reply.body.trim()
+      ) {
+        throw new AuthorityError(
+          "invalid_email_reply",
+          "The email reply is outside Bander’s supported shape",
+          422,
+        );
+      }
+    }
 
-    const effects: DraftEffect[] = creating
-      ? [
+    const effects: DraftEffect[] = fixture.emailReply
+      ? [structuredClone(fixture.emailReply)]
+      : !fixture.calendar
+        ? []
+        : creating
+        ? [
           {
             type: "calendar.create_event",
             calendarId: "primary",
@@ -939,7 +982,7 @@ export class AuthorityEngine {
             eventType: "default",
           },
         ]
-      : cancelling
+        : cancelling
         ? [
             {
               type: "calendar.cancel_event",
@@ -958,7 +1001,7 @@ export class AuthorityEngine {
               },
             },
           ]
-      : [
+        : [
       {
         type: "calendar.reschedule_event",
         eventId: event!.id,
@@ -1003,7 +1046,9 @@ export class AuthorityEngine {
           422,
         );
       }
-      const canonicalDocument = creating
+      const canonicalDocument = directFamily
+        ? createDirectFamilyDocument((fixture.familyNotification.document as Extract<FamilyNotificationDocument, { kind: "direct_message" }>).body)
+        : creating
         ? createFamilyNotificationDocument({
             kind: "calendar_creation",
             eventTitle: createFixture!.title,
@@ -1199,8 +1244,10 @@ export class AuthorityEngine {
         }
         this.#store.updateDraft({ ...draft, status: "conflict" });
         throw new AuthorityError(
-          "conflict",
-          "Your calendar changed after you approved this. I didn’t act.",
+          error.kind === "email" ? "email_thread_changed" : "conflict",
+          error.kind === "email"
+            ? "The email thread changed after approval. No reply was sent."
+            : "Your calendar changed after you approved this. I didn’t act.",
           409,
         );
       }
@@ -1232,6 +1279,19 @@ export class AuthorityEngine {
           409,
         );
       }
+      if (error instanceof ExecutionEmailRejectedError) {
+        const completedAt = this.#now().toISOString();
+        this.#store.updatePermit({ ...permit, consumedAt: completedAt });
+        if (band.mode === "one_time") {
+          this.#store.updateBand({ ...band, status: "consumed" });
+        }
+        this.#store.updateDraft({ ...draft, status: "conflict" });
+        throw new AuthorityError(
+          "email_send_rejected",
+          "The email service rejected the exact approved reply",
+          409,
+        );
+      }
       if (error instanceof ExecutionAmbiguousError) {
         const completedAt = this.#now().toISOString();
         this.#store.updatePermit({ ...permit, consumedAt: completedAt });
@@ -1240,8 +1300,12 @@ export class AuthorityEngine {
         }
         this.#store.updateDraft({ ...draft, status: "conflict" });
         throw new AuthorityError(
-          "calendar_outcome_ambiguous",
-          "Bander could not confirm the Calendar result and did not notify anyone.",
+          `${error.kind}_outcome_ambiguous`,
+          error.kind === "email"
+            ? "Bander could not confirm whether the approved email reply was sent."
+            : error.kind === "family"
+              ? "Bander could not confirm whether the approved family message was sent."
+              : "Bander could not confirm the Calendar result and did not notify anyone.",
           409,
         );
       }
@@ -1268,7 +1332,11 @@ export class AuthorityEngine {
     const family = draft.document.effects.find(
       (effect) => effect.type === "family.telegram_notification",
     );
-    const actionCount = [calendar, createdCalendar, cancelledCalendar].filter(Boolean).length;
+    const emailReply = draft.document.effects.find(
+      (effect) => effect.type === "email.reply",
+    );
+    const directFamily = family?.document.kind === "direct_message";
+    const actionCount = [calendar, createdCalendar, cancelledCalendar, emailReply, directFamily ? family : undefined].filter(Boolean).length;
     const expectedStart = calendar
       ? calendar.changes.startTime
       : createdCalendar
@@ -1286,8 +1354,8 @@ export class AuthorityEngine {
         : cancelledCalendar?.expected.timeZone;
     if (
       actionCount !== 1 ||
-      ((createdCalendar || cancelledCalendar) && !observed) ||
-      (observed &&
+      ((createdCalendar || cancelledCalendar || emailReply || directFamily) && !observed) ||
+      (observed?.calendar &&
         (Date.parse(observed.calendar.completed.startTime) !==
           Date.parse(expectedStart!) ||
           Date.parse(observed.calendar.completed.endTime) !==
@@ -1295,6 +1363,9 @@ export class AuthorityEngine {
           observed.calendar.completed.timeZone !== expectedTimeZone ||
           (createdCalendar && observed.calendar.action !== "created") ||
           (cancelledCalendar && observed.calendar.action !== "removed"))) ||
+      ((calendar || createdCalendar || cancelledCalendar) && !observed?.calendar && Boolean(observed)) ||
+      (emailReply && !observed?.emailReply) ||
+      (!emailReply && observed?.emailReply) ||
       (family && !observed?.familyNotification) ||
       (!family && observed?.familyNotification)
     ) {

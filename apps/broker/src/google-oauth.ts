@@ -143,6 +143,8 @@ async function openAuthorizationInBrowser(url: string): Promise<void> {
 
 async function authorizeInteractively(
   desktop: DesktopOAuthClient,
+  scopes: readonly string[],
+  productLabel: string,
 ): Promise<{ client: GoogleOAuth2Client; tokens: GoogleCredentials }> {
   const state = randomBytes(32).toString("base64url");
   const pkce = createPkcePair();
@@ -165,7 +167,7 @@ async function authorizeInteractively(
   const authorizationUrl = client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [GOOGLE_CALENDAR_SCOPE],
+    scope: [...scopes],
     state,
     code_challenge_method: "S256" as GoogleCodeChallengeMethod,
     code_challenge: pkce.codeChallenge,
@@ -189,14 +191,14 @@ async function authorizeInteractively(
         const code = readOAuthCallback(callbackUrl.toString(), state);
         response
           .writeHead(200, { "content-type": "text/plain; charset=utf-8" })
-          .end("Bander is connected to the fictional filming calendar. You can close this tab.");
+          .end(`Bander is connected to ${productLabel}. You can close this tab.`);
         clearTimeout(timeout);
         server.close();
         resolve(code);
       } catch (error) {
         response
           .writeHead(400, { "content-type": "text/plain; charset=utf-8" })
-          .end("Bander could not complete Google Calendar authorization.");
+          .end("Bander could not complete Google authorization.");
         clearTimeout(timeout);
         server.close();
         reject(error);
@@ -219,9 +221,12 @@ async function authorizeInteractively(
   }
 }
 
-export async function loadGoogleCalendarOAuth(options: {
+export async function loadGoogleOAuth(options: {
   clientPath: string;
   tokenPath: string;
+  scopes: readonly string[];
+  productLabel: string;
+  exactScopes?: boolean;
 }): Promise<GoogleOAuth2Client> {
   const clientPath = path.resolve(options.clientPath);
   const tokenPath = path.resolve(options.tokenPath);
@@ -238,7 +243,7 @@ export async function loadGoogleCalendarOAuth(options: {
     });
     client.setCredentials(credentials);
   } else {
-    const authorized = await authorizeInteractively(desktop);
+    const authorized = await authorizeInteractively(desktop, options.scopes, options.productLabel);
     client = authorized.client;
     credentials = authorized.tokens;
     if (!credentials.refresh_token) {
@@ -254,8 +259,24 @@ export async function loadGoogleCalendarOAuth(options: {
   const access = await client.getAccessToken();
   if (!access.token) throw new Error("Google OAuth could not obtain an access token");
   const info = await client.getTokenInfo(access.token);
-  if (!info.scopes.includes(GOOGLE_CALENDAR_SCOPE)) {
-    throw new Error("Google OAuth did not grant the required Calendar scope");
+  const granted = [...info.scopes].sort();
+  const required = [...options.scopes].sort();
+  if (
+    options.scopes.some((scope) => !info.scopes.includes(scope)) ||
+    (options.exactScopes === true && JSON.stringify(granted) !== JSON.stringify(required))
+  ) {
+    throw new Error("Google OAuth did not grant the required scope set");
   }
   return client;
+}
+
+export async function loadGoogleCalendarOAuth(options: {
+  clientPath: string;
+  tokenPath: string;
+}): Promise<GoogleOAuth2Client> {
+  return loadGoogleOAuth({
+    ...options,
+    scopes: [GOOGLE_CALENDAR_SCOPE],
+    productLabel: "the fictional filming calendar",
+  });
 }

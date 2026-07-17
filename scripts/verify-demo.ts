@@ -85,6 +85,43 @@ const schedule = await request<{
   events: unknown[];
 }>("/api/demo/schedule/tomorrow");
 
+const inboxRead = await request<{ messages: Array<{ subject: string }>; seeded: boolean }>("/api/demo/inbox/important");
+
+await reset();
+const emailCard = await post<{ draftId: string; draftHash: string; effectPreviews: Array<{ kind: string; body?: string }> }>("/api/demo/proposals", { fixtureId: "reply-to-ruth-about-lunch" });
+const emailReceipt = await post<{ emailReply?: { body: string } }>(`/api/drafts/${emailCard.draftId}/approve`, { draftHash: emailCard.draftHash });
+const emailState = await request<{ sentEmails: Array<{ body: string }> }>("/api/demo/state");
+await post(`/api/drafts/${emailCard.draftId}/approve`, { draftHash: emailCard.draftHash });
+const emailReplayState = await request<{ sentEmails: Array<{ body: string }> }>("/api/demo/state");
+
+await reset();
+const emailDeclineCard = await post<{ draftId: string; draftHash: string }>("/api/demo/proposals", { fixtureId: "reply-to-ruth-about-lunch" });
+await post(`/api/drafts/${emailDeclineCard.draftId}/decline`);
+const emailDeclineState = await request<{ sentEmails: unknown[] }>("/api/demo/state");
+
+await reset();
+const emailThreadCard = await post<{ draftId: string; draftHash: string }>("/api/demo/proposals", { fixtureId: "reply-to-ruth-about-lunch" });
+const emailThreadConflict = await post<{ error: { code: string } }>(`/api/demo/drafts/${emailThreadCard.draftId}/approve-after-email-thread-change`, { draftHash: emailThreadCard.draftHash }, 409);
+const emailThreadState = await request<{ sentEmails: unknown[] }>("/api/demo/state");
+
+await reset();
+const emailAmbiguousCard = await post<{ draftId: string; draftHash: string }>("/api/demo/proposals", { fixtureId: "reply-to-ruth-about-lunch" });
+const emailAmbiguous = await post<{ status: string; message: string }>(`/api/demo/drafts/${emailAmbiguousCard.draftId}/approve-email-ambiguous`, { draftHash: emailAmbiguousCard.draftHash });
+const emailAmbiguousReplay = await post<{ status: string; message: string }>(`/api/demo/drafts/${emailAmbiguousCard.draftId}/approve-email-ambiguous`, { draftHash: emailAmbiguousCard.draftHash });
+const emailAmbiguousState = await request<{ sentEmails: unknown[] }>("/api/demo/state");
+
+await reset();
+const directFamilyCard = await post<{ draftId: string; draftHash: string; effectPreviews: Array<{ kind: string; body?: string }> }>("/api/demo/proposals", { fixtureId: "tell-gil-dinner-is-at-six" });
+const directFamilyReceipt = await post<{ familyNotification?: { body: string } }>(`/api/drafts/${directFamilyCard.draftId}/approve`, { draftHash: directFamilyCard.draftHash });
+const directFamilyState = await request<{ familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+await post(`/api/drafts/${directFamilyCard.draftId}/approve`, { draftHash: directFamilyCard.draftHash });
+const directFamilyReplayState = await request<{ familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+
+await reset();
+const directFamilyDeclineCard = await post<{ draftId: string; draftHash: string }>("/api/demo/proposals", { fixtureId: "tell-gil-dinner-is-at-six" });
+await post(`/api/drafts/${directFamilyDeclineCard.draftId}/decline`);
+const directFamilyDeclineState = await request<{ familyUpdates: unknown[] }>("/api/demo/state");
+
 await reset();
 const compoundCard = await post<{
   draftId: string;
@@ -237,6 +274,39 @@ console.log(
       standingRevoked: revokedRun.error.code,
       scheduleRead:
         schedule.events.length > 0 ? "zero_authority_seeded_answer" : "unexpected",
+      inboxRead:
+        inboxRead.seeded && inboxRead.messages.length === 1 && inboxRead.messages[0]?.subject === "Lunch next week"
+          ? "zero_authority_seeded_answer"
+          : "unexpected",
+      emailReplyApproval:
+        emailState.sentEmails.length === 1 && emailReceipt.emailReply?.body === emailState.sentEmails[0]?.body
+          ? "exact_approved_reply"
+          : "unexpected",
+      emailReplyReplay:
+        emailReplayState.sentEmails.length === 1 ? "no_second_email" : "unexpected",
+      emailReplyDecline:
+        emailDeclineState.sentEmails.length === 0 ? "zero_email" : "unexpected",
+      emailThreadChanged:
+        emailThreadConflict.error.code === "email_thread_changed" && emailThreadState.sentEmails.length === 0
+          ? "changed_world_zero_email"
+          : "unexpected",
+      emailAmbiguous:
+        emailAmbiguous.status === "email_outcome_ambiguous" &&
+        emailAmbiguousReplay.message === emailAmbiguous.message &&
+        emailAmbiguousState.sentEmails.length === 0 &&
+        emailAmbiguous.message.includes("won’t send it again")
+          ? "truthful_no_retry"
+          : "unexpected",
+      directFamilyApproval:
+        directFamilyState.familyUpdates.length === 1 &&
+        directFamilyCard.effectPreviews[0]?.body === directFamilyReceipt.familyNotification?.body &&
+        directFamilyReceipt.familyNotification?.body === directFamilyState.familyUpdates[0]?.body
+          ? "exact_text"
+          : "unexpected",
+      directFamilyReplay:
+        directFamilyReplayState.familyUpdates.length === 1 ? "no_second_message" : "unexpected",
+      directFamilyDecline:
+        directFamilyDeclineState.familyUpdates.length === 0 ? "zero_message" : "unexpected",
       compoundFamily:
         compoundState.familyUpdates.length === 1 &&
         compoundReplayState.familyUpdates.length === 1 &&

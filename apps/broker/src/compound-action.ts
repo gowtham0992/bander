@@ -37,7 +37,10 @@ function compoundEffects(document: DraftDocument) {
     (effect): effect is FamilyTelegramNotificationEffect =>
       effect.type === "family.telegram_notification",
   );
-  return { calendar, family };
+  const emailReply = document.effects.find(
+    (effect) => effect.type === "email.reply",
+  );
+  return { calendar, family, emailReply };
 }
 
 export class CompoundExecutionAdapter implements ExecutionAdapter {
@@ -47,6 +50,10 @@ export class CompoundExecutionAdapter implements ExecutionAdapter {
     readonly options: {
       calendar: ExecutionAdapter;
       deliver: (input: BoundFamilyNotificationDelivery) => Promise<DeliveryResult>;
+      reply?: (input: {
+        requestId: string;
+        effect: Extract<DraftDocument["effects"][number], { type: "email.reply" }>;
+      }) => Promise<{ status: "committed" | "observed_target" }>;
     },
   ) {}
 
@@ -70,23 +77,45 @@ export class CompoundExecutionAdapter implements ExecutionAdapter {
       }
       return structuredClone(existing.result);
     }
-    const { calendar, family } = compoundEffects(input.document);
+    const { calendar, family, emailReply } = compoundEffects(input.document);
+    const directFamily = family?.document.kind === "direct_message";
     if (
-      !calendar ||
+      [calendar, emailReply, directFamily ? family : undefined].filter(Boolean).length !== 1 ||
       input.document.effects.some(
         (effect) =>
           effect.type !== "calendar.reschedule_event" &&
           effect.type !== "calendar.create_event" &&
           effect.type !== "calendar.cancel_event" &&
+          effect.type !== "email.reply" &&
           effect.type !== "family.telegram_notification",
       ) ||
-      input.document.effects.length !== (family ? 2 : 1)
+      input.document.effects.length !== (calendar && family ? 2 : 1)
     ) {
       throw new Error("unsupported_real_execution_shape");
     }
+    if (emailReply) {
+      if (!this.options.reply) throw new Error("real_gmail_reply_not_configured");
+      const reply = await this.options.reply({
+        requestId: compoundDeliveryRequestId(input.draftHash, input.permitNonce).replace("compound_", "email_"),
+        effect: structuredClone(emailReply),
+      });
+      const result: ObservedExecutionResult = { emailReply: { status: reply.status } };
+      this.#results.set(input.permitNonce, { draftHash: input.draftHash, result: structuredClone(result) });
+      return result;
+    }
+    if (directFamily && family) {
+      const delivery = await this.options.deliver({
+        requestId: compoundDeliveryRequestId(input.draftHash, input.permitNonce).replace("compound_", "family_"),
+        binding: structuredClone(family.binding),
+        document: structuredClone(family.document),
+      });
+      const result: ObservedExecutionResult = { familyNotification: { status: delivery.status } };
+      this.#results.set(input.permitNonce, { draftHash: input.draftHash, result: structuredClone(result) });
+      return result;
+    }
     const calendarDocument: DraftDocument = {
       ...input.document,
-      effects: [calendar],
+      effects: [calendar!],
     };
     const observed = await this.options.calendar.executeDraft({
       ...input,
@@ -124,7 +153,8 @@ export class CompoundExecutionAdapter implements ExecutionAdapter {
         ? structuredClone(cached.result)
         : false;
     }
-    const { calendar, family } = compoundEffects(input.document);
+    const { calendar, family, emailReply } = compoundEffects(input.document);
+    if (emailReply || family?.document.kind === "direct_message") return false;
     if (!calendar) return false;
     const calendarResult = await this.options.calendar.getExecution({
       ...input,
@@ -133,9 +163,8 @@ export class CompoundExecutionAdapter implements ExecutionAdapter {
     if (!calendarResult || typeof calendarResult === "boolean") {
       return family ? false : calendarResult;
     }
-    const result: ObservedExecutionResult = {
-      calendar: structuredClone(calendarResult.calendar),
-    };
+    if (!calendarResult.calendar) return false;
+    const result: ObservedExecutionResult = { calendar: structuredClone(calendarResult.calendar) };
     if (family) {
       const delivery = await this.options.deliver({
         requestId: compoundDeliveryRequestId(input.draftHash, input.permitNonce),

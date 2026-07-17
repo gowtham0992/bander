@@ -7,20 +7,23 @@ Use the real product with fictional Calendar data and the invited family contact
 ## Tasks
 
 1. Say hello, then ask what is on the Calendar tomorrow. Explain why no Bander Card appeared.
-2. Ask to add lunch with a named person on a supplied day and time. Before approving, identify the title, complete interval, and what is explicitly not included. Approve and verify the new Calendar event.
-3. Ask to book a restaurant table. Explain Bander's limitation, then—without coaching—ask only to add the dinner to the Calendar.
-4. Ask to move one eligible appointment and let Gil know. Before approving, explain both effects, the complete before/after interval, and the exact text Gil would receive.
-5. Approve the compound move. Explain separately how they know the Calendar changed, Telegram accepted the update, and why that does not prove Gil read it.
-6. Prepare another request and choose **Not now**. Explain whether anything happened and whether the old Card can still be used.
-7. Ask to cancel a fictional dentist appointment. Explain whether approval removes only the Calendar event or also contacts the clinic. Use **Change it**, return to the same deal, then approve the removal.
-8. Prepare a second removal Card, change the event outside Bander, then approve. Explain why Bander stopped and whether anyone was contacted.
-9. Ask for an unsupported grocery order. Identify the safe next step without being told a magic sentence.
-10. Disconnect Gil. Explain what Bander can and cannot do afterward.
+2. Ask what Ruth said about lunch. Explain why the bounded inbox answer had no Card, then prepare an exact reply and identify its recipient, subject, and full text before approving.
+3. Ask to add lunch with a named person on a supplied day and time. Before approving, identify the title, complete interval, and what is explicitly not included. Approve and verify the new Calendar event.
+4. Ask to book a restaurant table. Explain Bander's limitation, then—without coaching—ask only to add the dinner to the Calendar.
+5. Ask to move one eligible appointment and let Gil know. Before approving, explain both effects, the complete before/after interval, and the exact text Gil would receive.
+6. Approve the compound move. Explain separately how they know the Calendar changed, Telegram accepted the update, and why that does not prove Gil read it.
+7. Prepare another request and choose **Not now**. Explain whether anything happened and whether the old Card can still be used.
+8. Ask to cancel a fictional dentist appointment. Explain whether approval removes only the Calendar event or also contacts the clinic. Use **Change it**, return to the same deal, then approve the removal.
+9. Prepare a second removal Card, change the event outside Bander, then approve. Explain why Bander stopped and whether anyone was contacted.
+10. Ask for an unsupported grocery order. Identify the safe next step without being told a magic sentence.
+11. Send one exact independent message to Gil, then disconnect Gil. Explain what Bander can and cannot do afterward.
 
 ## Success criteria
 
 - The participant distinguishes OpenClaw conversation from Bander approval and outcome messages.
 - They understand schedule reading needs no approval because it changes nothing.
+- They understand bounded email reading discloses sanitized email facts to the assistant, while an email reply requires an exact Card and cannot add recipients, reply-all, forward, or attach files.
+- They distinguish a deterministic Calendar update from an independent family message derived from their own request and shown exactly before approval.
 - They understand a create Card discloses the default or requested duration and does not imply an invitation, recurrence, or reservation.
 - They identify both effects and the complete before/after time before approving.
 - They understand **Do exactly this** applies once and **Not now** changes nothing.

@@ -36,6 +36,24 @@ export interface ScheduleReadResult {
   maxEvents: number;
 }
 
+export interface InboxReadMessage {
+  sender: string;
+  subject: string;
+  receivedAt: string;
+  excerpt: string;
+}
+
+export interface InboxReadResult {
+  requestedRange: {
+    startLocalDate: string;
+    endLocalDateExclusive: string;
+  };
+  messages: InboxReadMessage[];
+  empty: boolean;
+  truncated: boolean;
+  maxMessages: number;
+}
+
 export interface Person {
   id: string;
   displayName: string;
@@ -70,10 +88,26 @@ export interface DemoFamilyUpdateItem {
   sentAt: string;
 }
 
+export interface DemoInboxItem {
+  sender: string;
+  subject: string;
+  receivedAt: string;
+  excerpt: string;
+}
+
+export interface DemoSentEmailItem {
+  recipient: string;
+  subject: string;
+  body: string;
+  sentAt: string;
+}
+
 export interface DemoSandboxState {
   calendar: DemoCalendarItem[];
   messages: DemoMessageItem[];
   familyUpdates: DemoFamilyUpdateItem[];
+  inbox: DemoInboxItem[];
+  sentEmails: DemoSentEmailItem[];
 }
 
 export interface MockSeed {
@@ -158,7 +192,27 @@ export type FamilyNotificationDocument =
       startTime: string;
       endTime: string;
       timeZone: string;
+    }
+  | {
+      kind: "direct_message";
+      body: string;
     };
+
+export interface EmailReplyEffect {
+  type: "email.reply";
+  sourceMessageId: string;
+  threadId: string;
+  latestThreadMessageId: string;
+  recipient: string;
+  subject: string;
+  inReplyTo: string;
+  references: string[];
+  body: string;
+  rfcMessageId: string;
+  reconciliationToken: string;
+  rawMimeBase64Url: string;
+  mimeDigest: string;
+}
 
 export interface FamilyTelegramNotificationEffect {
   type: "family.telegram_notification";
@@ -176,6 +230,7 @@ export type DraftEffect =
   | CalendarCreateEffect
   | CalendarCancelEffect
   | MessageSendEffect
+  | EmailReplyEffect
   | FamilyTelegramNotificationEffect;
 
 export interface DraftDocument {
@@ -248,6 +303,12 @@ export type ApprovalEffectPreview =
   | {
       kind: "family.telegram_notification";
       recipientDisplayName: string;
+      body: string;
+    }
+  | {
+      kind: "email.reply";
+      recipient: string;
+      subject: string;
       body: string;
     };
 
@@ -352,7 +413,7 @@ export interface HumanReceipt {
   title: "Done";
   summary: string;
   detail: string;
-  calendar:
+  calendar?:
     | {
         title: string;
         previous: { startTime: string; endTime: string };
@@ -374,6 +435,12 @@ export interface HumanReceipt {
         timeZone: string;
         executionStatus: "committed" | "observed_target";
       };
+  emailReply?: {
+    recipient: string;
+    subject: string;
+    body: string;
+    status: "committed" | "observed_target";
+  };
   message?: {
     recipientDisplayName: string;
     body: string;
@@ -387,7 +454,7 @@ export interface HumanReceipt {
 }
 
 export interface ObservedExecutionResult {
-  calendar: {
+  calendar?: {
     status: "committed" | "observed_target";
     action?: "created" | "removed";
     completed: {
@@ -398,6 +465,9 @@ export interface ObservedExecutionResult {
   };
   familyNotification?: {
     status: "delivered" | "ambiguous" | "not_sent";
+  };
+  emailReply?: {
+    status: "committed" | "observed_target";
   };
 }
 

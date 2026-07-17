@@ -13,7 +13,7 @@ Live Devpost check: submissions close **July 21, 2026 at 5:00 PM Pacific Time** 
 - [x] Complete source/destination Card, owner approval and decline, duration preservation
 - [x] One real conditional Google mutation and truthful Bander outcome
 - [x] Real stale-ETag changed-world refusal with zero Bander mutation
-- [x] Exactly four bounded real-product tools and OpenClaw credential isolation
+- [x] Exactly five bounded real-product tools and OpenClaw credential isolation
 - [x] Only the bounded schedule DTO may enter the model trajectory; Card, callback, writable Calendar detail, credential, refusal, and outcome remain absent
 - [x] Deterministic Hero and browser sandbox preserved for judges
 - [x] Functional, attack, recovery, OpenClaw, Telegram, Google, Sol, build, audit, and secret checks recorded
@@ -56,6 +56,7 @@ Current required form fields also include submitter type, country of residence, 
 - [ ] Stop all stale gateways, then start only `npm run real`
 - [ ] Capture `Hi` → ordinary conversation with no Bander call
 - [ ] Capture a natural schedule question → warm real Calendar answer with no Bander Card
+- [ ] Capture one bounded Gmail read and one exact reply Card without exposing private content, Gmail IDs, headers, or OAuth details
 - [ ] Capture natural request → real Card → approval → one real Google move → truthful outcome
 - [ ] Capture the compound Card’s exact Gil update → real Calendar move → Gil lock-screen buzz → truthful combined outcome
 - [ ] Before filming, run the combined-family evidence checklist with fictional data: one create + Gil update, one move + Gil update, and one remove + Gil update
@@ -63,7 +64,7 @@ Current required form fields also include submitter type, country of residence, 
 - [ ] Confirm removal copy says it removes only the Calendar event and does not cancel an external appointment, reservation, or service
 - [ ] Revoke the family contact after the evidence run unless the filming session begins immediately
 - [ ] Capture independent Google change → approval → human refusal → zero Bander mutation
-- [ ] Show exactly four bounded Bander tools and the credential boundary briefly
+- [ ] Show exactly five bounded Bander tools and the separate Calendar/Gmail credential boundary briefly
 - [ ] Show selected red/green Codex evidence briefly
 - [ ] Keep secrets, account identifiers, OAuth details, generated config, and personal content off screen
 - [ ] Export, watch end to end, confirm narration and duration under three minutes
@@ -73,7 +74,7 @@ Current required form fields also include submitter type, country of residence, 
 
 - [ ] Tagline uses the final consumer promise
 - [ ] Project story covers problem, parent experience, architecture, exact claim, evidence, and limitations
-- [ ] Built-with list includes Codex, GPT-5.6 Sol, OpenClaw, TypeScript, Telegram, Google Calendar API, MCP
+- [ ] Built-with list includes Codex, GPT-5.6 Sol, OpenClaw, TypeScript, Telegram, Google Calendar API, Gmail API, MCP
 - [ ] Repository and video links open in a signed-out browser
 - [ ] `/feedback` Session ID entered only when the final core build is ready
 - [ ] Submit early, then reopen the public project page and verify every artifact

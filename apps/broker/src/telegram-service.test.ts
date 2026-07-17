@@ -23,6 +23,7 @@ import {
 } from "./telegram-service.js";
 import type { ProtectedGroupMemberStatus } from "./family-contact.js";
 import { renderFamilyNotification } from "./family-notification.js";
+import { buildPinnedReply } from "./gmail.js";
 
 const fixture: DraftFixture = {
   id: "telegram-fixture",
@@ -69,10 +70,22 @@ const familyNotificationDocument = {
   timeZone: "America/Denver",
 };
 
+const emailFixture: DraftFixture = {
+  id: "telegram-email-fixture",
+  claimedUserRequest: "Reply to Ruth that Tuesday at noon works.",
+  emailReply: buildPinnedReply({
+    source: { messageId: "source", threadId: "thread", latestThreadMessageId: "source", rfcMessageId: "<source@example.test>", references: [], replyRecipient: "ruth@example.test", subject: "Lunch" },
+    body: "Tuesday at noon works.",
+    stableMessageId: "<bander-stable@example.invalid>",
+  }),
+};
+
 class FakeAdapter implements ExecutionAdapter {
   executions = 0;
   ambiguous = false;
   conflict = false;
+  ambiguousKind: "calendar" | "email" | "family" = "calendar";
+  conflictKind: "calendar" | "email" = "calendar";
   alreadyAbsent = false;
   rejectedAction?: "create" | "cancel";
   focusEvent: CalendarEvent = {
@@ -135,8 +148,8 @@ class FakeAdapter implements ExecutionAdapter {
     document: DraftDocument;
   }): Promise<void | ObservedExecutionResult> {
     this.executions += 1;
-    if (this.ambiguous) throw new ExecutionAmbiguousError();
-    if (this.conflict) throw new ExecutionConflictError();
+    if (this.ambiguous) throw new ExecutionAmbiguousError(this.ambiguousKind);
+    if (this.conflict) throw new ExecutionConflictError(this.conflictKind);
     if (this.alreadyAbsent) throw new ExecutionAlreadyAbsentError();
     if (this.rejectedAction) throw new ExecutionRejectedError(this.rejectedAction);
     const calendar = input.document.effects.find(
@@ -154,6 +167,14 @@ class FakeAdapter implements ExecutionAdapter {
     const family = input.document.effects.find(
       (effect) => effect.type === "family.telegram_notification",
     );
+    const email = input.document.effects.find((effect) => effect.type === "email.reply");
+    if (email) return { emailReply: { status: "committed" } };
+    if (family?.document.kind === "direct_message") {
+      const delivery = this.compoundDelivery
+        ? await this.compoundDelivery({ requestId: `direct-${input.permitNonce}`, binding: family.binding, document: family.document })
+        : { status: "delivered" as const };
+      return { familyNotification: delivery };
+    }
     const cancelled = input.document.effects.find(
       (effect) => effect.type === "calendar.cancel_event",
     );
@@ -434,7 +455,7 @@ async function ambiguousProposal(compound: boolean) {
     claimedUserRequest: compound
       ? "Move dinner and let my son know."
       : "Move dinner.",
-    calendar: fixture.calendar,
+    calendar: fixture.calendar!,
     ...(family ? { familyNotification: family } : {}),
   });
   await current.service.deliverProposal(card);
@@ -797,6 +818,22 @@ describe("Bander Telegram service", () => {
     expect(approval).toContain("📅 Calendar change");
     expect(approval).toContain("👤 Family update Gil:");
     expect(approval).toContain(renderFamilyNotification(compoundFixture.familyNotification!.document));
+  });
+  it("direct_family_card_text_is_the_delivered_text_and_replay_sends_nothing", async () => {
+    const current = setup("real", familyRandomValues);
+    await pairOwner(current);
+    await pairFamilyContact(current);
+    current.adapter.compoundDelivery = (input) => current.service.deliverBoundFamilyNotification(input);
+    const binding = current.service.resolveFamilyContactAlias("Gil")!;
+    const document = { kind: "direct_message" as const, body: "Dinner is at 6." };
+    const card = await current.engine.proposeFixture({ id: "direct-family", claimedUserRequest: "Tell Gil dinner is at 6.", familyNotification: { ...binding, document } });
+    await current.service.deliverProposal(card);
+    const proposal = current.store.read().proposals.at(-1)!;
+    const callback: TelegramUpdate = { update_id: 778, callback_query: { id: "direct-family-approve", from: { id: 101, is_bot: false }, data: proposal.callbackValue, message: { message_id: proposal.messageId, chat: { id: -500, type: "supergroup" } } } };
+    await current.service.handleUpdate(callback);
+    await current.service.handleUpdate({ ...callback, update_id: 779, callback_query: { ...callback.callback_query!, id: "direct-family-replay" } });
+    expect(current.api.messages.filter((message) => message.chatId === "202" && message.text === document.body)).toHaveLength(1);
+    expect(current.api.messages.find((message) => message.chatId === "-500" && message.text.startsWith("Nothing has happened yet"))?.text).toContain(document.body);
   });
   it("rejects_delivery_to_revoked_contact", async () => {
     const current = setup("real", familyRandomValues);
@@ -2577,6 +2614,36 @@ describe("Bander Telegram service", () => {
     expect(current.api.callbackAnswers.at(-1)?.text).toBe(
       "Calendar result unconfirmed. No family update was sent.",
     );
+  });
+
+  it("email_thread_change_and_ambiguous_send_have_truthful_terminal_replay", async () => {
+    for (const mode of ["conflict", "ambiguous"] as const) {
+      const current = setup("real");
+      await pairOwner(current);
+      const card = await current.engine.proposeFixture(emailFixture, "openclaw-reference");
+      await current.service.deliverProposal(card);
+      const binding = current.store.read().proposals.at(-1)!;
+      if (mode === "conflict") {
+        current.adapter.conflict = true;
+        current.adapter.conflictKind = "email";
+      } else {
+        current.adapter.ambiguous = true;
+        current.adapter.ambiguousKind = "email";
+      }
+      const callback: TelegramUpdate = { update_id: 600, callback_query: { id: `email-${mode}`, from: { id: 101, is_bot: false }, data: binding.callbackValue, message: { message_id: binding.messageId, chat: { id: -500, type: "supergroup" } } } };
+      await current.service.handleUpdate(callback);
+      await current.service.handleUpdate({ ...callback, update_id: 601, callback_query: { ...callback.callback_query!, id: `email-${mode}-replay` } });
+      const state = current.store.read().proposals.at(-1)!;
+      expect(state.terminalFailureCode).toBe(mode === "conflict" ? "email_thread_changed" : "email_outcome_ambiguous");
+      expect(current.adapter.executions).toBe(1);
+      const outcome = current.api.messages.find((message) => message.text.includes(mode === "conflict" ? "email conversation changed" : "couldn’t confirm whether the approved email reply was sent"));
+      expect(outcome).toBeDefined();
+      if (mode === "conflict") {
+        expect(outcome?.text).toContain("since Bander prepared this reply");
+        expect(outcome?.text).not.toContain("since you approved");
+      }
+      expect(current.api.messages.filter((message) => message.text === outcome?.text)).toHaveLength(1);
+    }
   });
 
   it("ordinary_etag_conflict_still_says_nothing_was_changed_or_sent", async () => {

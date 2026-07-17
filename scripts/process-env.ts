@@ -66,6 +66,14 @@ export function createRuntimeEnvironments(
             GOOGLE_OAUTH_TOKEN_PATH: source.GOOGLE_OAUTH_TOKEN_PATH
               ? path.resolve(source.GOOGLE_OAUTH_TOKEN_PATH)
               : undefined,
+            GMAIL_OAUTH_CLIENT_PATH: source.GMAIL_OAUTH_CLIENT_PATH
+              ? path.resolve(source.GMAIL_OAUTH_CLIENT_PATH)
+              : undefined,
+            GMAIL_OAUTH_TOKEN_PATH: source.GMAIL_OAUTH_TOKEN_PATH
+              ? path.resolve(source.GMAIL_OAUTH_TOKEN_PATH)
+              : undefined,
+            BANDER_GMAIL_LIVE_EVIDENCE_DROP_RESPONSE:
+              source.BANDER_GMAIL_LIVE_EVIDENCE_DROP_RESPONSE,
             BANDER_CALENDAR_TIME_ZONE: source.BANDER_CALENDAR_TIME_ZONE,
           }
         : {

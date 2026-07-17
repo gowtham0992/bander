@@ -127,8 +127,8 @@ async function main() {
     const input = { draftHash: "live-cancel-recovery-probe", permitNonce: "live-cancel-recovery-permit", document };
     const first = await adapter.executeDraft(input);
     const replay = await adapter.executeDraft(input);
-    process.stdout.write(`${JSON.stringify({ mode: "lost", title, localDate, localInterval: "11:00 AM–12:00 PM", timeZone, firstStatus: first.calendar.status, replayStatus: replay.calendar.status, deleteAttempts, familyDeliveryAttempts: 0, identifiersPrinted: false })}\n`);
-    if (first.calendar.status !== "observed_target" || replay.calendar.status !== "observed_target" || deleteAttempts !== 1) process.exitCode = 1;
+    process.stdout.write(`${JSON.stringify({ mode: "lost", title, localDate, localInterval: "11:00 AM–12:00 PM", timeZone, firstStatus: first.calendar!.status, replayStatus: replay.calendar!.status, deleteAttempts, familyDeliveryAttempts: 0, identifiersPrinted: false })}\n`);
+    if (first.calendar!.status !== "observed_target" || replay.calendar!.status !== "observed_target" || deleteAttempts !== 1) process.exitCode = 1;
     return;
   }
 

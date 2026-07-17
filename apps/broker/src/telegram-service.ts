@@ -220,6 +220,10 @@ export interface TelegramProposalBinding {
 
 export type TelegramProposalTerminalFailureCode =
   | "calendar_outcome_ambiguous"
+  | "email_outcome_ambiguous"
+  | "family_outcome_ambiguous"
+  | "email_thread_changed"
+  | "email_send_rejected"
   | "calendar_event_already_absent"
   | "calendar_create_rejected"
   | "calendar_cancel_rejected"
@@ -303,6 +307,10 @@ function emptyState(): TelegramServiceState {
 
 const terminalFailureCodes = new Set<TelegramProposalTerminalFailureCode>([
   "calendar_outcome_ambiguous",
+  "email_outcome_ambiguous",
+  "family_outcome_ambiguous",
+  "email_thread_changed",
+  "email_send_rejected",
   "calendar_event_already_absent",
   "calendar_create_rejected",
   "calendar_cancel_rejected",
@@ -478,6 +486,14 @@ function cardText(
         safeDisplayText(effect.previousInterval),
       ];
     }
+    if (effect.kind === "email.reply") {
+      return [
+        "✉️ Email reply",
+        `To: ${safeDisplayText(effect.recipient)}`,
+        `Re: ${safeDisplayText(effect.subject.replace(/^Re:\s*/i, ""))}`,
+        `“${safeMultilineDisplayText(effect.body)}”`,
+      ];
+    }
     return effect.kind === "family.telegram_notification"
       ? [
           `${mode === "real" ? "👤 Family update" : "• Send"} ${firstName(effect.recipientDisplayName)}:`,
@@ -501,6 +517,12 @@ function cardText(
   const includesFamily = card.effectPreviews.some(
     (effect) => effect.kind === "family.telegram_notification",
   );
+  const includesEmail = card.effectPreviews.some(
+    (effect) => effect.kind === "email.reply",
+  );
+  const directFamilyOnly =
+    includesFamily &&
+    !card.effectPreviews.some((effect) => effect.kind.startsWith("calendar."));
   if (mode === "hero") {
     const approvedBoundary =
       card.effectPreviews.length === 1
@@ -525,6 +547,14 @@ function cardText(
         return [
           `📅 Remove “${safeDisplayText(effect.eventTitle)}”`,
           safeDisplayText(effect.previousInterval),
+        ];
+      }
+      if (effect.kind === "email.reply") {
+        return [
+          "✉️ Email reply",
+          `To: ${safeDisplayText(effect.recipient)}`,
+          `Re: ${safeDisplayText(effect.subject.replace(/^Re:\s*/i, ""))}`,
+          `“${safeMultilineDisplayText(effect.body)}”`,
         ];
       }
       return effect.kind === "family.telegram_notification"
@@ -557,7 +587,17 @@ function cardText(
     ...effects,
     "",
     ...(mode === "real"
-      ? includesCreate
+      ? includesEmail
+        ? [
+            "Not included:",
+            "No one else, no attachment, no forwarding, and no reply-all.",
+          ]
+        : directFamilyOnly
+          ? [
+              "Not included:",
+              "No one else, no links, no attachment, and no extra message.",
+            ]
+      : includesCreate
         ? [
             "Not included:",
             "No one will be invited. No recurring event or reservation will be created.",
@@ -603,6 +643,30 @@ function receiptText(
   receipt: HumanReceipt,
   mode: TelegramCopyMode,
 ): string {
+  if (receipt.emailReply) {
+    return [
+      receipt.emailReply.status === "observed_target"
+        ? "Your Sent folder now shows the approved reply ✓"
+        : "Email sent ✓",
+      `To: ${safeDisplayText(receipt.emailReply.recipient)}`,
+      `Re: ${safeDisplayText(receipt.emailReply.subject.replace(/^Re:\s*/i, ""))}`,
+      `“${safeMultilineDisplayText(receipt.emailReply.body)}”`,
+      "No one else was included.",
+    ].join("\n");
+  }
+  if (receipt.familyNotification && !receipt.calendar) {
+    return receipt.familyNotification.status === "delivered"
+      ? [
+          "Sent ✓",
+          `To ${firstName(receipt.familyNotification.recipientDisplayName)}:`,
+          `“${safeMultilineDisplayText(receipt.familyNotification.body)}”`,
+          "Telegram accepted the message; that does not prove it was read.",
+        ].join("\n")
+      : receipt.familyNotification.status === "ambiguous"
+        ? `I couldn’t confirm whether ${firstName(receipt.familyNotification.recipientDisplayName)} received the message.\nI won’t send it again automatically.`
+        : `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected. No message was sent.`;
+  }
+  if (!receipt.calendar) throw new Error("Calendar receipt is missing its Calendar result");
   if (mode === "hero") {
     if ("removed" in receipt.calendar) {
       return [
@@ -836,6 +900,30 @@ function refusalText(
       "Please check your calendar before asking OpenClaw again.",
     ].join("\n");
   }
+  if (code === "email_outcome_ambiguous") {
+    return [
+      "I couldn’t confirm whether the approved email reply was sent.",
+      "I won’t send it again automatically.",
+      "Please check your Sent folder before asking OpenClaw again.",
+    ].join("\n");
+  }
+  if (code === "family_outcome_ambiguous") {
+    return [
+      "I couldn’t confirm whether the approved family message was sent.",
+      "I won’t send it again automatically.",
+      "Please check with your family member before asking OpenClaw again.",
+    ].join("\n");
+  }
+  if (code === "email_thread_changed") {
+    return [
+      "I stopped—the email conversation changed since Bander prepared this reply.",
+      "I didn’t send the email.",
+      "Ask OpenClaw to check the latest message before replying again.",
+    ].join("\n");
+  }
+  if (code === "email_send_rejected") {
+    return "I couldn’t send that reply because the email service rejected it. Nothing was sent.";
+  }
   if (code === "calendar_event_already_absent") {
     const includesFamily = card.effectPreviews.some(
       (effect) => effect.kind === "family.telegram_notification",
@@ -893,6 +981,10 @@ function refusalText(
 
 function terminalFailureCode(code: string): TelegramProposalTerminalFailureCode {
   if (code === "calendar_outcome_ambiguous") return code;
+  if (code === "email_outcome_ambiguous") return code;
+  if (code === "family_outcome_ambiguous") return code;
+  if (code === "email_thread_changed") return code;
+  if (code === "email_send_rejected") return code;
   if (code === "calendar_event_already_absent") return code;
   if (code === "calendar_create_rejected") return code;
   if (code === "calendar_cancel_rejected") return code;
@@ -912,6 +1004,18 @@ function terminalCallbackText(
     return includesFamily
       ? "Calendar result unconfirmed. No family update was sent."
       : "Calendar result unconfirmed.";
+  }
+  if (code === "email_outcome_ambiguous") {
+    return "Email result unconfirmed. Bander will not send it again automatically.";
+  }
+  if (code === "family_outcome_ambiguous") {
+    return "Family message result unconfirmed. Bander will not send it again automatically.";
+  }
+  if (code === "email_thread_changed") {
+    return "The email conversation changed. No reply was sent.";
+  }
+  if (code === "email_send_rejected") {
+    return "Email rejected the reply. Nothing was sent.";
   }
   if (code === "calendar_event_already_absent") {
     return "The event was already gone. No family update was sent.";
@@ -942,6 +1046,7 @@ function standingOutcomeText(
   actionsUsed: number,
   maxActions: number,
 ): string {
+  if (!receipt.calendar) throw new Error("Standing receipt has no Calendar result");
   if ("created" in receipt.calendar || "removed" in receipt.calendar) {
     throw new Error("Standing Calendar create/cancel is unsupported");
   }

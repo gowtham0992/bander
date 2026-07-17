@@ -102,8 +102,8 @@ async function main() {
   const input = { draftHash: "live-create-recovery-probe", permitNonce: "live-create-recovery-permit", document };
   const first = await adapter.executeDraft(input);
   const replay = await adapter.executeDraft(input);
-  process.stdout.write(`${JSON.stringify({ mode, title, localDate, localInterval: "4:00–5:00 PM", timeZone, firstStatus: first.calendar.status, replayStatus: replay.calendar.status, insertAttempts, familyDeliveryAttempts: 0, identifiersPrinted: false })}\n`);
-  if (first.calendar.status !== "observed_target" || replay.calendar.status !== "observed_target" || insertAttempts !== 1) {
+  process.stdout.write(`${JSON.stringify({ mode, title, localDate, localInterval: "4:00–5:00 PM", timeZone, firstStatus: first.calendar!.status, replayStatus: replay.calendar!.status, insertAttempts, familyDeliveryAttempts: 0, identifiersPrinted: false })}\n`);
+  if (first.calendar!.status !== "observed_target" || replay.calendar!.status !== "observed_target" || insertAttempts !== 1) {
     process.exitCode = 1;
   }
 }
