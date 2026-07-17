@@ -577,7 +577,17 @@ function Welcome({
           <div><strong>You</strong><span>ask naturally</span></div><span aria-hidden="true">→</span><div><strong>Your assistant</strong><span>talks, never holds keys</span></div><span aria-hidden="true">→</span><div className="bander-node"><strong>Bander</strong><span>shows the exact deal</span></div><span aria-hidden="true">→</span><div><strong>Your services</strong><span>change only after approval</span></div>
         </div>
       </section>
-      <footer className="public-footer"><strong>Set it up for someone you love.</strong><p>The complete setup guide, architecture, evidence ledger, honest limitations, repository, and MIT license ship with the project. Public links will appear here only when the repository is public.</p></footer>
+      <footer className="public-footer">
+        <strong>Set it up for someone you love.</strong>
+        <p>The code, complete setup guide, architecture, evidence ledger, honest limitations, and MIT license are public.</p>
+        <nav className="project-links" aria-label="Project resources">
+          <a href="https://github.com/gowtham0992/bander" target="_blank" rel="noreferrer">Repository</a>
+          <a href="https://github.com/gowtham0992/bander/blob/main/SETUP.md" target="_blank" rel="noreferrer">Setup guide</a>
+          <a href="https://github.com/gowtham0992/bander/blob/main/docs/architecture.md" target="_blank" rel="noreferrer">Architecture</a>
+          <a href="https://github.com/gowtham0992/bander/blob/main/BUILD_WITH_CODEX.md" target="_blank" rel="noreferrer">Evidence</a>
+          <a href="https://github.com/gowtham0992/bander/blob/main/README.md#security-boundary-and-limitations" target="_blank" rel="noreferrer">Limitations</a>
+        </nav>
+      </footer>
     </main>
   );
 }

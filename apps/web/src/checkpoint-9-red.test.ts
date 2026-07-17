@@ -34,4 +34,10 @@ describe("Checkpoint 9 public-surface truthfulness", () => {
       'setScreen({ kind: "error", message: "I stopped—the seeded email conversation changed. No reply was sent." })',
     );
   });
+
+  it("public_repository_resources_are_linked_after_visibility_changes", () => {
+    expect(source).toContain('aria-label="Project resources"');
+    expect(source).toContain('href="https://github.com/gowtham0992/bander"');
+    expect(source).not.toContain("Public links will appear here only when the repository is public.");
+  });
 });

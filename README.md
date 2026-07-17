@@ -305,7 +305,7 @@ npm run verify:cancel-live -- --title='Fictional title' --date=2026-07-23
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-The fresh public-surface matrix contains 453 runtime functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+The fresh public-surface matrix contains 454 runtime functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 

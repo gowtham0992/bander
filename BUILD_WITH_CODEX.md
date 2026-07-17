@@ -1995,6 +1995,16 @@ and the browser sandbox is not evidence that any real service acted. Repository
 visibility and Pages enablement remain owner-controlled. Parent testing, filming,
 `/feedback`, Devpost and submission work remain deferred.
 
+After the owner made the repository public, signed-out browser verification
+observed both the repository and `https://gowtham0992.github.io/bander/` live.
+The `/bander/?scenario=compound` direct link rendered the seeded compound Card
+and approval controls. That check also exposed the now-stale conditional footer
+promising links only after publication. A focused test failed first; the restored
+footer now links to the public repository, setup guide, architecture, evidence
+ledger and limitations with native accessible links and 44px targets. The final
+count is 454 functional cases and 26 adversarial cases; Pages artifact and
+desktop/mobile browser QA remain green with zero external product requests.
+
 ## 2026-07-16 — Checkpoint 7C: Calendar-complete product integration
 
 Checkpoint 7C did not change the production authority lifecycle, conditional
