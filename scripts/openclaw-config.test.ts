@@ -125,5 +125,8 @@ describe("OpenClaw reference tool manifest", () => {
     expect(prompt).toContain(
       "I can tell you what’s coming up on your connected calendar",
     );
+    expect(prompt).toContain(
+      "Removing it affects only the Calendar—it does not cancel an appointment or reservation with a business.",
+    );
   });
 });

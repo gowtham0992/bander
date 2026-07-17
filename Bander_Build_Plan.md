@@ -105,6 +105,8 @@ Reschedule execution uses the canonical event ID and approved ETag stored in the
 
 If a Google write response is lost, Bander re-reads the exact event. It may report that the approved target was observed, but it does not claim causality it cannot prove. If the target cannot be confirmed, it does not notify the family contact and reports the Calendar result as unconfirmed.
 
+Reconciliation treats provider errors by meaning, never by a generic null result. For cancellation, only an action-specific `404` or `410` proves that the exact event is absent; authorization, rate-limit, timeout, server, network, and malformed-client failures remain ambiguous. Creation likewise never treats an unreadable lookup as proof that the event exists. After dispatch, replay may reread but never issue a second insert or delete.
+
 After a create insert is marked dispatched, Bander never inserts again automatically. It reconciles only by the exact stored client event ID. An exact match becomes an observation-safe success; different content is an identity collision and fails closed; a missing event remains permanently unconfirmed with no family delivery.
 
 After a cancellation delete is marked dispatched, Bander never deletes again automatically. A lost response is reconciled only by reading the exact stored event ID. A cancelled tombstone or definitive absence supports observation-safe state wording without claiming causality; an active, changed, unreadable, or otherwise unclassifiable event remains ambiguous and produces no family delivery. An initial 404/410 is reported as already absent, not as Bander success.
@@ -165,7 +167,7 @@ Real authority state is currently process-local, memory-only, and not restart-du
 
 `npm run hero` is the reproducible Telegram/judge sandbox. It uses a deterministic model provider plus seeded mock Calendar and Messages services. It proves authority, privacy, replay, recovery, standing limits, and presentation without personal accounts. It never claims a Google mutation and is not the canonical parent product.
 
-`npm run demo` is the fully local browser version of the deterministic sandbox.
+`npm run demo` is the fully local browser version of the deterministic sandbox. Its primary lanes remain schedule read, one exact move-plus-family deal, and an unknowable provider result. Secondary seeded journeys demonstrate add and remove Cards, exact family-text equality, decline, replay, and changed-world cancellation without touching Google, Telegram, or OpenAI.
 
 The sandbox's seeded Messages examples and standing autonomy remain valuable test surfaces. Standing autonomy remains sandbox-only and is not a current real-product capability.
 

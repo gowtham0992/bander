@@ -249,8 +249,8 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
     const demo = run("npm", ["run", "verify:demo"], { cwd: clone, env: environment });
     const parsedStart = demo.stdout.lastIndexOf("{");
     const outcomes = parsedStart >= 0 ? JSON.parse(demo.stdout.slice(parsedStart)) as Record<string, string> : {};
-    if (Object.keys(outcomes).length !== 9 || Object.values(outcomes).some((value) => value === "unexpected")) {
-      throw new Error("The deterministic demo did not report nine green outcomes");
+    if (Object.keys(outcomes).length !== 18 || Object.values(outcomes).some((value) => value === "unexpected")) {
+      throw new Error("The deterministic demo did not report eighteen green outcomes");
     }
     await proveDemoStarts(clone, environment);
     if (run("git", ["status", "--porcelain"], { cwd: clone }).stdout !== "") {
@@ -263,7 +263,7 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
         "- npm ci, typecheck, and production build passed",
         "- no-account doctor reported actionable real-setup gaps",
         "- deterministic sandbox started without accounts",
-        "- nine of nine demo outcomes passed",
+        "- eighteen of eighteen demo outcomes passed",
         "- no Google, Telegram, or OpenAI product endpoint was reachable",
         "- isolated working tree remained clean",
       ].join("\n") + "\n",

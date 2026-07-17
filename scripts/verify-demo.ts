@@ -115,6 +115,62 @@ const ambiguousReplay = await post<{ status: string; message: string }>(
 );
 
 await reset();
+const createCard = await post<{
+  draftId: string;
+  draftHash: string;
+  effectPreviews: Array<{ kind: string; body?: string }>;
+}>("/api/demo/proposals", { fixtureId: "add-lunch-with-ruth-and-notify-gil" });
+const createReceipt = await post<{ familyNotification?: { body: string } }>(
+  `/api/drafts/${createCard.draftId}/approve`,
+  { draftHash: createCard.draftHash },
+);
+const createState = await request<{ calendar: Array<{ title: string }>; familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+await post(`/api/drafts/${createCard.draftId}/approve`, { draftHash: createCard.draftHash });
+const createReplayState = await request<{ calendar: Array<{ title: string }>; familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+
+await reset();
+const createDeclineCard = await post<{ draftId: string; draftHash: string }>(
+  "/api/demo/proposals",
+  { fixtureId: "add-lunch-with-ruth-and-notify-gil" },
+);
+await post(`/api/drafts/${createDeclineCard.draftId}/decline`);
+const createDeclineState = await request<{ calendar: Array<{ title: string }>; familyUpdates: unknown[] }>("/api/demo/state");
+
+await reset();
+const cancelCard = await post<{
+  draftId: string;
+  draftHash: string;
+  effectPreviews: Array<{ kind: string; body?: string }>;
+}>("/api/demo/proposals", { fixtureId: "cancel-dentist-and-notify-gil" });
+const cancelReceipt = await post<{ familyNotification?: { body: string } }>(
+  `/api/drafts/${cancelCard.draftId}/approve`,
+  { draftHash: cancelCard.draftHash },
+);
+const cancelState = await request<{ calendar: Array<{ title: string }>; familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+await post(`/api/drafts/${cancelCard.draftId}/approve`, { draftHash: cancelCard.draftHash });
+const cancelReplayState = await request<{ calendar: Array<{ title: string }>; familyUpdates: Array<{ body: string }> }>("/api/demo/state");
+
+await reset();
+const cancelDeclineCard = await post<{ draftId: string; draftHash: string }>(
+  "/api/demo/proposals",
+  { fixtureId: "cancel-dentist-and-notify-gil" },
+);
+await post(`/api/drafts/${cancelDeclineCard.draftId}/decline`);
+const cancelDeclineState = await request<{ calendar: Array<{ title: string }>; familyUpdates: unknown[] }>("/api/demo/state");
+
+await reset();
+const cancelConflictCard = await post<{ draftId: string; draftHash: string }>(
+  "/api/demo/proposals",
+  { fixtureId: "cancel-dentist-and-notify-gil" },
+);
+const cancelConflict = await post<{ error: { code: string } }>(
+  `/api/demo/drafts/${cancelConflictCard.draftId}/approve-after-cancel-calendar-change`,
+  { draftHash: cancelConflictCard.draftHash },
+  409,
+);
+const cancelConflictState = await request<{ calendar: Array<{ title: string; startTime: string }>; familyUpdates: unknown[] }>("/api/demo/state");
+
+await reset();
 const exactCard = await post<{ draftId: string; draftHash: string }>(
   "/api/demo/proposals",
   { fixtureId: "move-dinner-and-notify-sarah" },
@@ -194,6 +250,52 @@ console.log(
         !ambiguous.message.includes("nothing changed") &&
         ambiguousState.familyUpdates.length === 0
           ? "truthful_zero_family_update"
+          : "unexpected",
+      createApproval:
+        createState.calendar.filter((event) => event.title === "Lunch with Ruth").length === 1 &&
+        createState.familyUpdates.length === 1
+          ? "one_event_one_family_update"
+          : "unexpected",
+      createReplay:
+        createReplayState.calendar.filter((event) => event.title === "Lunch with Ruth").length === 1 &&
+        createReplayState.familyUpdates.length === 1
+          ? "no_second_effect"
+          : "unexpected",
+      createDecline:
+        !createDeclineState.calendar.some((event) => event.title === "Lunch with Ruth") &&
+        createDeclineState.familyUpdates.length === 0
+          ? "zero_effect"
+          : "unexpected",
+      cancelApproval:
+        !cancelState.calendar.some((event) => event.title === "Dentist appointment") &&
+        cancelState.familyUpdates.length === 1
+          ? "one_removal_one_family_update"
+          : "unexpected",
+      cancelReplay:
+        !cancelReplayState.calendar.some((event) => event.title === "Dentist appointment") &&
+        cancelReplayState.familyUpdates.length === 1
+          ? "no_second_effect"
+          : "unexpected",
+      cancelDecline:
+        cancelDeclineState.calendar.some((event) => event.title === "Dentist appointment") &&
+        cancelDeclineState.familyUpdates.length === 0
+          ? "zero_effect"
+          : "unexpected",
+      cancelChangedWorld:
+        cancelConflict.error.code === "conflict" &&
+        cancelConflictState.calendar.some((event) => event.title === "Dentist appointment" && event.startTime === "2026-07-14T20:00:00-06:00") &&
+        cancelConflictState.familyUpdates.length === 0
+          ? "changed_event_preserved_zero_family_update"
+          : "unexpected",
+      createExactText:
+        createCard.effectPreviews.find((effect) => effect.kind === "family.telegram_notification")?.body === createReceipt.familyNotification?.body &&
+        createReceipt.familyNotification?.body === createState.familyUpdates[0]?.body
+          ? "byte_identical"
+          : "unexpected",
+      cancelExactText:
+        cancelCard.effectPreviews.find((effect) => effect.kind === "family.telegram_notification")?.body === cancelReceipt.familyNotification?.body &&
+        cancelReceipt.familyNotification?.body === cancelState.familyUpdates[0]?.body
+          ? "byte_identical"
           : "unexpected",
     },
     null,

@@ -74,7 +74,7 @@ Choose the path that matches what you want to verify:
 | --- | --- | --- |
 | **Real product** | Live conversational OpenClaw, live `gpt-5.6-sol`, real Google Calendar, real Telegram | `npm run real` after the one-time setup below |
 | **Hero sandbox** | Deterministic provider, seeded mock Calendar and Messages services, real Telegram | `npm run hero` |
-| **Local judge sandbox** | Deterministic browser demo with schedule read, compound family deal, ambiguous outcome, and seeded mock services | `npm run demo` |
+| **Local judge sandbox** | Deterministic browser demo with schedule read, add/move/remove deals, compound family updates, ambiguous outcomes, and seeded mock services | `npm run demo` |
 
 The sandbox paths never claim to touch Google.
 
@@ -242,7 +242,7 @@ For a fully local, no-Telegram judge path:
 npm run demo
 ```
 
-Open `http://127.0.0.1:4310`. Every page is labelled as seeded and not live. The three leading journeys demonstrate a free schedule read with zero authority, one Calendar-plus-family deal whose Card text exactly matches Gil’s simulated phone, and an unknowable Calendar result that sends no family update. Changed-world refusal, replay recovery, and narrow standing limits remain under **More verified behaviors**. `npm run verify:demo` independently reports all nine outcomes.
+Open `http://127.0.0.1:4310`. Every page is labelled as seeded and not live. The three leading journeys demonstrate a free schedule read with zero authority, one Calendar-plus-family deal whose Card text exactly matches Gil’s simulated phone, and an unknowable Calendar result that sends no family update. Seeded add and remove journeys—including decline, replay, exact family text, and changed-world cancellation—sit under **More verified behaviors** beside recovery and narrow standing limits. `npm run verify:demo` independently reports all 18 outcomes.
 
 ## Verification and attack suite
 
@@ -283,7 +283,7 @@ npm run verify:cancel-live -- --title='Fictional title' --date=2026-07-23
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-The current fresh matrix passes **388 runtime functional cases plus 20 adversarial tests** and all nine deterministic demo outcomes. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+The fresh Checkpoint 7C matrix passes **409 runtime functional cases**, **22 adversarial tests**, and all **18 deterministic demo outcomes**. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 

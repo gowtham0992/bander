@@ -31,6 +31,7 @@ interface BrokerAppOptions {
   activateAgentStandingBand?: (bandId: string) => Promise<void>;
   resetDemo?: () => Promise<void>;
   simulateCalendarChange?: () => Promise<void>;
+  simulateCancellationCalendarChange?: () => Promise<void>;
   prepareAmbiguousCalendarOutcome?: () => void;
   dropNextStandingRunResponseAfterCompletion?: () => boolean;
   heroMode?: boolean;
@@ -386,6 +387,37 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
           request.params.draftId,
           request.body.draftHash,
         );
+      } catch (error) {
+        return sendError(error, reply);
+      }
+    },
+  );
+
+  app.post<{ Params: { draftId: string }; Body: { draftHash: string } }>(
+    "/api/demo/drafts/:draftId/approve-after-cancel-calendar-change",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["draftHash"],
+          properties: { draftHash: { type: "string", pattern: "^[a-f0-9]{64}$" } },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (options.runtimeMode === "real" || !options.simulateCancellationCalendarChange) {
+        return reply.code(404).send({
+          error: { code: "not_found", message: "API route not found" },
+        });
+      }
+      try {
+        const authorization = await options.engine.approve(
+          request.params.draftId,
+          request.body.draftHash,
+        );
+        await options.simulateCancellationCalendarChange();
+        return await options.engine.executePermit(authorization.permitId);
       } catch (error) {
         return sendError(error, reply);
       }

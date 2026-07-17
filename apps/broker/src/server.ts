@@ -163,6 +163,8 @@ const app = buildBrokerApp({
         readDemoState: () => mockAdapter.readDemoState(),
         simulateCalendarChange: () =>
           mockAdapter.simulateCalendarChange("event-dinner-sarah"),
+        simulateCancellationCalendarChange: () =>
+          mockAdapter.simulateCalendarChange("event-dentist"),
         prepareAmbiguousCalendarOutcome: () =>
           mockAdapter.prepareAmbiguousCalendarOutcome(),
         readDemoSchedule: async () => {

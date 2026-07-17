@@ -177,6 +177,7 @@ describe("broker approval boundary", () => {
       expect(text).not.toContain("standing");
       expect(text).not.toContain(fixture.claimedUserRequest);
       expect(text).toContain("deterministic update");
+      expect(text).toContain("does not cancel an external appointment or reservation");
       expect(text).not.toMatch(/alias|telegram|chat id|user id|contactId|pairing/i);
     } finally {
       await client.close();

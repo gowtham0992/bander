@@ -28,7 +28,7 @@ npm ci
 npm run demo
 ```
 
-Open <http://127.0.0.1:4310>. This is a deterministic, seeded sandbox. It does not connect to Google, Telegram, or OpenAI and must not be presented as evidence of a live account mutation. It exercises the same Card, approval, outcome, and replay rules as the real product.
+Open <http://127.0.0.1:4310>. This is a deterministic, seeded sandbox. It does not connect to Google, Telegram, or OpenAI and must not be presented as evidence of a live account mutation. It exercises the same Card, approval, outcome, and replay rules as the real product, including secondary add and remove journeys.
 
 ## Real setup
 

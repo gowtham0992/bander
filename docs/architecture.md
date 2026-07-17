@@ -38,7 +38,7 @@ Real reschedule eligibility is narrow: timed, non-recurring, owner-organized, no
 
 Real creation is a separate action shape: one timed `default` event on `primary`, no attendees, recurrence, location, description, conferencing, attachments, custom reminders, booking, or reservation. Bander generates a cryptographically random lowercase base32hex-compatible client event ID once per proposal and commits it with the sanitized title, exact start/end, and configured IANA timezone. After dispatch it never issues another insert automatically. A lost response or duplicate-ID result is reconciled only with `events.get` for that exact stored ID; exact content is reported as observed, different content fails closed, and a missing event remains unconfirmed.
 
-Real cancellation is a third explicit action shape for one active timed `default` event on `primary` that is non-recurring, owner-organized, and attendee-free. The immutable action stores the canonical event ID, exact ETag, complete original interval, timezone, and eligibility facts. Execution calls `events.delete` once with `sendUpdates: "none"` and the stored ETag in `If-Match`; it sends no body and never recreates the event. A stale ETag is changed world. An initial 404/410 is already absent rather than success. After an ambiguous dispatched delete, Bander never deletes again: it reads only the exact ID, treats a cancelled tombstone or definitive absence as observation-safe removal, and otherwise records an ambiguous terminal result with no family delivery.
+Real cancellation is a third explicit action shape for one active timed `default` event on `primary` that is non-recurring, owner-organized, and attendee-free. The immutable action stores the canonical event ID, exact ETag, complete original interval, timezone, and eligibility facts. Execution calls `events.delete` once with `sendUpdates: "none"` and the stored ETag in `If-Match`; it sends no body and never recreates the event. A stale ETag is changed world. An initial 404/410 is already absent rather than success. After an ambiguous dispatched delete, Bander never deletes again: it reads only the exact ID, treats a cancelled tombstone or action-specific 404/410 absence as observation-safe removal, and otherwise records an ambiguous terminal result with no family delivery. Authorization, rate-limit, timeout, server, network, and malformed-client lookup failures never collapse into absence.
 
 A 412 is a changed-world conflict, not permission to re-plan. Bander performs no automatic refetch-and-write. Concurrent empirical tests show that two writes using the same approved ETag allow one commit and make the other fail precondition. Timeout reconciliation may describe only the Calendar state Bander later observes; it must not claim causality it cannot prove.
 
@@ -222,9 +222,11 @@ introduction pending for startup recovery and creates no authority or Calendar
 activity.
 
 The zero-account browser experience is a deterministic sandbox. Its seeded
-schedule read creates no authority. Its compound deal uses the production
-family-notification document and renderer, and its simulated phone receives the
-same bytes displayed on the Card. Its ambiguous Calendar scenario deliberately
+schedule read creates no authority. Its move, create, and cancellation deals use
+the production Card previews and family-notification document renderer, and its
+simulated phone receives the same bytes displayed on the Card. Create and
+cancellation approval, decline, replay, and changed-world behavior operate on
+the same seeded Calendar pane. Its ambiguous Calendar scenario deliberately
 records an unknowable external result, sends no family update, and never claims
 that nothing changed. The sandbox never loads real Google, Telegram, or OpenAI
 credentials.
@@ -251,7 +253,7 @@ empirical-check warning instead of inferring a pass.
 
 `npm run verify:clean-clone` copies only tracked and proposed non-ignored files
 into a generated directory under `/private/tmp`, installs from the lockfile,
-and proves the no-account doctor and nine-outcome deterministic sandbox. Product
+and proves the no-account doctor and eighteen-outcome deterministic sandbox. Product
 credentials are removed from the verifier subprocess environment, and outbound
 Google, Telegram, and OpenAI product endpoints are blocked while local loopback
 services remain available. Cleanup is restricted to the verifier's own

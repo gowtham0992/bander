@@ -6,6 +6,7 @@ Target: 2:35–2:50, one continuous narrated public video. The film uses the rea
 
 1. Stage only fictional events in the dedicated Google account; confirm `America/Denver` and the intended starting interval.
 2. Pair Gil’s phone, keep it outside the protected group, and confirm both phones are ready.
+   Before filming, complete the separate combined-family evidence checklist for one fictional create, move, and remove deal. Confirm Card/delivery text equality and replay safety for each; this is a pre-film gate, not an extra video sequence.
 3. Remove “Test” from the group and bot presentation. Keep OpenClaw visually assistant-like and Bander visibly teal/protective.
 4. Stop stale gateways and run only `npm run real`. Confirm real Google, live Sol, Telegram binding, and exactly four Bander tools.
 5. Keep tokens, OAuth files, IDs, private Calendar content, terminals with environment output, and personal notifications off camera.

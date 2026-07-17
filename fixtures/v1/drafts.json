@@ -2,6 +2,53 @@
   "version": 1,
   "fixtures": [
     {
+      "id": "add-lunch-with-ruth-and-notify-gil",
+      "claimedUserRequest": "Add lunch with Ruth next Tuesday at noon and let Gil know.",
+      "calendar": {
+        "kind": "create",
+        "eventId": "b7c0ffee12345",
+        "title": "Lunch with Ruth",
+        "startTime": "2026-07-21T18:00:00.000Z",
+        "endTime": "2026-07-21T19:00:00.000Z",
+        "timeZone": "America/Denver"
+      },
+      "familyNotification": {
+        "installationId": "sandbox-installation",
+        "contactId": "sandbox-contact-gil",
+        "pairingRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "displayLabel": "Gil",
+        "document": {
+          "kind": "calendar_creation",
+          "eventTitle": "Lunch with Ruth",
+          "startTime": "2026-07-21T18:00:00.000Z",
+          "endTime": "2026-07-21T19:00:00.000Z",
+          "timeZone": "America/Denver"
+        }
+      }
+    },
+    {
+      "id": "cancel-dentist-and-notify-gil",
+      "claimedUserRequest": "Remove my dentist appointment from the calendar and let Gil know.",
+      "calendar": {
+        "kind": "cancel",
+        "eventId": "event-dentist",
+        "expectedEtag": "event-dentist-r1"
+      },
+      "familyNotification": {
+        "installationId": "sandbox-installation",
+        "contactId": "sandbox-contact-gil",
+        "pairingRevision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "displayLabel": "Gil",
+        "document": {
+          "kind": "calendar_cancellation",
+          "eventTitle": "Dentist appointment",
+          "startTime": "2026-07-23T19:00:00.000Z",
+          "endTime": "2026-07-23T20:00:00.000Z",
+          "timeZone": "America/Denver"
+        }
+      }
+    },
+    {
       "id": "move-demo-appointment-and-notify-gil",
       "claimedUserRequest": "Move Bander Demo Appointment to July 18 at 4 PM and let my son know.",
       "calendar": {

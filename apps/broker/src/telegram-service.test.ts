@@ -530,7 +530,12 @@ describe("Bander Telegram service", () => {
     expect(proposal.text).toContain(
       "Bander will not automatically restore this event after you approve.",
     );
-    expect(proposal.text).toContain("No one will be contacted through the Calendar.");
+    expect(proposal.text).toContain("Not included:");
+    expect(proposal.text).toContain("This removes only the calendar event.");
+    expect(proposal.text).toContain(
+      "It does not contact anyone or cancel the appointment itself.",
+    );
+    expect(proposal.text).not.toContain("No one will be contacted through the Calendar.");
     expect(proposal.replyMarkup).toMatchObject({
       inline_keyboard: [[{ text: "Remove this event" }, { text: "Not now" }]],
     });
@@ -553,6 +558,32 @@ describe("Bander Telegram service", () => {
       "No one was contacted through the Calendar or Bander.",
       "Nothing else changed through Bander.",
     ].join("\n"));
+  });
+
+  it("cancellation Card with family update distinguishes Calendar removal from external cancellation", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture({
+      ...cancelFixture,
+      familyNotification: {
+        installationId: "installation-opaque",
+        contactId: "contact-opaque",
+        pairingRevision: "a".repeat(64),
+        displayLabel: "Gil",
+        document: {
+          kind: "calendar_cancellation",
+          eventTitle: "Dentist appointment",
+          startTime: "2026-07-23T19:00:00.000Z",
+          endTime: "2026-07-23T20:00:00.000Z",
+          timeZone: "America/Denver",
+        },
+      },
+    });
+    await current.service.deliverProposal(card);
+    const text = current.api.messages.at(-1)?.text ?? "";
+    expect(text).toContain("Only the exact family update shown above will be sent.");
+    expect(text).toContain("Bander will not contact the clinic, business, or event organizer.");
+    expect(text).not.toContain("It does not contact anyone");
   });
 
   it("ambiguous cancellation never claims nothing changed or retries", async () => {

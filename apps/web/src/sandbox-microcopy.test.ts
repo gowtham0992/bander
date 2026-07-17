@@ -45,8 +45,16 @@ describe("final sandbox microcopy", () => {
   });
 
   it("keeps a compound deal in the compound lane after Change it", () => {
-    expect(source).toContain('{ kind: "change"; card: ApprovalCard; scenario: "exact" | "conflict" | "compound" | "ambiguous" }');
+    expect(source).toContain('{ kind: "change"; card: ApprovalCard; scenario: DealScenario }');
     expect(source).toContain('setScreen({ kind: "change", card: screen.card, scenario: screen.scenario })');
     expect(source).toContain('scenario: screen.scenario');
+  });
+
+  it("keeps create and cancellation as secondary product journeys", () => {
+    expect(source).toContain("Add something to the calendar");
+    expect(source).toContain("Remove something from the calendar");
+    expect(source).toContain('"add-lunch-with-ruth-and-notify-gil"');
+    expect(source).toContain('"cancel-dentist-and-notify-gil"');
+    expect(source).toContain('cancels ? "Remove this event" : "Do exactly this"');
   });
 });

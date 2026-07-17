@@ -42,10 +42,17 @@ const approved = {
   },
 } satisfies GoogleEventResource;
 
+function statusError(status: number) {
+  const error = new Error(`status ${status}`) as Error & { response: { status: number } };
+  error.response = { status };
+  return error;
+}
+
 class CreateBoundary implements GoogleCalendarBoundary {
   inserts: Parameters<GoogleCalendarBoundary["insertEvent"]>[0][] = [];
   stored: GoogleEventResource | undefined;
   insertError: unknown;
+  getError: unknown;
 
   async getPrimaryTimeZone() { return "America/Denver"; }
   async listEvents() { return []; }
@@ -53,6 +60,7 @@ class CreateBoundary implements GoogleCalendarBoundary {
     return { events: [], timeZone: "America/Denver", truncated: false };
   }
   async getEvent(): Promise<GoogleEventResource> {
+    if (this.getError) throw this.getError;
     if (!this.stored) {
       const error = new Error("not found") as Error & { response: { status: number } };
       error.response = { status: 404 };
@@ -94,6 +102,37 @@ function selector(value: unknown): CalendarIntentSelector {
 }
 
 describe("real Calendar event creation", () => {
+  it.each([401, 403, 408, 429, 500, 503])(
+    "create_reconciliation_status_%s_never_proves_the_event_exists",
+    async (status) => {
+      const boundary = new CreateBoundary();
+      boundary.insertError = new Error("insert response unavailable");
+      boundary.getError = statusError(status);
+      const calendar = new GoogleCalendarAdapter(boundary);
+      const input = { draftHash: "hash", permitNonce: "permit", document: createDraft() };
+
+      await expect(calendar.executeDraft(input)).rejects.toBeInstanceOf(ExecutionAmbiguousError);
+      await expect(calendar.getExecution(input)).resolves.toBe(false);
+      await expect(calendar.executeDraft(input)).rejects.toBeInstanceOf(ExecutionAmbiguousError);
+      expect(boundary.inserts).toHaveLength(1);
+    },
+  );
+
+  it.each([new Error("network unavailable"), { unexpected: true }])(
+    "create_reconciliation_malformed_or_transport_failure_stays_ambiguous",
+    async (getError) => {
+      const boundary = new CreateBoundary();
+      boundary.insertError = new Error("insert response unavailable");
+      boundary.getError = getError;
+      const calendar = new GoogleCalendarAdapter(boundary);
+      await expect(calendar.executeDraft({
+        draftHash: "hash",
+        permitNonce: "permit",
+        document: createDraft(),
+      })).rejects.toBeInstanceOf(ExecutionAmbiguousError);
+      expect(boundary.inserts).toHaveLength(1);
+    },
+  );
   it("create_uses_stable_client_event_id", async () => {
     const compiler = new RealCalendarDraftCompiler(
       { discoverEvent: vi.fn() },

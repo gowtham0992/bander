@@ -1,5 +1,7 @@
 import type {
   CalendarEvent,
+  CalendarCreateEffect,
+  CalendarCancelEffect,
   CalendarRescheduleEffect,
   DemoSandboxState,
   DraftDocument,
@@ -51,8 +53,10 @@ export class MockServiceClient implements ExecutionAdapter {
     document: DraftDocument;
   }): Promise<void | ObservedExecutionResult> {
     const calendar = input.document.effects.find(
-      (effect): effect is CalendarRescheduleEffect =>
-        effect.type === "calendar.reschedule_event",
+      (effect): effect is CalendarRescheduleEffect | CalendarCreateEffect | CalendarCancelEffect =>
+        effect.type === "calendar.reschedule_event" ||
+        effect.type === "calendar.create_event" ||
+        effect.type === "calendar.cancel_event",
     );
     const message = input.document.effects.find(
       (effect): effect is MessageSendEffect => effect.type === "messages.send",
@@ -71,6 +75,9 @@ export class MockServiceClient implements ExecutionAdapter {
     }
 
     if (this.#ambiguousNextCalendar) {
+      if (calendar.type !== "calendar.reschedule_event") {
+        throw new Error("The seeded ambiguous simulation supports rescheduling only");
+      }
       this.#ambiguousNextCalendar = false;
       await this.#request(`/calendar/events/${encodeURIComponent(calendar.eventId)}`, {
         method: "PATCH",
@@ -83,17 +90,34 @@ export class MockServiceClient implements ExecutionAdapter {
       throw new ExecutionAmbiguousError();
     }
 
+    const calendarOperation = calendar.type === "calendar.reschedule_event"
+      ? {
+          kind: "reschedule" as const,
+          eventId: calendar.eventId,
+          expectedEtag: calendar.expected.etag,
+          newStartTime: calendar.changes.startTime,
+          newEndTime: calendar.changes.endTime,
+        }
+      : calendar.type === "calendar.create_event"
+        ? {
+            kind: "create" as const,
+            eventId: calendar.eventId,
+            title: calendar.title,
+            startTime: calendar.startTime,
+            endTime: calendar.endTime,
+            timeZone: calendar.timeZone,
+          }
+        : {
+            kind: "cancel" as const,
+            eventId: calendar.eventId,
+            expectedEtag: calendar.expected.etag,
+          };
     await this.#request("/operations/execute", {
       method: "POST",
       body: JSON.stringify({
         operationKey: input.permitNonce,
         draftHash: input.draftHash,
-        calendar: {
-          eventId: calendar.eventId,
-          expectedEtag: calendar.expected.etag,
-          newStartTime: calendar.changes.startTime,
-          newEndTime: calendar.changes.endTime,
-        },
+        calendar: calendarOperation,
         ...(message
           ? {
               message: {
@@ -113,19 +137,32 @@ export class MockServiceClient implements ExecutionAdapter {
           : {}),
       }),
     });
-    if (family) {
-      return {
-        calendar: {
-          status: "committed",
-          completed: {
-            startTime: calendar.changes.startTime,
-            endTime: calendar.changes.endTime,
+    const completed = calendar.type === "calendar.reschedule_event"
+      ? {
+          startTime: calendar.changes.startTime,
+          endTime: calendar.changes.endTime,
+          timeZone: calendar.expected.timeZone,
+        }
+      : calendar.type === "calendar.create_event"
+        ? {
+            startTime: calendar.startTime,
+            endTime: calendar.endTime,
+            timeZone: calendar.timeZone,
+          }
+        : {
+            startTime: calendar.expected.startTime,
+            endTime: calendar.expected.endTime,
             timeZone: calendar.expected.timeZone,
-          },
-        },
-        familyNotification: { status: "delivered" },
-      };
-    }
+          };
+    return {
+      calendar: {
+        ...(calendar.type === "calendar.create_event" ? { action: "created" as const } : {}),
+        ...(calendar.type === "calendar.cancel_event" ? { action: "removed" as const } : {}),
+        status: "committed",
+        completed,
+      },
+      ...(family ? { familyNotification: { status: "delivered" as const } } : {}),
+    };
   }
 
   async getExecution(input: {

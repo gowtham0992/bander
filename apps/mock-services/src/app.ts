@@ -27,10 +27,15 @@ interface ExecuteOperationBody {
   operationKey: string;
   draftHash: string;
   calendar: {
+    kind?: "reschedule" | "create" | "cancel";
     eventId: string;
-    expectedEtag: string;
-    newStartTime: string;
-    newEndTime: string;
+    expectedEtag?: string;
+    newStartTime?: string;
+    newEndTime?: string;
+    title?: string;
+    startTime?: string;
+    endTime?: string;
+    timeZone?: string;
   };
   message?: {
     recipientId: string;
@@ -72,7 +77,7 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
     {
       operationKey: string;
       draftHash: string;
-      event: CalendarEvent;
+      event?: CalendarEvent;
       message?: SentMessage;
     }
   >();
@@ -311,12 +316,17 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
             calendar: {
               type: "object",
               additionalProperties: false,
-              required: ["eventId", "expectedEtag", "newStartTime", "newEndTime"],
+              required: ["eventId"],
               properties: {
+                kind: { type: "string", enum: ["reschedule", "create", "cancel"] },
                 eventId: { type: "string", minLength: 1, maxLength: 100 },
                 expectedEtag: { type: "string", minLength: 1, maxLength: 100 },
                 newStartTime: { type: "string", minLength: 20, maxLength: 40 },
                 newEndTime: { type: "string", minLength: 20, maxLength: 40 },
+                title: { type: "string", minLength: 1, maxLength: 160 },
+                startTime: { type: "string", minLength: 20, maxLength: 40 },
+                endTime: { type: "string", minLength: 20, maxLength: 40 },
+                timeZone: { type: "string", minLength: 1, maxLength: 100 },
               },
             },
             message: {
@@ -356,17 +366,18 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         return existing;
       }
 
+      const kind = request.body.calendar.kind ?? "reschedule";
       const event = events.get(request.body.calendar.eventId);
       const person = request.body.message
         ? people.get(request.body.message.recipientId)
         : undefined;
-      if (!event || (request.body.message && !person)) {
+      if ((kind !== "create" && !event) || (kind === "create" && event) || (request.body.message && !person)) {
         return reply.code(404).send({
           error: { code: "resource_not_found", message: "Deal resource not found" },
         });
       }
       if (
-        event.etag !== request.body.calendar.expectedEtag ||
+        (kind !== "create" && event!.etag !== request.body.calendar.expectedEtag) ||
         (request.body.message &&
           person?.revision !== request.body.message.expectedRecipientRevision)
       ) {
@@ -378,10 +389,26 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         });
       }
       if (
-        !Number.isFinite(new Date(request.body.calendar.newStartTime).getTime()) ||
-        !Number.isFinite(new Date(request.body.calendar.newEndTime).getTime()) ||
-        new Date(request.body.calendar.newEndTime).getTime() <=
-          new Date(request.body.calendar.newStartTime).getTime()
+        kind === "create" &&
+        (!request.body.calendar.title ||
+          !request.body.calendar.startTime ||
+          !request.body.calendar.endTime ||
+          !request.body.calendar.timeZone)
+      ) {
+        return reply.code(422).send({
+          error: {
+            code: "invalid_calendar_create",
+            message: "Calendar creation requires a title, interval, and timezone",
+          },
+        });
+      }
+      if (
+        kind !== "cancel" && (
+          !Number.isFinite(new Date(kind === "create" ? request.body.calendar.startTime! : request.body.calendar.newStartTime!).getTime()) ||
+          !Number.isFinite(new Date(kind === "create" ? request.body.calendar.endTime! : request.body.calendar.newEndTime!).getTime()) ||
+          new Date(kind === "create" ? request.body.calendar.endTime! : request.body.calendar.newEndTime!).getTime() <=
+            new Date(kind === "create" ? request.body.calendar.startTime! : request.body.calendar.newStartTime!).getTime()
+        )
       ) {
         return reply.code(422).send({
           error: {
@@ -391,14 +418,27 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         });
       }
 
-      const nextRevision = event.revision + 1;
-      const updatedEvent: CalendarEvent = {
-        ...event,
-        startTime: request.body.calendar.newStartTime,
-        endTime: request.body.calendar.newEndTime,
-        revision: nextRevision,
-        etag: `${event.id}-r${nextRevision}`,
-      };
+      const updatedEvent: CalendarEvent | undefined = kind === "cancel"
+        ? undefined
+        : kind === "create"
+          ? {
+              id: request.body.calendar.eventId,
+              title: request.body.calendar.title!,
+              startTime: request.body.calendar.startTime!,
+              endTime: request.body.calendar.endTime!,
+              timeZone: request.body.calendar.timeZone!,
+              organizerId: "person-owner",
+              attendeeIds: ["person-owner"],
+              revision: 1,
+              etag: `${request.body.calendar.eventId}-r1`,
+            }
+          : {
+              ...event!,
+              startTime: request.body.calendar.newStartTime!,
+              endTime: request.body.calendar.newEndTime!,
+              revision: event!.revision + 1,
+              etag: `${event!.id}-r${event!.revision + 1}`,
+            };
       const message =
         request.body.message && person
           ? {
@@ -418,13 +458,14 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         : undefined;
 
       // Both seeded effects commit together after every precondition has passed.
-      events.set(updatedEvent.id, updatedEvent);
+      if (kind === "cancel") events.delete(request.body.calendar.eventId);
+      else events.set(updatedEvent!.id, updatedEvent!);
       if (message) messagesByKey.set(request.body.operationKey, message);
       if (familyUpdate) familyUpdatesByKey.set(request.body.operationKey, familyUpdate);
       const result = {
         operationKey: request.body.operationKey,
         draftHash: request.body.draftHash,
-        event: updatedEvent,
+        ...(updatedEvent ? { event: updatedEvent } : {}),
         ...(message ? { message } : {}),
       };
       operationResults.set(request.body.operationKey, result);

@@ -12,6 +12,15 @@ type StandingRunResponse =
   | { status: "executed"; receipt: HumanReceipt }
   | { status: "review_required"; card: ApprovalCard };
 
+type DealScenario =
+  | "exact"
+  | "conflict"
+  | "compound"
+  | "ambiguous"
+  | "create"
+  | "cancel"
+  | "cancel-conflict";
+
 export interface StandingRunInput {
   bandId: string;
   fixtureId: string;
@@ -22,17 +31,18 @@ export interface StandingRunInput {
 type Screen =
   | { kind: "welcome" }
   | { kind: "loading"; message: string }
-  | { kind: "card"; card: ApprovalCard; scenario: "exact" | "conflict" | "compound" | "ambiguous" }
+  | { kind: "card"; card: ApprovalCard; scenario: DealScenario }
   | { kind: "receipt"; receipt: HumanReceipt }
   | { kind: "compound-receipt"; receipt: HumanReceipt; state: DemoSandboxState; card: ApprovalCard; replayed: boolean }
   | { kind: "schedule-read"; result: ScheduleReadResult }
   | { kind: "ambiguous-outcome"; message: string; card: ApprovalCard }
+  | { kind: "cancel-conflict-outcome"; state: DemoSandboxState }
   | { kind: "standing-card"; card: StandingBandCard }
   | { kind: "standing-receipt"; receipt: HumanReceipt; bandId: string }
   | { kind: "standing-revoked" }
   | { kind: "standing-recovery"; input: StandingRunInput; message: string }
   | { kind: "declined" }
-  | { kind: "change"; card: ApprovalCard; scenario: "exact" | "conflict" | "compound" | "ambiguous" }
+  | { kind: "change"; card: ApprovalCard; scenario: DealScenario }
   | { kind: "approval-recovery"; card: ApprovalCard; message: string }
   | { kind: "error"; message: string };
 
@@ -153,9 +163,14 @@ function FamilyPhone({ state }: { state: DemoSandboxState }) {
 }
 
 function CompoundResult({ screen, onReplay, onBack }: { screen: Extract<Screen, { kind: "compound-receipt" }>; onReplay: () => void; onBack: () => void }) {
+  const outcome = "created" in screen.receipt.calendar
+    ? `“${screen.receipt.calendar.title}” was added for the approved interval.`
+    : "removed" in screen.receipt.calendar
+      ? `“${screen.receipt.calendar.title}” was removed from the seeded Calendar.`
+      : `“${screen.receipt.calendar.title}” moved to the approved interval.`;
   return (
     <main className="compound-result" aria-live="polite">
-      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>“{screen.receipt.calendar.title}” moved to the approved interval.</p><p>Gil’s phone received the exact text shown on the Card.</p><button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
+      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>{outcome}</p><p>Gil’s phone received the exact text shown on the Card.</p><button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
       <FamilyPhone state={screen.state} />
     </main>
   );
@@ -329,7 +344,7 @@ function Welcome({
   onCompile,
   status,
 }: {
-  onStart: (scenario: "exact" | "conflict" | "compound" | "ambiguous") => void;
+  onStart: (scenario: DealScenario) => void;
   onSchedule: () => void;
   onStanding: () => void;
   onCompile: (request: string) => void;
@@ -357,6 +372,9 @@ function Welcome({
       </section>
       <section className="more-behaviors">
         <h2>More verified behaviors</h2>
+        <button className="scenario-link" onClick={() => onStart("create")}>Add something to the calendar</button>
+        <button className="scenario-link" onClick={() => onStart("cancel")}>Remove something from the calendar</button>
+        <button className="scenario-link" onClick={() => onStart("cancel-conflict")}>Removal when the calendar changed</button>
         <button className="scenario-link" onClick={() => onStart("conflict")}>Changed-world refusal</button>
         <button className="scenario-link" onClick={() => onStart("exact")}>Approval recovery and replay</button>
         <button className="scenario-link" onClick={onStanding}>Standing routine sandbox</button>
@@ -495,6 +513,9 @@ function DealCard({
   busy: boolean;
 }) {
   const expiry = new Date(card.expiresAt);
+  const creates = card.effectPreviews.some((preview) => preview.kind === "calendar.create_event");
+  const cancels = card.effectPreviews.some((preview) => preview.kind === "calendar.cancel_event");
+  const hasFamilyUpdate = card.effectPreviews.some((preview) => preview.kind === "family.telegram_notification");
   return (
     <main className="deal-shell">
       <div className="deal-heading">
@@ -517,7 +538,13 @@ function DealCard({
         </section>
 
         <div className="boundary-copy">
-          <p><strong>Not included:</strong> Any other calendar events or actions.</p>
+          {creates ? (
+            <><p><strong>Not included:</strong></p><p>No one will be invited. No recurring event or reservation will be created.</p></>
+          ) : cancels ? (
+            <><p>Bander will not automatically restore this event after you approve.</p><p><strong>Not included:</strong></p><p>This removes only the calendar event.</p>{hasFamilyUpdate ? <p>Only the exact family update shown above will be sent. Bander will not contact the clinic, business, or event organizer.</p> : <p>It does not contact anyone or cancel the appointment itself.</p>}</>
+          ) : (
+            <p><strong>Not included:</strong> Any other calendar events or actions.</p>
+          )}
           <p>Nothing else will change in this seeded sandbox.</p>
         </div>
 
@@ -539,7 +566,7 @@ function DealCard({
 
         <div className="actions">
           <button className="primary" onClick={onApprove} disabled={busy}>
-             {busy ? "Completing…" : "Do exactly this"}
+             {busy ? "Completing…" : cancels ? "Remove this event" : "Do exactly this"}
           </button>
           <button className="secondary" onClick={onChange} disabled={busy}>Change it</button>
           <button className="quiet" onClick={onDecline} disabled={busy}>Not now</button>
@@ -690,17 +717,24 @@ export function App() {
   useEffect(() => {
     api<Status>("/api/status").then(setStatus).catch(() => setStatus(null));
     const scenario = new URLSearchParams(window.location.search).get("scenario");
-    if (scenario === "exact" || scenario === "conflict" || scenario === "compound" || scenario === "ambiguous") void start(scenario);
+    if (["exact", "conflict", "compound", "ambiguous", "create", "cancel", "cancel-conflict"].includes(scenario ?? "")) void start(scenario as DealScenario);
     if (scenario === "standing") void startStanding();
   }, []);
 
-  async function start(scenario: "exact" | "conflict" | "compound" | "ambiguous") {
+  async function start(scenario: DealScenario) {
     setScreen({ kind: "loading", message: "Preparing the exact deal…" });
     try {
       await api("/api/demo/reset", { method: "POST" });
+      const fixtureId = scenario === "create"
+        ? "add-lunch-with-ruth-and-notify-gil"
+        : scenario === "cancel" || scenario === "cancel-conflict"
+          ? "cancel-dentist-and-notify-gil"
+          : scenario === "compound" || scenario === "ambiguous"
+            ? "move-demo-appointment-and-notify-gil"
+            : "move-dinner-and-notify-sarah";
       const card = await api<ApprovalCard>("/api/demo/proposals", {
         method: "POST",
-        body: JSON.stringify({ fixtureId: scenario === "compound" || scenario === "ambiguous" ? "move-demo-appointment-and-notify-gil" : "move-dinner-and-notify-sarah" }),
+        body: JSON.stringify({ fixtureId }),
       });
       setScreen({ kind: "card", card, scenario });
     } catch (error) {
@@ -846,11 +880,13 @@ export function App() {
     }
   }
 
-  async function approve(card: ApprovalCard, scenario: "exact" | "conflict" | "compound" | "ambiguous") {
+  async function approve(card: ApprovalCard, scenario: DealScenario) {
     setBusy(true);
     try {
       const path = scenario === "ambiguous"
           ? `/api/demo/drafts/${card.draftId}/approve-ambiguous`
+          : scenario === "cancel-conflict"
+          ? `/api/demo/drafts/${card.draftId}/approve-after-cancel-calendar-change`
           : scenario === "conflict"
           ? `/api/demo/drafts/${card.draftId}/approve-after-calendar-change`
           : `/api/drafts/${card.draftId}/approve`;
@@ -864,7 +900,7 @@ export function App() {
         setScreen({ kind: "ambiguous-outcome", message: outcome.message, card });
         return;
       }
-      if (scenario === "exact" || scenario === "compound") {
+      if (["exact", "compound", "create", "cancel"].includes(scenario)) {
         const result = await attemptApprovalWithRecovery(request, () =>
           setScreen({ kind: "loading", message: "Checking what happened…" }),
         );
@@ -877,7 +913,7 @@ export function App() {
           });
           return;
         }
-        if (scenario === "compound") {
+        if (["compound", "create", "cancel"].includes(scenario)) {
           const state = await api<DemoSandboxState>("/api/hero/state").catch(() => api<DemoSandboxState>("/api/demo/state"));
           setScreen({ kind: "compound-receipt", receipt: result.value, state, card, replayed: false });
         } else setScreen({ kind: "receipt", receipt: result.value });
@@ -885,6 +921,11 @@ export function App() {
       }
       setScreen({ kind: "receipt", receipt: await request() });
     } catch (error) {
+      if (scenario === "cancel-conflict" && error instanceof ApiError && error.code === "conflict") {
+        const state = await api<DemoSandboxState>("/api/demo/state");
+        setScreen({ kind: "cancel-conflict-outcome", state });
+        return;
+      }
       setScreen({ kind: "error", message: (error as Error).message });
     } finally {
       setBusy(false);
@@ -960,6 +1001,12 @@ export function App() {
       {screen.kind === "schedule-read" && <ScheduleReadView result={screen.result} onBack={() => setScreen({ kind: "welcome" })} />}
       {screen.kind === "compound-receipt" && <CompoundResult screen={screen} onReplay={() => replayCompound(screen)} onBack={() => setScreen({ kind: "welcome" })} />}
       {screen.kind === "ambiguous-outcome" && <AmbiguousOutcome message={screen.message} onReplay={() => approve(screen.card, "ambiguous")} onBack={() => setScreen({ kind: "welcome" })} />}
+      {screen.kind === "cancel-conflict-outcome" && (
+        <main className="compound-result" aria-live="polite">
+          <section className="result-shell uncertain-result"><span className="deal-kicker">Calendar changed</span><h1>I stopped.</h1><p>The calendar changed since the deal was prepared. Bander did not remove the event or send a family update.</p><p>Review the changed event before asking your assistant again.</p><button className="secondary" onClick={() => setScreen({ kind: "welcome" })}>Back to the sandbox</button></section>
+          <FamilyPhone state={screen.state} />
+        </main>
+      )}
       {screen.kind === "standing-card" && (
         <StandingCardView
           card={screen.card}

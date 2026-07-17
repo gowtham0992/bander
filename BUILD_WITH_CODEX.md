@@ -1821,6 +1821,79 @@ secret scan with zero matches. Transcript hashes remain
 `3c30cae54d4efba1a7a6aa025199d68435dab348`. The family contact is revoked.
 `/feedback` remains deferred.
 
+## 2026-07-16 — Checkpoint 7C: Calendar-complete product integration
+
+Checkpoint 7C did not change the production authority lifecycle, conditional
+Google write/delete semantics, family-delivery ordering, Sol authority boundary,
+contact authorization, or the exact four-tool real MCP inventory. It completed
+the deterministic judge surface and current product explanation around the
+already-implemented read, create, move, and cancel lanes.
+
+The focused cancellation Card assertion was observed red against the prior
+parent copy: it omitted an explicit `Not included` boundary and could be read as
+canceling more than a Calendar entry. The restored Card now says that Bander
+removes only the Calendar event, does not contact or cancel the external
+appointment, and—when applicable—sends only the exact family update displayed
+on the Card. The current Bander introduction and capability answer likewise
+distinguish Calendar removal from canceling an appointment or reservation with
+a business.
+
+The production post-dispatch reconciliation classifiers were verified rather
+than broadened. Creation lookup failures and cancellation lookup statuses other
+than definitive 404/410 remain ambiguous. Statuses 401, 403, 408, 429, 500 and
+503, network failures, and malformed lookup results all preserve the typed
+unconfirmed state, issue no second insert/delete, and send no family update. A
+deliberate mutation that treated cancellation lookup 401 as observed absence
+made the focused status-matrix test fail and was reverted.
+
+Two genuine authority-boundary cases were promoted into the adversarial suite.
+First, a deliberate causal receipt for an observed-absent cancellation failed
+the observation-safe wording test. Second, disabling creation-title
+sanitization let control/bidi content reach the trusted Card and failed the
+voice-forgery test. Both mutations were restored before the final run.
+
+The deterministic sandbox now has visibly secondary create and cancel journeys
+using the real create/cancel action shapes and the production family-document
+renderer. Create approval adds one seeded event and one byte-identical family
+update; cancellation removes one seeded event and sends the exact approved
+update; replay repeats neither effect; decline creates neither effect; and a
+seeded changed-world cancellation preserves the externally changed event and
+sends no family update. The demo verifier now reports 18 outcomes: the previous
+nine plus create approval/replay/decline, cancel approval/replay/decline,
+cancel changed-world, and byte equality for both family documents. The clean
+clone verifier expects and passed all 18.
+
+Actual browser accessibility computation found meaningful native button names:
+
+- `ASK What’s on tomorrow? No approval toll for a harmless read.`
+- `CHANGE Move an appointment and let family know One exact Card. One decision.`
+- `UNCERTAIN See an unknowable result Bander says only what it can prove.`
+
+The lane controls remain native, unnested buttons with visible focus styling and
+responsive tap targets; no redundant ARIA was added. Pointer activation and the
+ASK, CHANGE, UNCERTAIN, create, cancel, cancellation-conflict, replay, and
+Change-it flows were exercised in the browser. Final local-only visual QA at
+1280×720 and the existing 500×900 mobile check showed the three primary lanes
+clearly, complete trusted effect text, and scroll-reachable actions. No personal
+screenshots were committed.
+
+Final restored-green matrix: typecheck and production build; 31 functional
+files with 409 tests; 22 adversarial tests; all 18 deterministic sandbox
+outcomes; one-time and standing recovery verifiers; the real OpenClaw verifier
+with exactly four configured Bander tools; live compound Sol 18/18, read Sol
+7/7, create Sol 8/8, and the final cancel Sol run 8/8, all with zero false
+accepts and zero authority or Calendar mutation; dependency audit with zero
+vulnerabilities; read-only offline doctor; isolated clean-clone acceptance; and
+a tracked/proposed-file secret scan across 140 files with zero matches. One
+cancel Sol run safely classified a whole-afternoon bulk request as clarification
+instead of the verifier's expected unsupported label; it created no authority
+or mutation, and the bounded rerun passed 8/8 without changing the production
+contract.
+
+Both transcript files remain ignored and untracked with no diff. No real Google
+mutation, Telegram family notification, parent test, filming, submission work,
+or `/feedback` was performed for this checkpoint.
+
 ## July 16, 2026 — Checkpoint 6B technical-owner onboarding and cold-clone proof
 
 The checkpoint began with the requested focused red state. The unified doctor

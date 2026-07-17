@@ -498,6 +498,9 @@ function cardText(
   const includesCancel = card.effectPreviews.some(
     (effect) => effect.kind === "calendar.cancel_event",
   );
+  const includesFamily = card.effectPreviews.some(
+    (effect) => effect.kind === "family.telegram_notification",
+  );
   if (mode === "hero") {
     const approvedBoundary =
       card.effectPreviews.length === 1
@@ -562,7 +565,16 @@ function cardText(
         : includesCancel
           ? [
               "Bander will not automatically restore this event after you approve.",
-              "No one will be contacted through the Calendar.",
+              "Not included:",
+              "This removes only the calendar event.",
+              ...(includesFamily
+                ? [
+                    "Only the exact family update shown above will be sent.",
+                    "Bander will not contact the clinic, business, or event organizer.",
+                  ]
+                : [
+                    "It does not contact anyone or cancel the appointment itself.",
+                  ]),
             ]
           : ["Nothing else will change."]
       : ["Not included:", "• Any other events, messages or payments"]),
@@ -1190,7 +1202,7 @@ export class TelegramService {
     if (!installation || installation.groupIntroductionDeliveredAt) return;
     const sent = await this.#api.sendMessage(
       installation.chatId,
-      "I’m Bander. Ask your assistant about your calendar anytime. If something would change—or a family update would be sent—I’ll show you the exact details first. Nothing happens through me until you say yes.",
+      "I’m Bander. Ask your assistant what’s coming up, or ask to add, move, or remove one calendar event. If something would change—or a family update would be sent—I’ll show you the exact details first. Nothing happens through me until you say yes.",
     );
     state.installation = {
       ...installation,

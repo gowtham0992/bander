@@ -28,4 +28,11 @@ describe("current public product claims", () => {
   it("uses parent-readable Calendar change language in current public copy", () => {
     expect(readme).not.toContain("complete Calendar transition");
   });
+
+  it("documents add and remove parity without broad Calendar-management claims", () => {
+    expect(readme).toContain("all 18 outcomes");
+    expect(plan).toContain("Secondary seeded journeys demonstrate add and remove Cards");
+    expect(readme).toContain("does not provide full Calendar management");
+    expect(readme).not.toContain("all nine deterministic demo outcomes");
+  });
 });

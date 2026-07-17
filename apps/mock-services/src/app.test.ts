@@ -43,6 +43,7 @@ describe("mock-service credential boundary", () => {
         }),
         expect.objectContaining({ title: "Focus block" }),
         expect.objectContaining({ title: "Bander Demo Appointment" }),
+        expect.objectContaining({ title: "Dentist appointment" }),
       ],
       messages: [],
       familyUpdates: [],
@@ -170,6 +171,60 @@ describe("mock Messages idempotency", () => {
 });
 
 describe("atomic seeded deal execution", () => {
+  it("creates one seeded Calendar event and one byte-exact family update on replay", async () => {
+    const instance = createApp();
+    const body = "Bander update\n“Lunch with Ruth” was added for Tue, Jul 21, 12:00–1:00 PM MDT.\nThis is the exact update your family approved Bander to send.";
+    const request = {
+      method: "POST" as const,
+      url: "/operations/execute",
+      headers: authorization,
+      payload: {
+        operationKey: "sandbox-create-operation-0001",
+        draftHash: "1".repeat(64),
+        calendar: {
+          kind: "create",
+          eventId: "b7c0ffee12345",
+          title: "Lunch with Ruth",
+          startTime: "2026-07-21T18:00:00.000Z",
+          endTime: "2026-07-21T19:00:00.000Z",
+          timeZone: "America/Denver",
+        },
+        family: { recipientDisplayName: "Gil", body },
+      },
+    };
+    const first = await instance.inject(request);
+    const replay = await instance.inject(request);
+    const visible = await instance.inject({ method: "GET", url: "/demo/state", headers: authorization });
+
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(200);
+    expect(visible.json().calendar).toContainEqual(expect.objectContaining({ title: "Lunch with Ruth" }));
+    expect(visible.json().familyUpdates).toEqual([{ recipientDisplayName: "Gil", body, sentAt: "2026-07-13T18:00:00.000Z" }]);
+  });
+
+  it("removes one seeded Calendar event and sends one byte-exact family update on replay", async () => {
+    const instance = createApp();
+    const body = "Bander update\n“Dentist appointment,” scheduled for Thu, Jul 23, 1:00–2:00 PM MDT, is no longer on the calendar.\nThis is the exact update your family approved Bander to send.";
+    const request = {
+      method: "POST" as const,
+      url: "/operations/execute",
+      headers: authorization,
+      payload: {
+        operationKey: "sandbox-cancel-operation-0001",
+        draftHash: "2".repeat(64),
+        calendar: { kind: "cancel", eventId: "event-dentist", expectedEtag: "event-dentist-r1" },
+        family: { recipientDisplayName: "Gil", body },
+      },
+    };
+    const first = await instance.inject(request);
+    const replay = await instance.inject(request);
+    const visible = await instance.inject({ method: "GET", url: "/demo/state", headers: authorization });
+
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(200);
+    expect(visible.json().calendar).not.toContainEqual(expect.objectContaining({ title: "Dentist appointment" }));
+    expect(visible.json().familyUpdates).toEqual([{ recipientDisplayName: "Gil", body, sentAt: "2026-07-13T18:00:00.000Z" }]);
+  });
   it("updates the same Demo Calendar and Messages state that the Hero view reads", async () => {
     const instance = createApp();
     const operation = {

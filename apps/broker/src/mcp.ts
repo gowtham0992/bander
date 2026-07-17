@@ -88,7 +88,7 @@ export function createBanderMcpServer(options: McpRoutesOptions): McpServer {
                   "Tell you what is coming up on the connected primary Calendar",
                   "Prepare one bounded Calendar event creation for human review",
                   "Prepare one bounded owner-only Calendar reschedule for human review",
-                  "Prepare one bounded owner-only Calendar cancellation for human review",
+                  "Prepare removal of one bounded owner-only Calendar event for human review; this does not cancel an external appointment or reservation",
                   "Prepare one Calendar creation, reschedule, or cancellation plus one deterministic update to the connected family contact on the same human review",
                   "Read only the minimal status of a previously proposed action",
                 ]

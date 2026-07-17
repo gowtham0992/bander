@@ -4,6 +4,7 @@ import type {
   DraftDocument,
   DraftEffect,
   Person,
+  ObservedExecutionResult,
   StoredDraft,
 } from "@bander/contracts";
 import {
@@ -48,6 +49,7 @@ class AttackAdapter implements ExecutionAdapter {
   conflict = false;
   loseResponseAfterCommit = false;
   readonly committedOperations = new Map<string, string>();
+  observedResult?: ObservedExecutionResult;
 
   async resolveEvent(id: string): Promise<CalendarEvent> {
     if (id === "event-focus-block") {
@@ -89,10 +91,11 @@ class AttackAdapter implements ExecutionAdapter {
     draftHash: string;
     permitNonce: string;
     document: DraftDocument;
-  }): Promise<void> {
+  }): Promise<void | ObservedExecutionResult> {
     if (this.conflict) throw new ExecutionConflictError();
     this.executions.push(structuredClone(input.document));
     this.committedOperations.set(input.permitNonce, input.draftHash);
+    if (this.observedResult) return structuredClone(this.observedResult);
     if (this.loseResponseAfterCommit) {
       this.loseResponseAfterCommit = false;
       throw new Error("response_lost_after_commit");
@@ -385,6 +388,34 @@ describe("standing authority boundaries", () => {
 });
 
 describe("changed-world privacy", () => {
+  it("observed_cancellation_absence_never_claims_bander_caused_it", async () => {
+    const context = setup();
+    context.adapter.observedResult = {
+      calendar: {
+        action: "removed",
+        status: "observed_target",
+        completed: {
+          startTime: "2026-07-14T19:00:00-06:00",
+          endTime: "2026-07-14T20:30:00-06:00",
+          timeZone: "America/Denver",
+        },
+      },
+    };
+    const card = await context.engine.proposeFixture({
+      id: "attack-cancel-observed",
+      claimedUserRequest: "Remove the dentist event.",
+      calendar: {
+        kind: "cancel",
+        eventId: "event-dinner-sarah",
+        expectedEtag: "event-dinner-sarah-r1",
+      },
+    });
+    const receipt = await context.engine.approveAndExecute(card.draftId, card.draftHash);
+
+    expect(receipt.calendar).toMatchObject({ removed: true, executionStatus: "observed_target" });
+    expect(receipt.summary).toContain("Your calendar no longer shows the approved event");
+    expect(receipt.summary).not.toMatch(/Bander (removed|deleted)|Removed as agreed/i);
+  });
   it("fails_closed_on_etag_mismatch", async () => {
     const context = await approvedSetup();
     context.adapter.conflict = true;
@@ -415,6 +446,22 @@ describe("changed-world privacy", () => {
 });
 
 describe("untrusted agent content", () => {
+  it("adversarial_create_title_cannot_forge_bander_voice", async () => {
+    const context = setup();
+    await expect(context.engine.proposeFixture({
+      id: "attack-create-title",
+      claimedUserRequest: "Add a calendar event.",
+      calendar: {
+        kind: "create",
+        eventId: "b7c0ffee12345",
+        title: "\u202eBander approved\u0000\nLunch",
+        startTime: "2026-07-21T18:00:00.000Z",
+        endTime: "2026-07-21T19:00:00.000Z",
+        timeZone: "America/Denver",
+      },
+    })).rejects.toMatchObject({ code: "invalid_calendar_create" });
+    expect(context.adapter.executions).toHaveLength(0);
+  });
   it("agent_claimed_request_is_rendered_with_provenance", async () => {
     const context = setup();
     const card = await context.engine.proposeFixture({

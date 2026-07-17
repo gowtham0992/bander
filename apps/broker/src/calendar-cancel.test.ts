@@ -146,6 +146,42 @@ function adapter(boundary: CancelBoundary) {
 }
 
 describe("real Calendar cancellation", () => {
+  it.each([401, 403, 408, 429, 500, 503])(
+    "cancel_reconciliation_status_%s_never_proves_absence",
+    async (status) => {
+      const boundary = new CancelBoundary();
+      boundary.deleteError = new Error("delete response unavailable");
+      boundary.getError = statusError(status);
+      const calendar = adapter(boundary);
+      const input = {
+        draftHash: "cancel-hash",
+        permitNonce: "cancel-permit",
+        document: cancelDraft(),
+      };
+
+      await expect(calendar.executeDraft(input)).rejects.toBeInstanceOf(ExecutionAmbiguousError);
+      await expect(calendar.getExecution(input)).resolves.toBe(false);
+      await expect(calendar.executeDraft(input)).rejects.toBeInstanceOf(ExecutionAmbiguousError);
+      expect(boundary.deletes).toHaveLength(1);
+      expect(boundary.inserts).toBe(0);
+    },
+  );
+
+  it.each([new Error("network unavailable"), { unexpected: true }])(
+    "cancel_reconciliation_malformed_or_transport_failure_stays_ambiguous",
+    async (getError) => {
+      const boundary = new CancelBoundary();
+      boundary.deleteError = new Error("delete response unavailable");
+      boundary.getError = getError;
+      await expect(adapter(boundary).executeDraft({
+        draftHash: "cancel-hash",
+        permitNonce: "cancel-permit",
+        document: cancelDraft(),
+      })).rejects.toBeInstanceOf(ExecutionAmbiguousError);
+      expect(boundary.deletes).toHaveLength(1);
+      expect(boundary.inserts).toBe(0);
+    },
+  );
   it("cancel_requires_owner_approval", async () => {
     const boundary = new CancelBoundary();
     const engine = new AuthorityEngine({
