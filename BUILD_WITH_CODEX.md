@@ -1918,6 +1918,83 @@ and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
 both files remain ignored and untracked. `/feedback`, parent testing, filming,
 Devpost and submission work remain deferred.
 
+## 2026-07-16 — Combined Checkpoint 9: public product surface
+
+Checkpoint 9 turns the zero-account browser sandbox into a deployable public
+product surface without placing any production integration in the browser. The
+React application now uses one typed demo-backend contract. Local `npm run demo`
+uses the broker, while the Pages build runs the same authority engine, contracts,
+canonical serializer, Card renderer and versioned fictional fixtures entirely in
+the browser. A narrow platform boundary keeps Node crypto in production and uses
+pinned `@noble/hashes` plus Web Crypto in the browser. The static build contains
+no broker, Google/Gmail, Telegram, OpenAI/OpenClaw, filesystem or process-
+environment module and its CSP forbids runtime connections.
+
+The first focused red run exposed five real defects: an email-only success could
+claim Gil received a message, email ambiguity rendered Calendar/family surfaces,
+deep-link startup could race Draft registration, changed-thread email failure had
+no first-class parent result, and a definitive Gmail rejection deleted its
+operation record so replay could reach transport again. The repaired Gmail
+operation persists a typed `rejected` terminal state; the public UI renders only
+effects present in the observed receipt, email ambiguity shows only Sent Mail,
+deep-link and approval entry are single-flight, and changed-thread refusal is a
+truthful dedicated result.
+
+Five load-bearing guards were deliberately broken one at a time and restored:
+
+- changing one browser Card title made browser/server proposal parity fail;
+- changing the replayed Calendar-ambiguity status made terminal parity fail;
+- placing a fake OpenAI-shaped value in the built page made the artifact scanner
+  reject the bundle;
+- importing the broker into the browser backend pulled production dependencies
+  into the graph and made the Pages boundary build fail; and
+- rendering Gil's-phone success unconditionally made the email truthfulness test
+  fail.
+
+The shared deterministic runtime now covers seeded Calendar, inbox, Sent Mail,
+family-phone and guided Dr. Rao state. Browser/server parity is byte-for-byte for
+schedule and inbox reads; eight deal shapes; Cards, hashes, receipts, world state,
+replay and decline; Calendar/email changed-world and ambiguous terminals; and
+standing activation, eligible execution, review fallback, replay and revocation.
+All 27 existing demo outcomes remain green. The public homepage leads with three
+calm parent lanes and one guided read → reply → appointment + Gil episode, while
+secondary proofs remain available without presenting a test catalog.
+
+The Pages build targets `/bander/` and is produced by an allowlisted environment
+wrapper plus the official GitHub Pages Actions workflow. Artifact verification
+passes seven approved files, base-path and scenario direct refresh, CSP, source-
+map, secret-shape, environment-name, production-module and runtime-host scans.
+Browser QA observed nine meaningful native button names, one main heading,
+working Enter/Space activation, visible focus, minimum 44px targets, no nested
+controls or horizontal overflow, a single effect under a programmatic double
+approval, and zero external requests at 1280×720, 375×812 and 500×900. The three
+primary accessible names are the visible lane copy for asking about tomorrow,
+moving an appointment and telling family, and seeing an unknowable result; no
+redundant ARIA label was added.
+
+The clean-clone gate itself caught two release-hygiene issues after implementation:
+a literal fake-token canary in the artifact test violated the repository secret
+scan, and the no-account verifier still expected an older sandbox label. The
+canary is now constructed dynamically and the verifier pins the current seeded,
+non-live statement. A fresh isolated clone then passed `npm ci`, typecheck,
+production and Pages builds, no-account doctor, 27/27 outcomes, blocked product
+endpoints and a clean isolated working tree without credentials, state,
+transcripts or screenshots.
+
+Final restored-green evidence: 40 functional files with 453 cases; three
+adversarial files with 26 cases; 27/27 deterministic outcomes; both recovery
+verifiers; 128 focused Calendar, Gmail and direct-family cases; exact five-tool
+real OpenClaw verification; live read Sol 7/7, Gmail/action Sol 7/7 and compound
+Sol 18/18 with zero false accepts; typecheck, production build and `/bander/`
+Pages build; artifact and browser QA; clean clone; dependency audit with zero
+vulnerabilities; and read-only doctor with 9 PASS, 3 expected WARN and 0 FAIL.
+The doctor state checksum was identical before and after. BotFather privacy
+remains an empirical warning, GitHub Pages response headers remain outside this
+static repository's control, source maps are public only after artifact scanning,
+and the browser sandbox is not evidence that any real service acted. Repository
+visibility and Pages enablement remain owner-controlled. Parent testing, filming,
+`/feedback`, Devpost and submission work remain deferred.
+
 ## 2026-07-16 — Checkpoint 7C: Calendar-complete product integration
 
 Checkpoint 7C did not change the production authority lifecycle, conditional

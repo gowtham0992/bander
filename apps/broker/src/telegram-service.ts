@@ -1307,7 +1307,7 @@ export class TelegramService {
     if (!installation || installation.groupIntroductionDeliveredAt) return;
     const sent = await this.#api.sendMessage(
       installation.chatId,
-      "I’m Bander. Ask your assistant what’s coming up, or ask to add, move, or remove one calendar event. If something would change—or a family update would be sent—I’ll show you the exact details first. Nothing happens through me until you say yes.",
+      "I’m Bander. Ask your assistant about your calendar or email anytime. If something would change—or a message would be sent—I’ll show you the exact details first. Nothing happens through me until you say yes.",
     );
     state.installation = {
       ...installation,

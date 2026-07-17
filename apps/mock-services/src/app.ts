@@ -132,6 +132,12 @@ export function buildMockServices(options: MockServicesOptions): FastifyInstance
         receivedAt: "2026-07-16T15:00:00.000Z",
         excerpt: "Would Tuesday at noon work for lunch?",
       },
+      {
+        sender: "Dr. Rao’s office <office@example.test>",
+        subject: "Appointment options",
+        receivedAt: "2026-07-16T15:00:00.000Z",
+        excerpt: "Thursday at 2 PM is available. Does that work for you?",
+      },
     ],
     sentEmails: [...sentEmailsByKey.values()],
   }));

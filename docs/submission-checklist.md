@@ -16,6 +16,8 @@ Live Devpost check: submissions close **July 21, 2026 at 5:00 PM Pacific Time** 
 - [x] Exactly five bounded real-product tools and OpenClaw credential isolation
 - [x] Only the bounded schedule DTO may enter the model trajectory; Card, callback, writable Calendar detail, credential, refusal, and outcome remain absent
 - [x] Deterministic Hero and browser sandbox preserved for judges
+- [x] Zero-credential `/bander/` Pages artifact uses browser-only seeded state and the shared authority/Card code
+- [x] Pages build blocks production integrations and runtime product endpoints; direct scenario refresh is verified
 - [x] Functional, attack, recovery, OpenClaw, Telegram, Google, Sol, build, audit, and secret checks recorded
 - [ ] Final clean recording-machine run immediately before filming
 
@@ -46,6 +48,7 @@ Current required form fields also include submitter type, country of residence, 
 - [ ] Complete the unmoderated protocol in [parent-test.md](parent-test.md) with an actual parent or honestly labelled non-builder adult proxy
 - [ ] Make `gowtham0992/bander` public, or keep private and share with both judge addresses
 - [ ] Verify repository rendering and links on GitHub after push
+- [ ] Enable GitHub Pages with **GitHub Actions** as the source if the repository setting is not already enabled, then verify the public sandbox signed out
 - [ ] Add one separately sanitized real-product screenshot
 
 ## Video preparation
@@ -90,6 +93,8 @@ npm run build
 npm run doctor
 npm run verify:demo
 npm run verify:clean-clone
+npm run build:pages
+npm run verify:pages
 npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw

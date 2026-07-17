@@ -832,7 +832,7 @@ describe("Bander Telegram service", () => {
     const callback: TelegramUpdate = { update_id: 778, callback_query: { id: "direct-family-approve", from: { id: 101, is_bot: false }, data: proposal.callbackValue, message: { message_id: proposal.messageId, chat: { id: -500, type: "supergroup" } } } };
     await current.service.handleUpdate(callback);
     await current.service.handleUpdate({ ...callback, update_id: 779, callback_query: { ...callback.callback_query!, id: "direct-family-replay" } });
-    expect(current.api.messages.filter((message) => message.chatId === "202" && message.text === document.body)).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.chatId === "202" && message.text === renderFamilyNotification(document))).toHaveLength(1);
     expect(current.api.messages.find((message) => message.chatId === "-500" && message.text.startsWith("Nothing has happened yet"))?.text).toContain(document.body);
   });
   it("rejects_delivery_to_revoked_contact", async () => {
@@ -840,7 +840,7 @@ describe("Bander Telegram service", () => {
     await pairOwner(current); await pairFamilyContact(current);
     await current.service.handleUpdate(messageUpdate({ updateId: 90, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" }));
     await expect(current.service.deliverFamilyNotification({ requestId: "family-send-0001", document: familyNotificationDocument })).rejects.toThrow("No active family contact");
-    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(0);
+    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(0);
   });
 
   it("delivery_request_content_mismatch_and_confirmed_replay_send_nothing", async () => {
@@ -849,7 +849,7 @@ describe("Bander Telegram service", () => {
     const first = await current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: familyNotificationDocument });
     const replay = await current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: familyNotificationDocument });
     expect(first).toEqual({ status: "delivered" }); expect(replay).toEqual(first);
-    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
     await expect(current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: { ...familyNotificationDocument, eventTitle: "Changed" } })).rejects.toThrow("different content");
   });
 
@@ -858,12 +858,12 @@ describe("Bander Telegram service", () => {
     await pairOwner(current); await pairFamilyContact(current);
     const calls = await Promise.all(Array.from({ length: 3 }, () => current.service.deliverFamilyNotification({ requestId: "family-send-0003", document: familyNotificationDocument })));
     expect(calls).toEqual([{ status: "delivered" }, { status: "delivered" }, { status: "delivered" }]);
-    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
     const attemptsBeforeAmbiguous = current.api.sendAttempts;
-    current.api.failNextMessageMatching = (text) => text.startsWith("Bander update");
+    current.api.failNextMessageMatching = (text) => text.startsWith("EXACT UPDATE FROM BANDER");
     expect(await current.service.deliverFamilyNotification({ requestId: "family-send-0004", document: familyNotificationDocument })).toEqual({ status: "ambiguous" });
     expect(await current.service.deliverFamilyNotification({ requestId: "family-send-0004", document: familyNotificationDocument })).toEqual({ status: "ambiguous" });
-    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
     expect(current.api.sendAttempts - attemptsBeforeAmbiguous).toBe(1);
   });
 
@@ -890,10 +890,10 @@ describe("Bander Telegram service", () => {
     const second = setup("real", familyRandomValues);
     await pairOwner(second); await pairFamilyContact(second);
     let revoke: Promise<void> | undefined;
-    second.api.beforeSend = (text) => { if (text.startsWith("Bander update")) revoke = second.service.handleUpdate(messageUpdate({ updateId: 92, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" })); };
+    second.api.beforeSend = (text) => { if (text.startsWith("EXACT UPDATE FROM BANDER")) revoke = second.service.handleUpdate(messageUpdate({ updateId: 92, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" })); };
     expect(await second.service.deliverFamilyNotification({ requestId: "family-send-0007", document: familyNotificationDocument })).toEqual({ status: "delivered" });
     await revoke;
-    expect(second.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(1);
+    expect(second.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
     expect(second.store.read().familyContact).toBeUndefined();
   });
 
@@ -921,7 +921,7 @@ describe("Bander Telegram service", () => {
     });
     expect(result).toEqual({ status: "not_sent" });
     expect(current.api.sendAttempts).toBe(attempts);
-    expect(current.api.messages.filter((message) => message.text.startsWith("Bander update"))).toHaveLength(0);
+    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(0);
   });
 
   it("revoked_contact_never_receives_old_approved_message", async () => {

@@ -202,6 +202,16 @@ export function buildBrokerApp(options: BrokerAppOptions): FastifyInstance {
     return { messages: await options.readDemoInbox(), seeded: true };
   });
 
+  app.get("/api/demo/inbox/guided", async (_request, reply) => {
+    if (options.runtimeMode === "real" || !options.readDemoState) {
+      return reply.code(404).send({ error: { code: "not_found", message: "API route not found" } });
+    }
+    const messages = (await options.readDemoState()).inbox.filter(
+      (message) => message.subject === "Appointment options",
+    );
+    return { messages, seeded: true };
+  });
+
   app.post("/api/demo/reset", async (_request, reply) => {
     if (options.runtimeMode === "real") {
       return reply.code(404).send({

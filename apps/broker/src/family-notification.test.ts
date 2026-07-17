@@ -19,7 +19,7 @@ describe("family notification boundary", () => {
       timeZone: "America/Denver",
     });
     expect(renderFamilyNotification(document)).toBe([
-      "Bander update",
+      "EXACT UPDATE FROM BANDER",
       "“Lunch with Ruth” was added for Tue, Jul 21, 12:00–1:00 PM MDT.",
       "This is the exact update your family approved Bander to send.",
     ].join("\n"));
@@ -33,7 +33,7 @@ describe("family notification boundary", () => {
       timeZone: "America/Denver",
     });
     expect(renderFamilyNotification(document)).toBe([
-      "Bander update",
+      "EXACT UPDATE FROM BANDER",
       "“Dentist appointment,” scheduled for Thu, Jul 23, 1:00–2:00 PM MDT, is no longer on the calendar.",
       "This is the exact update your family approved Bander to send.",
     ].join("\n"));

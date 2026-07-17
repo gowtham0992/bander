@@ -34,11 +34,11 @@ describe("final sandbox microcopy", () => {
 
   it("keeps meaningful native lane-button names and keyboard focus", () => {
     expect(source).toContain('<button className="lane-card read-lane"');
-    expect(source).toContain("What’s on tomorrow?");
+    expect(source).toContain("What’s on tomorrow? What did Ruth say?");
     expect(source).toContain('<button className="lane-card compound-lane"');
-    expect(source).toContain("Move an appointment and let family know");
+    expect(source).toContain("Answer the email, update the calendar, tell Gil.");
     expect(source).toContain('<button className="lane-card uncertain-lane"');
-    expect(source).toContain("See an unknowable result");
+    expect(source).toContain("See a truthful uncertain outcome.");
     expect(source).not.toMatch(/<button className="lane-card[^>]*aria-label=/);
     expect(styles).toContain("button:focus-visible");
     expect(styles).toContain(".lane-card { width: 100%;");
@@ -51,8 +51,7 @@ describe("final sandbox microcopy", () => {
   });
 
   it("keeps create and cancellation as secondary product journeys", () => {
-    expect(source).toContain("Add something to the calendar");
-    expect(source).toContain("Remove something from the calendar");
+    expect(source).toContain("Add or remove something from the Calendar");
     expect(source).toContain('"add-lunch-with-ruth-and-notify-gil"');
     expect(source).toContain('"cancel-dentist-and-notify-gil"');
     expect(source).toContain('cancels ? "Remove this event" : "Do exactly this"');

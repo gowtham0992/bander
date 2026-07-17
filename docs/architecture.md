@@ -21,10 +21,11 @@ The dedicated profile can call:
 
 - `bander__list_capabilities`
 - `bander__read_schedule`
+- `bander__read_inbox`
 - `bander__propose_action`
 - `bander__get_receipt`
 
-The OpenClaw model may converse normally, ask Bander for one bounded schedule range, and decide whether to propose a clear Calendar action. It cannot approve, mint authority, author a Card or outcome, choose a Calendar/account/API query, or call Google directly. Its environment contains the OpenAI key and OpenClaw Telegram token needed for its own work, but not Google OAuth paths, the Bander Telegram token, mock-service credentials, Calendar tools, browser, shell, or generic outbound-action tools.
+The OpenClaw model may converse normally, ask Bander for one bounded schedule range or one bounded inbox match, and decide whether to propose a clear supported action. It cannot approve, mint authority, author a Card or outcome, choose a Calendar/account/API query, or call Google directly. Its environment contains the OpenAI key and OpenClaw Telegram token needed for its own work, but not Google OAuth paths, the Bander Telegram token, mock-service credentials, Calendar tools, browser, shell, or generic outbound-action tools.
 
 The strong route property applies only inside this profile. Bander does not restrict other OpenClaw profiles or a host compromised at the operating-system/user-account level.
 
@@ -263,8 +264,34 @@ empirical-check warning instead of inferring a pass.
 
 `npm run verify:clean-clone` copies only tracked and proposed non-ignored files
 into a generated directory under `/private/tmp`, installs from the lockfile,
-and proves the no-account doctor and 27-outcome deterministic sandbox. Product
+and proves the no-account doctor, 27-outcome deterministic sandbox, and
+credential-free Pages build. Product
 credentials are removed from the verifier subprocess environment, and outbound
 Google, Telegram, and OpenAI product endpoints are blocked while local loopback
 services remain available. Cleanup is restricted to the verifier's own
 generated prefix.
+
+## ADR-017: The public browser sandbox shares authority code, not integrations
+
+**Status:** accepted after browser/server parity and artifact verification
+
+The React application uses one typed demo-backend interface. Local `npm run demo`
+uses the existing HTTP broker; the Pages build uses an in-browser implementation
+backed by the same `AuthorityEngine`, contracts, canonical serializer, Card
+renderer and versioned fictional fixtures. The browser platform implementation
+uses pinned `@noble/hashes` for synchronous SHA-256 and Web Crypto for CSPRNG/
+UUID; Node remains the default production implementation. Known vectors and
+Node/browser canonical-hash tests pin parity.
+
+Server and integration modules are excluded from the Pages graph at build time.
+The built artifact is scanned for credential shapes, product environment names,
+production module markers and external product endpoints. Its static CSP uses
+`connect-src 'none'`, and browser QA observes only same-origin static assets.
+The sandbox therefore cannot contact Google, Gmail, Telegram, OpenAI, OpenClaw
+or a Bander server at runtime. It is not evidence that those services acted.
+
+GitHub Pages is built at `/bander/` by the official Actions flow. Query-string
+scenario state needs no SPA fallback and is verified under direct refresh.
+Because Pages does not support repository-controlled response headers, the meta
+CSP cannot set `frame-ancestors`; Bander does not claim header-level framing
+protection. Rollback means deploying the prior known-good commit/artifact.

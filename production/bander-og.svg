@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f4f0e9"/>
+  <rect x="56" y="50" width="1088" height="530" rx="38" fill="#0d3637"/>
+  <image href="bander_mark_transparent.svg" x="92" y="82" width="118" height="118"/>
+  <text x="230" y="145" fill="#6fe2d8" font-family="Arial, sans-serif" font-size="34" font-weight="700" letter-spacing="7">BANDER</text>
+  <text x="92" y="270" fill="#ffffff" font-family="Georgia, serif" font-size="62" font-weight="700">Ask freely.</text>
+  <text x="92" y="338" fill="#ffffff" font-family="Georgia, serif" font-size="62" font-weight="700">Approve changes.</text>
+  <text x="94" y="406" fill="#c6dedb" font-family="Arial, sans-serif" font-size="25">Exact deals before real actions.</text>
+  <text x="94" y="444" fill="#c6dedb" font-family="Arial, sans-serif" font-size="25">Truthful outcomes afterward.</text>
+  <rect x="752" y="100" width="316" height="416" rx="30" fill="#f9f7f1"/>
+  <text x="786" y="148" fill="#a43f39" font-family="Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="2">GIL’S PHONE — SANDBOX</text>
+  <rect x="782" y="178" width="256" height="270" rx="22" fill="#ffffff" stroke="#d9d7cd" stroke-width="2"/>
+  <text x="808" y="218" fill="#164541" font-family="Arial, sans-serif" font-size="21" font-weight="700">Bander</text>
+  <text x="808" y="265" fill="#263d3a" font-family="Arial, sans-serif" font-size="20">Appointment with</text>
+  <text x="808" y="295" fill="#263d3a" font-family="Arial, sans-serif" font-size="20">Dr. Rao is now</text>
+  <text x="808" y="342" fill="#263d3a" font-family="Arial, sans-serif" font-size="20" font-weight="700">Thu · 2:00–3:00 PM</text>
+  <text x="808" y="398" fill="#607370" font-family="Arial, sans-serif" font-size="16">Exact approved update.</text>
+  <circle cx="910" cy="478" r="8" fill="#1da69c"/>
+  <text x="930" y="485" fill="#315653" font-family="Arial, sans-serif" font-size="17">Seeded, not live</text>
+</svg>

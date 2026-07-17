@@ -100,6 +100,7 @@ describe("Checkpoint 6A deterministic sandbox", () => {
 
   it("sandbox_is_visibly_labelled_seeded_and_not_live", () => {
     const source = readFileSync(new URL("../../web/src/App.tsx", import.meta.url), "utf8");
-    expect(source).toContain("Deterministic sandbox — uses seeded data and does not connect to Google, Telegram, or OpenAI.");
+    expect(source).toContain("This is a deterministic sandbox using seeded data, running entirely in your browser.");
+    expect(source).toContain("It cannot touch Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts.");
   });
 });

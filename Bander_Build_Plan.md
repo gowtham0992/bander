@@ -173,6 +173,8 @@ Real authority state is currently process-local, memory-only, and not restart-du
 
 `npm run demo` is the fully local browser version of the deterministic sandbox. Its seeded email read/reply and independent-family journeys join the existing schedule, Calendar, ambiguity, decline, replay, recovery, and standing proofs without touching Google, Gmail, Telegram, OpenAI, or real people.
 
+The public Pages build is a second backend for the same React experience. It runs the shared authority engine, contracts, canonical hashing, Card renderer and versioned fictional fixtures entirely in the browser. It contains no production adapter, OAuth material, Telegram service, OpenAI/OpenClaw runtime, server, filesystem or process-environment module and makes no runtime network request beyond same-origin static assets. It is explicitly labelled seeded and non-live; it is not evidence of a real integration action.
+
 The sandbox's seeded Messages examples and standing autonomy remain valuable test surfaces. Standing autonomy remains sandbox-only and is not a current real-product capability.
 
 ## 10. Verification contract
@@ -186,7 +188,8 @@ The implementation is accepted only with executable evidence:
 - empirical Telegram owner/non-owner, wrong-chat/message/callback, imitation, replay, decline, delivery-retry, and trajectory-privacy checks;
 - Google OAuth, authoritative timezone, conditional write, stale ETag, concurrent ETag, ambiguous matching, unsupported shape, and failure-response tests;
 - a real `gpt-5.6-sol` evidence call and malformed/broadened-output tests;
-- production build, dependency audit, and tracked secret scan; and
+- production build, dependency audit, and tracked secret scan;
+- browser/server parity, Pages import-boundary and built-artifact security scans; and
 - a manual real Telegram → OpenClaw → Bander → Google journey.
 
 Observed evidence and command outputs live in [BUILD_WITH_CODEX.md](BUILD_WITH_CODEX.md). The public setup and commands live in [README.md](README.md).

@@ -117,7 +117,7 @@ export function buildPinnedReply(input: {
 
 type Operation = {
   digest: string;
-  status: "dispatching" | "committed" | "observed_target" | "ambiguous";
+  status: "dispatching" | "committed" | "observed_target" | "ambiguous" | "rejected";
 };
 
 function effectDigest(effect: EmailReplyEffect): string {
@@ -143,6 +143,9 @@ export class GmailReplyAdapter {
     if (existing) {
       if (existing.digest !== digest) throw new GmailReplyError("invalid_reply", "Email operation identity was reused with different content");
       if (existing.status === "committed" || existing.status === "observed_target") return { status: existing.status };
+      if (existing.status === "rejected") {
+        throw new GmailReplyError("send_rejected", "The email service rejected the approved reply");
+      }
       throw new GmailReplyError("send_ambiguous", "Bander could not confirm whether the email reply was sent");
     }
     if (createHash("sha256").update(Buffer.from(effect.rawMimeBase64Url, "base64url")).digest("hex") !== effect.mimeDigest) {
@@ -158,7 +161,7 @@ export class GmailReplyAdapter {
       return { status: "committed" };
     } catch (error) {
       if (!error || typeof error !== "object" || Reflect.get(error, "ambiguous") !== true) {
-        this.#operations.delete(operationId);
+        this.#operations.set(operationId, { digest, status: "rejected" });
         throw new GmailReplyError("send_rejected", "The email service rejected the approved reply");
       }
       try {

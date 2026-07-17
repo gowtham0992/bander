@@ -83,7 +83,7 @@ function assertNoPrivateArtifacts(cwd: string): void {
     }
   }
   const files = trackedAndProposedFiles(cwd);
-  if (files.some((file) => /\.(?:png|jpe?g|webp)$/i.test(file))) {
+  if (files.some((file) => /\.(?:png|jpe?g|webp)$/i.test(file) && file !== "production/bander-og.png")) {
     throw new Error("The isolated clone contains a personal or generated screenshot");
   }
   if (!fs.existsSync(path.join(cwd, "LICENSE"))) {
@@ -205,7 +205,11 @@ async function proveDemoStarts(cwd: string, environment: NodeJS.ProcessEnv): Pro
     const assets = await Promise.all(
       assetPaths.map((asset) => fetch(new URL(asset, origin)).then((response) => response.text())),
     );
-    if (!assets.some((asset) => asset.includes("Deterministic sandbox") && asset.includes("does not connect to Google, Telegram, or OpenAI"))) {
+    if (!assets.some((asset) =>
+      asset.includes("Deterministic sandbox")
+      && asset.includes("uses seeded data")
+      && asset.includes("does not connect to Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts"),
+    )) {
       throw new Error("The sandbox is not visibly labelled deterministic and non-live");
     }
   } finally {
@@ -246,6 +250,8 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
     });
     run("npm", ["run", "typecheck"], { cwd: clone, env: environment });
     run("npm", ["run", "build"], { cwd: clone, env: environment });
+    run("npm", ["run", "build:pages"], { cwd: clone, env: environment });
+    run("npm", ["run", "verify:pages"], { cwd: clone, env: environment });
     const doctor = run("npm", ["run", "doctor"], { cwd: clone, env: environment });
     if (!doctor.stdout.includes("Copy .env.example to .env") || doctor.stdout.includes("Error:")) {
       throw new Error("The no-account doctor was not actionable");
@@ -264,7 +270,7 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
       [
         "Clean-clone acceptance: PASS",
         "- no credentials, generated state, transcripts, or screenshots",
-        "- npm ci, typecheck, and production build passed",
+        "- npm ci, typecheck, production build, and credential-free Pages build passed",
         "- no-account doctor reported actionable real-setup gaps",
         "- deterministic sandbox started without accounts",
         "- 27 of 27 demo outcomes passed",

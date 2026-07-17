@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import type { DraftDocument } from "@bander/contracts";
+import { corePlatform } from "#bander/platform";
 
 function sortValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortValue);
@@ -22,5 +22,5 @@ export function hashDraft(document: DraftDocument): string {
 }
 
 export function hashCanonical(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+  return corePlatform.sha256Hex(canonicalJson(value));
 }

@@ -88,7 +88,9 @@ function messageLine(effect: MessageSendEffect): string {
 export function renderFamilyNotificationDocument(
   document: FamilyNotificationDocument,
 ): string {
-  if (document.kind === "direct_message") return document.body;
+  if (document.kind === "direct_message") {
+    return ["YOUR WORDS — SENT BY BANDER", document.body].join("\n");
+  }
   const interval =
     document.kind === "calendar_transition"
       ? formatCalendarIntervalWithContext(
@@ -106,7 +108,7 @@ export function renderFamilyNotificationDocument(
       ? `“${document.eventTitle},” scheduled for ${interval}, is no longer on the calendar.`
       : `“${document.eventTitle}” ${document.kind === "calendar_creation" ? "was added for" : "is now"} ${interval}.`;
   return [
-    "Bander update",
+    "EXACT UPDATE FROM BANDER",
     stateLine,
     "This is the exact update your family approved Bander to send.",
   ].join("\n");

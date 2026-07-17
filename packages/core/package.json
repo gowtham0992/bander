@@ -3,8 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#bander/platform": {
+      "browser": "./src/platform-browser.ts",
+      "default": "./src/platform-node.ts"
+    }
+  },
   "exports": "./src/index.ts",
   "dependencies": {
-    "@bander/contracts": "*"
+    "@bander/contracts": "*",
+    "@noble/hashes": "2.2.0"
   }
 }

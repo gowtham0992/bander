@@ -75,6 +75,23 @@ describe("exact Gmail reply", () => {
     expect(boundary.sends).toBe(1);
   });
 
+  it("definitive_rejection_is_terminal_and_replay_never_redispatches", async () => {
+    const boundary = new Boundary();
+    boundary.sendReply = async () => {
+      boundary.sends += 1;
+      throw new Error("definitive boundary rejection");
+    };
+    const adapter = new GmailReplyAdapter(boundary);
+
+    await expect(adapter.execute("operation-rejected", effect())).rejects.toMatchObject({
+      code: "send_rejected",
+    });
+    await expect(adapter.execute("operation-rejected", effect())).rejects.toMatchObject({
+      code: "send_rejected",
+    });
+    expect(boundary.sends).toBe(1);
+  });
+
   it("operation_identity_rejects_changed_body_or_regenerated_message_id", async () => {
     const boundary = new Boundary();
     const adapter = new GmailReplyAdapter(boundary);

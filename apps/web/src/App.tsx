@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ApprovalCard,
   ApprovalEffectPreview,
@@ -7,6 +7,9 @@ import type {
   StandingBandCard,
   ScheduleReadResult,
 } from "@bander/contracts";
+import { createDemoBackend } from "./backend/index.js";
+
+const demoBackend = createDemoBackend();
 
 type StandingRunResponse =
   | { status: "executed"; receipt: HumanReceipt }
@@ -40,8 +43,10 @@ type Screen =
   | { kind: "compound-receipt"; receipt: HumanReceipt; state: DemoSandboxState; card: ApprovalCard; replayed: boolean }
   | { kind: "schedule-read"; result: ScheduleReadResult }
   | { kind: "inbox-read"; messages: DemoSandboxState["inbox"] }
-  | { kind: "ambiguous-outcome"; message: string; card: ApprovalCard }
+  | { kind: "ambiguous-outcome"; message: string; card: ApprovalCard; state: DemoSandboxState }
   | { kind: "cancel-conflict-outcome"; state: DemoSandboxState }
+  | { kind: "email-thread-changed" }
+  | { kind: "initialization-failed" }
   | { kind: "standing-card"; card: StandingBandCard }
   | { kind: "standing-receipt"; receipt: HumanReceipt; bandId: string }
   | { kind: "standing-revoked" }
@@ -55,6 +60,7 @@ interface Status {
   fixtureMode: boolean;
   modelCompiler: "available" | "not_configured";
   heroMode: boolean;
+  browserOnly?: boolean;
 }
 
 export class ApiError extends Error {
@@ -99,40 +105,36 @@ export function attemptStandingRunWithRecovery(
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  if (init?.body !== undefined) headers.set("content-type", "application/json");
-  const response = await fetch(path, {
-    ...init,
-    headers,
-  });
-  if (response.status === 204) return undefined as T;
-  const body = (await response.json()) as T & {
+  const response = await demoBackend.request<T & {
     error?: { code: string; message: string };
-  };
-  if (!response.ok) {
+  }>(path, init);
+  if (response.status === 204) return undefined as T;
+  const body = response.body;
+  if (response.status < 200 || response.status >= 300) {
     throw new ApiError(
       body.error?.message ?? "Bander could not continue",
       response.status,
       body.error?.code,
     );
   }
-  return body;
+  return body as T;
 }
 
 function Brand() {
   return (
-    <a className="brand" href="/" aria-label="Bander home">
-      <img src="/bander_mark_transparent.svg" alt="" />
+    <a className="brand" href={import.meta.env.BASE_URL} aria-label="Bander home">
+      <img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />
       <span>Bander</span>
     </a>
   );
 }
 
-const sandboxNotice = "Deterministic sandbox — uses seeded data and does not connect to Google, Telegram, or OpenAI. It exercises the same Bander Card, approval, outcome, and replay rules as the real product.";
+const browserSandboxNotice = "This is a deterministic sandbox using seeded data, running entirely in your browser. It cannot touch Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts. It uses the same Bander authority engine and Card rendering as the real product.";
+const localSandboxNotice = "Deterministic sandbox — uses seeded data through a local Bander demo service. It does not connect to Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts.";
 const uncertaintySandboxPreface = "The Calendar provider’s response will be deliberately lost after approval, so Bander must report only what it can prove.";
 
-function SandboxNotice() {
-  return <p className="sandbox-notice">{sandboxNotice}</p>;
+function SandboxNotice({ browserOnly }: { browserOnly: boolean }) {
+  return <p className="sandbox-notice">{browserOnly ? browserSandboxNotice : localSandboxNotice}</p>;
 }
 
 function ScheduleReadView({ result, onBack }: { result: ScheduleReadResult; onBack: () => void }) {
@@ -198,7 +200,7 @@ function CompoundResult({ screen, onReplay, onBack }: { screen: Extract<Screen, 
             : "The exact approved action completed.";
   return (
     <main className="compound-result" aria-live="polite">
-      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>{outcome}</p><p>Gil’s phone received the exact text shown on the Card.</p><button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
+      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>{outcome}</p>{screen.receipt.familyNotification && <p>Gil’s phone received the exact text shown on the Card.</p>}<button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
       {screen.receipt.emailReply ? (
         <aside className="sandbox-phone" aria-label="Seeded Sent mail"><span>Sent mail — sandbox</span>{screen.state.sentEmails.map((email) => <article key={`${email.sentAt}-${email.subject}`}><strong>To {email.recipient}</strong><pre>{email.body}</pre></article>)}</aside>
       ) : <FamilyPhone state={screen.state} />}
@@ -206,11 +208,15 @@ function CompoundResult({ screen, onReplay, onBack }: { screen: Extract<Screen, 
   );
 }
 
-function AmbiguousOutcome({ message, onReplay, onBack }: { message: string; onReplay: () => void; onBack: () => void }) {
+function AmbiguousOutcome({ screen, onReplay, onBack }: { screen: Extract<Screen, { kind: "ambiguous-outcome" }>; onReplay: () => void; onBack: () => void }) {
+  const emailOnly = screen.card.effectPreviews.some((effect) => effect.kind === "email.reply");
+  const hasFamily = screen.card.effectPreviews.some((effect) => effect.kind === "family.telegram_notification");
   return (
     <main className="compound-result" aria-live="polite">
-      <section className="result-shell uncertain-result"><span className="deal-kicker">Deliberately simulated lost response</span><h1>Calendar result unknown.</h1><p className="preserve-lines">{message}</p><p>The sandbox deliberately makes the external result unknowable.</p><button className="secondary" onClick={onReplay}>Replay safely</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
-      <aside className="sandbox-phone"><span>Gil’s phone — sandbox</span><p>No family update received.</p></aside>
+      <section className="result-shell uncertain-result"><span className="deal-kicker">Deliberately simulated lost response</span><h1>{emailOnly ? "Email result unknown." : "Calendar result unknown."}</h1><p className="preserve-lines">{screen.message}</p><p>The sandbox deliberately makes the external result unknowable.</p><button className="secondary" onClick={onReplay}>Replay safely</button><button className="quiet" onClick={onBack}>Back to the sandbox</button></section>
+      {emailOnly ? (
+        <aside className="sandbox-phone" aria-label="Seeded Sent mail"><span>Sent mail — sandbox</span>{screen.state.sentEmails.length === 0 ? <p>No confirmed reply appears.</p> : screen.state.sentEmails.map((email) => <article key={`${email.sentAt}-${email.subject}`}><strong>To {email.recipient}</strong><pre>{email.body}</pre></article>)}</aside>
+      ) : hasFamily ? <FamilyPhone state={screen.state} /> : null}
     </main>
   );
 }
@@ -367,6 +373,137 @@ export function HeroSandbox() {
   );
 }
 
+type GuidedStage =
+  | "ready"
+  | "read"
+  | "email-card"
+  | "email-sent"
+  | "calendar-card"
+  | "complete";
+
+function GuidedEpisode() {
+  const [stage, setStage] = useState<GuidedStage>("ready");
+  const [card, setCard] = useState<ApprovalCard | null>(null);
+  const [state, setState] = useState<DemoSandboxState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [replayed, setReplayed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshState = async () => {
+    const next = await api<DemoSandboxState>("/api/demo/state");
+    setState(next);
+    return next;
+  };
+
+  const begin = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/demo/reset", { method: "POST" });
+      await api("/api/demo/inbox/guided");
+      await refreshState();
+      setStage("read");
+    } catch {
+      setError("This demo step reset itself. Tap Start again — nothing was sent or changed.");
+    } finally { setBusy(false); }
+  };
+
+  const prepare = async (fixtureId: string, nextStage: "email-card" | "calendar-card") => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const nextCard = await api<ApprovalCard>("/api/demo/proposals", {
+        method: "POST",
+        body: JSON.stringify({ fixtureId }),
+      });
+      setCard(nextCard);
+      setStage(nextStage);
+    } catch {
+      setError("This demo step reset itself. Tap Start again — nothing was sent or changed.");
+    } finally { setBusy(false); }
+  };
+
+  const approveGuided = async (nextStage: "email-sent" | "complete") => {
+    if (!card || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api<HumanReceipt>(`/api/drafts/${card.draftId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ draftHash: card.draftHash }),
+      });
+      await refreshState();
+      setStage(nextStage);
+      setReplayed(false);
+    } catch {
+      setError("Bander couldn’t complete this seeded step. Nothing will be retried automatically.");
+    } finally { setBusy(false); }
+  };
+
+  const replay = async () => {
+    if (!card || busy) return;
+    setBusy(true);
+    try {
+      await api<HumanReceipt>(`/api/drafts/${card.draftId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ draftHash: card.draftHash }),
+      });
+      await refreshState();
+      setReplayed(true);
+    } finally { setBusy(false); }
+  };
+
+  const latestInbox = state?.inbox.find((message) => message.subject === "Appointment options");
+  const guidedCalendar = state?.calendar.find((event) => event.title === "Appointment with Dr. Rao");
+  return (
+    <section className="guided-episode" aria-labelledby="guided-title">
+      <header className="guided-heading">
+        <div><span className="eyebrow">A family coordination episode</span><h2 id="guided-title">See the rule hold across a whole task.</h2></div>
+        <p>Advance each step yourself. Reads flow freely; every real change waits for its own exact deal.</p>
+      </header>
+      <div className="household-grid">
+        <section className="conversation-pane" aria-label="Assistant conversation and Bander approval">
+          <span className="surface-label">CONVERSATION + APPROVAL</span>
+          <div className="conversation-flow">
+            <p className="parent-bubble">What did Dr. Rao’s office say?</p>
+            {stage === "ready" ? (
+              <button className="primary" onClick={begin} disabled={busy}>{busy ? "Opening…" : "Ask without approval"}</button>
+            ) : (
+              <p className="assistant-bubble">Dr. Rao’s office says Thursday at 2 PM is available and asks whether that works for you.</p>
+            )}
+            {stage === "read" && <><p className="parent-bubble">Reply that Thursday at 2 works.</p><button className="primary" onClick={() => prepare("reply-to-dr-rao-about-thursday", "email-card")} disabled={busy}>Prepare the exact reply</button></>}
+            {stage === "email-card" && card && <DealCard card={card} embedded busy={busy} onApprove={() => approveGuided("email-sent")} onDecline={() => setStage("read")} onChange={() => setStage("read")} />}
+            {stage === "email-sent" && <><p className="bander-bubble"><strong>Email sent ✓</strong><br />The exact approved reply is in seeded Sent Mail.</p><p className="parent-bubble">Add Dr. Rao’s appointment Thursday at 2 PM and let Gil know.</p><button className="primary" onClick={() => prepare("add-dr-rao-appointment-and-notify-gil", "calendar-card")} disabled={busy}>Prepare the calendar + family deal</button></>}
+            {stage === "calendar-card" && card && <DealCard card={card} embedded busy={busy} onApprove={() => approveGuided("complete")} onDecline={() => setStage("email-sent")} onChange={() => setStage("email-sent")} />}
+            {stage === "complete" && <><p className="bander-bubble"><strong>Done exactly as approved ✓</strong><br />The seeded Calendar and Gil’s phone now show only the approved effects.</p><button className="secondary" onClick={replay} disabled={busy}>{replayed ? "Replay changed nothing" : "Replay the same approval"}</button></>}
+            {error && <p className="guided-error" role="alert">{error}</p>}
+          </div>
+        </section>
+        <section className="external-pane inbox-pane" aria-label="Seeded inbox and Sent Mail">
+          <span className="surface-label">{stage === "ready" || stage === "read" || stage === "email-card" ? "SEEDED INBOX" : "SENT MAIL — SANDBOX"}</span>
+          {stage === "ready" ? <p className="surface-empty">Ask about the fictional email to begin.</p> : stage === "read" || stage === "email-card" ? <article><strong>{latestInbox?.sender ?? "Dr. Rao’s office"}</strong><h3>{latestInbox?.subject ?? "Appointment options"}</h3><p>{latestInbox?.excerpt}</p></article> : <>{state?.sentEmails.filter((email) => email.subject === "Re: Appointment options").map((email) => <article key={email.sentAt}><strong>To {email.recipient}</strong><h3>{email.subject}</h3><p>{email.body}</p></article>)}</>}
+        </section>
+        <section className="external-pane calendar-pane-public" aria-label="Seeded Calendar">
+          <span className="surface-label">CALENDAR — SANDBOX</span>
+          {guidedCalendar ? <article><strong>THU · 2:00 PM</strong><h3>{guidedCalendar.title}</h3><p>2:00–3:00 PM MDT</p></article> : <p className="surface-empty">No Dr. Rao appointment yet.</p>}
+        </section>
+        <section className="external-pane phone-pane" aria-label="Gil’s seeded phone">
+          <span className="surface-label">GIL’S PHONE — SANDBOX</span>
+          {state?.familyUpdates.length ? state.familyUpdates.map((update) => <article key={update.sentAt}><strong>Bander</strong><pre>{update.body}</pre></article>) : <p className="surface-empty">No family update received.</p>}
+        </section>
+      </div>
+      {stage === "complete" && (
+        <aside className="evidence-strip">
+          <strong>The real Bander has done this with real services.</strong>
+          <span>A real OpenClaw conversation, Google Calendar, Gmail, and a separate Telegram phone—while OpenClaw held none of those credentials.</span>
+        </aside>
+      )}
+    </section>
+  );
+}
+
 function Welcome({
   onStart,
   onSchedule,
@@ -385,36 +522,32 @@ function Welcome({
   const [compilerRequest, setCompilerRequest] = useState("");
   return (
     <main className="welcome">
-      <div className="eyebrow">Everyday Bander lanes</div>
+      <div className="eyebrow">Bander · a confidence layer for personal AI</div>
       <h1>Ask freely.<br />Approve changes.</h1>
       <p className="lede">
-        Your agent can prepare useful work. Bander shows you the exact deal and
-        carries out only what you approve.
+        Your assistant can read your calendar and mail and talk like a person. Bander holds the keys—calendar changes, email replies, and family messages happen only as exact deals you approve, and Bander reports only what it can prove.
       </p>
       <section className="lane-grid" aria-label="Main sandbox journeys">
         <button className="lane-card read-lane" onClick={onSchedule}>
-          <span>ASK</span><strong>What’s on tomorrow?</strong><small>No approval toll for a harmless read.</small>
+          <span>JUST ASK</span><strong>“What’s on tomorrow? What did Ruth say?”</strong><small>Harmless reading flows without an approval toll.</small>
         </button>
         <button className="lane-card compound-lane" onClick={() => onStart("compound")}>
-          <span>CHANGE</span><strong>Move an appointment and let family know</strong><small>One exact Card. One decision.</small>
+          <span>APPROVE A CHANGE</span><strong>“Answer the email, update the calendar, tell Gil.”</strong><small>Exact effects. One decision at a time.</small>
         </button>
         <button className="lane-card uncertain-lane" onClick={() => onStart("ambiguous")}>
-          <span>UNCERTAIN</span><strong>See an unknowable result</strong><small>Bander says only what it can prove.</small>
+          <span>WHEN BANDER ISN’T SURE</span><strong>See a truthful uncertain outcome.</strong><small>No reassuring guess. No blind retry.</small>
         </button>
       </section>
+      <GuidedEpisode />
       <section className="more-behaviors">
-        <h2>More verified behaviors</h2>
-        <button className="scenario-link" onClick={onInbox}>Read an important seeded email</button>
-        <button className="scenario-link" onClick={() => onStart("email")}>Reply with exact approval</button>
-        <button className="scenario-link" onClick={() => onStart("email-thread")}>Reply when the thread changed</button>
-        <button className="scenario-link" onClick={() => onStart("email-ambiguous")}>Reply when Gmail’s result is uncertain</button>
-        <button className="scenario-link" onClick={() => onStart("direct-family")}>Tell Gil dinner is at 6</button>
-        <button className="scenario-link" onClick={() => onStart("create")}>Add something to the calendar</button>
-        <button className="scenario-link" onClick={() => onStart("cancel")}>Remove something from the calendar</button>
-        <button className="scenario-link" onClick={() => onStart("cancel-conflict")}>Removal when the calendar changed</button>
-        <button className="scenario-link" onClick={() => onStart("conflict")}>Changed-world refusal</button>
-        <button className="scenario-link" onClick={() => onStart("exact")}>Approval recovery and replay</button>
-        <button className="scenario-link" onClick={onStanding}>Standing routine sandbox</button>
+        <h2>More things Bander gets right</h2>
+        <div className="behavior-grid">
+          <button className="scenario-link" onClick={() => onStart("create")}>Add or remove something from the Calendar</button>
+          <button className="scenario-link" onClick={() => onStart("cancel-conflict")}>When the Calendar changed first</button>
+          <button className="scenario-link" onClick={() => onStart("email-thread")}>When a new email arrived before approval</button>
+          <button className="scenario-link" onClick={() => onStart("email-ambiguous")}>When an external service’s result is unknowable</button>
+          <button className="scenario-link" onClick={onStanding}>A bounded routine with an off switch</button>
+        </div>
       </section>
       {status?.modelCompiler === "available" && (
         <form
@@ -438,11 +571,13 @@ function Welcome({
           </div>
         </form>
       )}
-      <p className="fixture-note">
-        {status?.modelCompiler === "available"
-          ? "GPT-5.6 is available · deterministic demo selected"
-          : "Versioned local demo · no API key needed"}
-      </p>
+      <section className="identity-rule" aria-labelledby="identity-title">
+        <div><span className="eyebrow">The trust boundary</span><h2 id="identity-title">Two names, one rule.</h2><p>Your assistant talks with you and never holds the downstream keys. Bander holds the keys and speaks when something real is about to change—to show the exact deal, or to report only what it can prove afterward.</p></div>
+        <div className="trust-diagram" role="img" aria-label="You talk to your assistant. The assistant can ask Bander. Only Bander holds the keys to connected services.">
+          <div><strong>You</strong><span>ask naturally</span></div><span aria-hidden="true">→</span><div><strong>Your assistant</strong><span>talks, never holds keys</span></div><span aria-hidden="true">→</span><div className="bander-node"><strong>Bander</strong><span>shows the exact deal</span></div><span aria-hidden="true">→</span><div><strong>Your services</strong><span>change only after approval</span></div>
+        </div>
+      </section>
+      <footer className="public-footer"><strong>Set it up for someone you love.</strong><p>The complete setup guide, architecture, evidence ledger, honest limitations, repository, and MIT license ship with the project. Public links will appear here only when the repository is public.</p></footer>
     </main>
   );
 }
@@ -551,12 +686,14 @@ function DealCard({
   onDecline,
   onChange,
   busy,
+  embedded = false,
 }: {
   card: ApprovalCard;
   onApprove: () => void;
   onDecline: () => void;
   onChange: () => void;
   busy: boolean;
+  embedded?: boolean;
 }) {
   const expiry = new Date(card.expiresAt);
   const creates = card.effectPreviews.some((preview) => preview.kind === "calendar.create_event");
@@ -564,11 +701,13 @@ function DealCard({
   const hasFamilyUpdate = card.effectPreviews.some((preview) => preview.kind === "family.telegram_notification");
   const repliesByEmail = card.effectPreviews.some((preview) => preview.kind === "email.reply");
   const directFamily = hasFamilyUpdate && !card.effectPreviews.some((preview) => preview.kind.startsWith("calendar."));
+  const Shell = embedded ? "section" : "main";
+  const Heading = embedded ? "h3" : "h1";
   return (
-    <main className="deal-shell">
+    <Shell className={`deal-shell${embedded ? " embedded-deal" : ""}`}>
       <div className="deal-heading">
         <span className="deal-kicker">Prepared for you</span>
-        <h1>{card.title}</h1>
+        <Heading>{card.title}</Heading>
       </div>
       <article className="deal-card">
         <AgentClaim card={card} />
@@ -624,7 +763,7 @@ function DealCard({
           <button className="quiet" onClick={onDecline} disabled={busy}>Not now</button>
         </div>
       </article>
-    </main>
+    </Shell>
   );
 }
 
@@ -766,15 +905,19 @@ export function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "welcome" });
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
+  const deepLinkStarted = useRef(false);
+  const approvalInFlight = useRef(false);
 
   useEffect(() => {
     api<Status>("/api/status").then(setStatus).catch(() => setStatus(null));
+    if (deepLinkStarted.current) return;
+    deepLinkStarted.current = true;
     const scenario = new URLSearchParams(window.location.search).get("scenario");
-    if (["exact", "conflict", "compound", "ambiguous", "create", "cancel", "cancel-conflict", "email", "email-thread", "email-ambiguous", "direct-family"].includes(scenario ?? "")) void start(scenario as DealScenario);
+    if (["exact", "conflict", "compound", "ambiguous", "create", "cancel", "cancel-conflict", "email", "email-thread", "email-ambiguous", "direct-family"].includes(scenario ?? "")) void start(scenario as DealScenario, true);
     if (scenario === "standing") void startStanding();
   }, []);
 
-  async function start(scenario: DealScenario) {
+  async function start(scenario: DealScenario, initializingFromDeepLink = false) {
     setScreen({ kind: "loading", message: "Preparing the exact deal…" });
     try {
       await api("/api/demo/reset", { method: "POST" });
@@ -795,7 +938,8 @@ export function App() {
       });
       setScreen({ kind: "card", card, scenario });
     } catch (error) {
-      setScreen({ kind: "error", message: (error as Error).message });
+      if (initializingFromDeepLink) setScreen({ kind: "initialization-failed" });
+      else setScreen({ kind: "error", message: (error as Error).message });
     }
   }
 
@@ -946,6 +1090,8 @@ export function App() {
   }
 
   async function approve(card: ApprovalCard, scenario: DealScenario) {
+    if (approvalInFlight.current) return;
+    approvalInFlight.current = true;
     setBusy(true);
     try {
       const path = scenario === "ambiguous"
@@ -966,12 +1112,14 @@ export function App() {
         });
       if (scenario === "ambiguous") {
         const outcome = await api<{ message: string }>(path, { method: "POST", body: JSON.stringify({ draftHash: card.draftHash }) });
-        setScreen({ kind: "ambiguous-outcome", message: outcome.message, card });
+        const state = await api<DemoSandboxState>("/api/demo/state");
+        setScreen({ kind: "ambiguous-outcome", message: outcome.message, card, state });
         return;
       }
       if (scenario === "email-ambiguous") {
         const outcome = await api<{ message: string }>(path, { method: "POST", body: JSON.stringify({ draftHash: card.draftHash }) });
-        setScreen({ kind: "ambiguous-outcome", message: outcome.message, card });
+        const state = await api<DemoSandboxState>("/api/demo/state");
+        setScreen({ kind: "ambiguous-outcome", message: outcome.message, card, state });
         return;
       }
       if (["exact", "compound", "create", "cancel", "email", "direct-family"].includes(scenario)) {
@@ -1001,11 +1149,12 @@ export function App() {
         return;
       }
       if (scenario === "email-thread" && error instanceof ApiError && error.code === "email_thread_changed") {
-        setScreen({ kind: "error", message: "I stopped—the seeded email conversation changed. No reply was sent." });
+        setScreen({ kind: "email-thread-changed" });
         return;
       }
       setScreen({ kind: "error", message: (error as Error).message });
     } finally {
+      approvalInFlight.current = false;
       setBusy(false);
     }
   }
@@ -1040,7 +1189,7 @@ export function App() {
   return (
     <div className="app-frame">
       <header><Brand /><span className="tagline">Help without surprises.</span></header>
-      <SandboxNotice />
+      <SandboxNotice browserOnly={status?.browserOnly === true || demoBackend.kind === "browser"} />
       {screen.kind === "welcome" && (
         <Welcome
           onStart={start}
@@ -1080,7 +1229,23 @@ export function App() {
       {screen.kind === "schedule-read" && <ScheduleReadView result={screen.result} onBack={() => setScreen({ kind: "welcome" })} />}
       {screen.kind === "inbox-read" && <InboxReadView messages={screen.messages} onBack={() => setScreen({ kind: "welcome" })} />}
       {screen.kind === "compound-receipt" && <CompoundResult screen={screen} onReplay={() => replayCompound(screen)} onBack={() => setScreen({ kind: "welcome" })} />}
-      {screen.kind === "ambiguous-outcome" && <AmbiguousOutcome message={screen.message} onReplay={() => approve(screen.card, screen.card.effectPreviews.some((effect) => effect.kind === "email.reply") ? "email-ambiguous" : "ambiguous")} onBack={() => setScreen({ kind: "welcome" })} />}
+      {screen.kind === "ambiguous-outcome" && <AmbiguousOutcome screen={screen} onReplay={() => approve(screen.card, screen.card.effectPreviews.some((effect) => effect.kind === "email.reply") ? "email-ambiguous" : "ambiguous")} onBack={() => setScreen({ kind: "welcome" })} />}
+      {screen.kind === "email-thread-changed" && (
+        <main className="result-shell uncertain-result" aria-live="polite">
+          <span className="deal-kicker">Email changed</span>
+          <h1>I stopped.</h1>
+          <p className="result-summary">I stopped—the email conversation changed since this reply was prepared. No reply was sent. Read the latest message before trying again.</p>
+          <button className="secondary" onClick={() => setScreen({ kind: "welcome" })}>Back to the sandbox</button>
+        </main>
+      )}
+      {screen.kind === "initialization-failed" && (
+        <main className="result-shell error-state" role="alert">
+          <span className="deal-kicker">Demo step reset</span>
+          <h1>Nothing happened.</h1>
+          <p className="result-summary">This demo step reset itself. Tap Start again — nothing was sent or changed.</p>
+          <button className="secondary" onClick={() => setScreen({ kind: "welcome" })}>Start again</button>
+        </main>
+      )}
       {screen.kind === "cancel-conflict-outcome" && (
         <main className="compound-result" aria-live="polite">
           <section className="result-shell uncertain-result"><span className="deal-kicker">Calendar changed</span><h1>I stopped.</h1><p>The calendar changed since the deal was prepared. Bander did not remove the event or send a family update.</p><p>Review the changed event before asking your assistant again.</p><button className="secondary" onClick={() => setScreen({ kind: "welcome" })}>Back to the sandbox</button></section>

@@ -79,6 +79,7 @@ Choose the path that matches what you want to verify:
 | **Real product** | Live conversational OpenClaw, live `gpt-5.6-sol`, real Google Calendar, bounded Gmail, real Telegram | `npm run real` after the one-time setup below |
 | **Hero sandbox** | Deterministic provider, seeded mock Calendar and Messages services, real Telegram | `npm run hero` |
 | **Local judge sandbox** | Deterministic browser demo with schedule read, add/move/remove deals, compound family updates, ambiguous outcomes, and seeded mock services | `npm run demo` |
+| **Static browser sandbox** | The same authority engine, canonical hashing, contracts and Card renderer against browser-only fictional state; no accounts or server | `npm run build:pages` |
 
 The sandbox paths never claim to touch Google.
 
@@ -246,7 +247,21 @@ For a fully local, no-Telegram judge path:
 npm run demo
 ```
 
-Open `http://127.0.0.1:4310`. Every page is labelled as seeded and not live. The journeys demonstrate frictionless schedule and email reads, exact Calendar/email/family deals, and truthful uncertain outcomes. Seeded decline, replay, changed-world, recovery, and narrow standing proofs remain under **More verified behaviors**. `npm run verify:demo` independently reports all 27 outcomes.
+Open `http://127.0.0.1:4310`. Every page is labelled as seeded and not live. The journeys demonstrate frictionless schedule and email reads, exact Calendar/email/family deals, and truthful uncertain outcomes. Seeded decline, replay, changed-world, recovery, and narrow standing proofs remain under **More things Bander gets right**. `npm run verify:demo` independently reports all 27 outcomes.
+
+## Zero-account browser sandbox
+
+The GitHub Pages build is the judge-facing homepage, not a marketing page. It runs the shared production authority engine, contracts, canonical SHA-256 hashing and Card renderer in the browser against versioned fictional fixtures. A separate browser platform boundary supplies the same canonical hash using pinned `@noble/hashes` and Web Crypto randomness. Server, OAuth, Telegram, OpenAI, OpenClaw, filesystem and process-environment modules are excluded by the Pages import boundary.
+
+```bash
+npm ci
+npm run build:pages
+npm run verify:pages
+```
+
+The artifact is built for `/bander/`; query links such as `?scenario=compound` survive direct load and refresh. Its meta CSP blocks runtime connections with `connect-src 'none'`, and empirical browser QA verifies that only same-origin static assets load. GitHub Pages does not let this repository set response headers such as `frame-ancestors`, so the static meta policy is not described as clickjacking protection. Source maps remain public because the artifact scan found no secret or private state in them.
+
+Deployment uses [the official Pages Actions workflow](.github/workflows/pages.yml). Roll back by rerunning the workflow for the previous known-good commit (or reverting the public-surface commit and letting Pages deploy that artifact). Repository visibility and Pages settings remain owner-controlled; the workflow does not change either.
 
 ## Verification and attack suite
 
@@ -259,6 +274,8 @@ npm run build
 npm run doctor
 npm run verify:demo
 npm run verify:clean-clone
+npm run build:pages
+npm run verify:pages
 npm run verify:recovery
 npm run verify:standing-recovery
 npm run verify:openclaw
@@ -288,7 +305,7 @@ npm run verify:cancel-live -- --title='Fictional title' --date=2026-07-23
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-Fresh Checkpoint 8 totals are recorded after the combined final matrix. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+The fresh public-surface matrix contains 453 runtime functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 

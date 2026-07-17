@@ -231,7 +231,7 @@ const app = buildBrokerApp({
           mockAdapter.prepareAmbiguousEmailOutcome(),
         simulateEmailThreadChange: () =>
           mockAdapter.simulateEmailThreadChange(),
-        readDemoInbox: async () => (await mockAdapter.readDemoState()).inbox,
+        readDemoInbox: async () => (await mockAdapter.readDemoState()).inbox.filter((message) => message.subject === "Lunch next week"),
         readDemoSchedule: async () => {
           const state = await mockAdapter.readDemoState();
           const events = state.calendar

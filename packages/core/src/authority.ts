@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from "node:crypto";
 import type {
   AgentReceipt,
   ApprovalCard,
@@ -19,6 +18,7 @@ import type {
   StandingExecutionRequest,
   StoredDraft,
 } from "@bander/contracts";
+import { corePlatform } from "#bander/platform";
 import { hashCanonical, hashDraft } from "./canonical.js";
 import {
   renderApprovalCard,
@@ -319,7 +319,7 @@ export class AuthorityEngine {
     this.#store = options.store;
     this.#adapter = options.adapter;
     this.#now = options.now ?? (() => new Date());
-    this.#id = options.id ?? randomUUID;
+    this.#id = options.id ?? corePlatform.randomUuid;
     this.#proposalLimit = options.proposalLimit ?? 5;
     this.#proposalWindowMinutes = options.proposalWindowMinutes ?? 10;
   }
@@ -946,11 +946,11 @@ export class AuthorityEngine {
     }
     if (fixture.emailReply) {
       const reply = fixture.emailReply;
-      const mimeBytes = Buffer.from(reply.rawMimeBase64Url, "base64url");
+      const mimeBytes = corePlatform.base64UrlToBytes(reply.rawMimeBase64Url);
       if (
         reply.type !== "email.reply" ||
         !/^[a-f0-9]{64}$/.test(reply.mimeDigest) ||
-        createHash("sha256").update(mimeBytes).digest("hex") !== reply.mimeDigest ||
+        corePlatform.sha256Hex(mimeBytes) !== reply.mimeDigest ||
         !/^<[^\r\n<>\s]+@[^\r\n<>\s]+>$/.test(reply.rfcMessageId) ||
         !/^[a-f0-9]{64}$/.test(reply.reconciliationToken) ||
         /[\r\n]/.test(reply.recipient) ||
