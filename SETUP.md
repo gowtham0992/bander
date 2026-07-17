@@ -32,7 +32,7 @@ npm run demo
 
 Open <http://127.0.0.1:4310>. This is a deterministic, seeded sandbox. It does not connect to Google, Telegram, or OpenAI and must not be presented as evidence of a live account mutation. It exercises the same Card, approval, outcome, and replay rules as the real product, including secondary add and remove journeys.
 
-On the development machine, clean-clone verification completed in 13–15 seconds with a warm npm cache. A cold network/package download can take materially longer; Bander does not promise a fixed five-minute install time.
+On the development machine, both completed clean-clone runs took 13 seconds with a warm npm cache (observed range: 13–13 seconds). A cold network/package download can take materially longer; Bander does not promise a fixed five-minute install time.
 
 ## Real setup
 

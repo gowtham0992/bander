@@ -26,7 +26,7 @@ npm run verify:demo
 # Verifies all 27 outcomes without Google, Telegram, OpenAI, Gmail, or OpenClaw credentials
 ```
 
-The [hosted Pages experience](https://gowtham0992.github.io/bander/) runs the shared authority engine in the browser against seeded fictional state and touches no real account. `npm run verify:pages` is the single artifact-security, direct-refresh, and browser/server parity check. The supported Node floor is 22.12.0; CI and the repository-pinned runtime use Node 24. Two clean-clone runs took 13–15 seconds with a warm npm cache on the development machine; package and network download speed are the main variables, so this is measured evidence rather than a fixed-time promise. Expected output ends with `27 of 27 demo outcomes passed`. No shared judge account is provided because shared credentials would contradict Bander's trust model.
+The [hosted Pages experience](https://gowtham0992.github.io/bander/) runs the shared authority engine in the browser against seeded fictional state and touches no real account. `npm run verify:pages` is the single artifact-security, direct-refresh, and browser/server parity check. The supported Node floor is 22.12.0; CI and the repository-pinned runtime use Node 24. Both completed clean-clone runs took 13 seconds with a warm npm cache on the development machine (observed range: 13–13 seconds); package and network download speed are the main variables, so this is measured evidence rather than a fixed-time promise. Expected output ends with `27 of 27 demo outcomes passed`. No shared judge account is provided because shared credentials would contradict Bander's trust model.
 
 | Evaluator path | What it proves | What it does not prove | Cleanup |
 | --- | --- | --- | --- |

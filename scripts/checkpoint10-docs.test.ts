@@ -8,7 +8,7 @@ describe("Checkpoint 10 evaluator and owner surface", () => {
     const source = read("README.md");
     expect(source).toContain("Judges: two commands, no accounts");
     expect(source).toContain("27 deterministic outcomes");
-    expect(source).toContain("13–15 seconds with a warm npm cache");
+    expect(source).toContain("observed range: 13–13 seconds");
     expect(source).toContain("No shared judge account is provided");
     expect(source).toContain("90-second hosted experience");
     expect(source).toContain("Clone + deterministic verification");
