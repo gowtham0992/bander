@@ -228,6 +228,7 @@ function safeCleanup(directory: string): void {
 export async function verifyCleanClone(source = process.cwd()): Promise<void> {
   const temporary = fs.mkdtempSync(TEMPORARY_PREFIX);
   const clone = path.join(temporary, "repository");
+  const startedAt = Date.now();
   try {
     run("git", ["clone", "--quiet", "--no-hardlinks", source, clone], { cwd: temporary });
     copyCurrentCheckout(source, clone);
@@ -235,11 +236,13 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
     assertNoSecretShapedTrackedContent(clone);
     assertLocalDocumentationLinks(clone);
 
+    const installStartedAt = Date.now();
     run("npm", ["ci", "--ignore-scripts"], {
       cwd: clone,
       env: sanitizedProductEnvironment(false),
       timeout: 300_000,
     });
+    const installSeconds = Math.ceil((Date.now() - installStartedAt) / 1000);
     const environment = sanitizedProductEnvironment();
     const [brokerPort, mockPort, webPort] = await reserveDistinctPorts(3);
     Object.assign(environment, {
@@ -256,6 +259,11 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
     if (!doctor.stdout.includes("Copy .env.example to .env") || doctor.stdout.includes("Error:")) {
       throw new Error("The no-account doctor was not actionable");
     }
+    const setup = run("npm", ["run", "setup"], { cwd: clone, env: environment });
+    if (!setup.stdout.toLocaleLowerCase("en-US").includes("edit it locally") || !fs.existsSync(path.join(clone, ".env")) || !fs.existsSync(path.join(clone, ".bander", "setup-state.json"))) {
+      throw new Error("The repository-local setup guide did not create a private resumable starting point");
+    }
+    run("npx", ["vitest", "run", "scripts/setup-and-recovery.test.ts"], { cwd: clone, env: environment });
     const demo = run("npm", ["run", "verify:demo"], { cwd: clone, env: environment });
     const parsedStart = demo.stdout.lastIndexOf("{");
     const outcomes = parsedStart >= 0 ? JSON.parse(demo.stdout.slice(parsedStart)) as Record<string, string> : {};
@@ -271,7 +279,9 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
         "Clean-clone acceptance: PASS",
         "- no credentials, generated state, transcripts, or screenshots",
         "- npm ci, typecheck, production build, and credential-free Pages build passed",
+        `- npm ci completed in ${installSeconds}s; total clean-clone proof completed in ${Math.ceil((Date.now() - startedAt) / 1000)}s`,
         "- no-account doctor reported actionable real-setup gaps",
+        "- repository-local setup started without secrets; scripted resume/isolation/recovery tests passed",
         "- deterministic sandbox started without accounts",
         "- 27 of 27 demo outcomes passed",
         "- no Google, Telegram, or OpenAI product endpoint was reachable",

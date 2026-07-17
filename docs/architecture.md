@@ -295,3 +295,13 @@ scenario state needs no SPA fallback and is verified under direct refresh.
 Because Pages does not support repository-controlled response headers, the meta
 CSP cannot set `frame-ancestors`; Bander does not claim header-level framing
 protection. Rollback means deploying the prior known-good commit/artifact.
+
+## ADR-018: Setup is repository-local, resumable verification—not installation
+
+**Status:** accepted
+
+`npm run setup` is a repository-local setup guide and verifier, not an installer. It may create only ignored `.env` and `.bander/` files. It never reads or modifies `~/.openclaw`; `npm run real` instead launches repository-pinned OpenClaw 2026.7.1 under an isolated generated home. Setup stores a versioned milestone list, configuration digests, a random verification challenge, and names/digests of template keys it created—never credential values.
+
+The Telegram privacy gate is a fresh HMAC-authenticated artifact emitted only by the empirical real-service verifier and bound to the current setup challenge/configuration digest. Stale, mismatched, unsigned, boolean, and substituted artifacts fail closed. Google validation pins the primary-Calendar timezone and the exact Gmail `readonly` + `send` scope set.
+
+Recovery is path-confined and manifest-driven. Pairing reset refuses an active family relationship unless the operator explicitly includes it. Google reauthorization removes only the selected token, never its Desktop client. Local uninstall defaults to a dry run and removes only manifest-owned ignored paths plus setup-created `.env` entries whose values remain unchanged. Synthetic-HOME and canary tests prove those paths do not touch an existing OpenClaw or unrelated files.

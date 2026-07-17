@@ -16,6 +16,24 @@ Bander is a confidence layer for personal AI agents. OpenClaw can understand a n
 
 The claim is intentionally narrow: Bander does not decide whether an agent's goal is wise. For effects routed through Bander, it ensures nothing happens beyond the specific deal the person saw and approved.
 
+### Judges: two commands, no accounts
+
+```bash
+npm ci && npm run demo
+# Open http://127.0.0.1:4310 — 27 deterministic outcomes
+
+npm run verify:demo
+# Verifies all 27 outcomes without Google, Telegram, OpenAI, Gmail, or OpenClaw credentials
+```
+
+The [hosted Pages experience](https://gowtham0992.github.io/bander/) runs the shared authority engine in the browser against seeded fictional state and touches no real account. `npm run verify:pages` is the single artifact-security, direct-refresh, and browser/server parity check. The supported Node floor is 22.12.0; CI and the repository-pinned runtime use Node 24. Two clean-clone runs took 13–15 seconds with a warm npm cache on the development machine; package and network download speed are the main variables, so this is measured evidence rather than a fixed-time promise. Expected output ends with `27 of 27 demo outcomes passed`. No shared judge account is provided because shared credentials would contradict Bander's trust model.
+
+| Evaluator path | What it proves | What it does not prove | Cleanup |
+| --- | --- | --- | --- |
+| **90-second hosted experience** | Product story, seeded authority/Card behavior, uncertainty and replay in a browser | Live OpenClaw, Google, Gmail or Telegram access | Close the tab; no account or local state was used |
+| **Clone + deterministic verification** | Reproducible 27-outcome sandbox, tests, and browser/server parity from the lockfile | A live external-service mutation | `Ctrl-C`; optionally remove the clone |
+| **Optional real setup** | The bounded real path using the evaluator's own disposable test accounts | Broad public OAuth onboarding or modification of an existing OpenClaw | Use the selective recovery commands in [SETUP.md](SETUP.md), then revoke cloud consent manually if desired |
+
 ## A 30-second real journey
 
 1. A parent writes in Telegram: “Move Bander Demo Appointment to July 18 at 4 PM and let my son know.”
@@ -89,13 +107,12 @@ The technical owner should follow [SETUP.md](SETUP.md) for the complete adult-ch
 
 ```bash
 npm ci
-cp .env.example .env
-# Complete Telegram, OpenAI, and Google Desktop OAuth setup in SETUP.md.
-npm run pair:real
-npm run doctor
-npm run doctor -- --live
+npm run setup
+# Follow the one-step-at-a-time repository-local guide and verifier.
 npm run real
 ```
+
+`npm run setup` is a repository-local setup guide and verifier, not an installer. It writes only ignored repository-local `.env`/`.bander` verification state, never collects or prints secrets, and never reads or changes an existing `~/.openclaw`. The real command launches the repository-pinned OpenClaw 2026.7.1 in an isolated generated home.
 
 The detailed reference below records the current Build Week configuration. `npm run doctor` is read-only and works before `.env` exists; expected setup gaps are actionable `FAIL` rows, not crashes. `npm run doctor -- --live` adds read-only Telegram, primary-Calendar timezone, Gmail identity/scope, and exact five-tool probes. It never verifies BotFather privacy by inference—use the empirical procedure in [SETUP.md](SETUP.md).
 
@@ -108,9 +125,17 @@ The detailed reference below records the current Build Week configuration. `npm 
 ```bash
 git clone https://github.com/gowtham0992/bander.git
 cd bander
-npm install
-cp .env.example .env
+npm ci
+npm run setup
 ```
+
+### Supported platform boundary
+
+**Tested and supported:** macOS on Apple Silicon; Node 22.12.0 or newer; Node 24 in CI and the pinned child runtime; npm through the committed lockfile; repository-pinned OpenClaw 2026.7.1; two Telegram bots and one private group; a dedicated Google OAuth Desktop client in External/Testing mode with configured test accounts; and a modern evergreen browser for the sandbox.
+
+**Expected but unverified:** Intel macOS and Linux deterministic sandbox/tests.
+
+**Unsupported:** Windows real mode, Docker, remote/headless production deployment, other OpenClaw versions, additive modification of an existing OpenClaw, broad production-grade OAuth onboarding for arbitrary public accounts, and restart-durable production authority.
 
 ### 2. Create two Telegram bots
 
@@ -305,7 +330,7 @@ npm run verify:cancel-live -- --title='Fictional title' --date=2026-07-23
 
 The suite covers changed-world preconditions, malformed and broadened model output, ambiguous matching, callback authorization, replay, decline, idempotent HTTP recovery, standing-request recovery in the sandbox, tool isolation, secret separation, and human-only Card/outcome content. See the [evidence ledger](BUILD_WITH_CODEX.md) and [technical architecture](docs/architecture.md).
 
-The fresh public-surface matrix contains 454 runtime functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the evidence ledger identifies those specific red→green cases rather than claiming that every static test was observed red.
+The fresh Checkpoint 10 matrix contains 468 runtime functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the [evidence ledger](BUILD_WITH_CODEX.md) identifies those specific red→green cases rather than claiming that every static test was observed red.
 
 ## Security boundary and limitations
 
@@ -328,13 +353,17 @@ Current limitations are material:
 
 ## How Codex and GPT-5.6 Sol were used
 
-Codex was the primary builder and verification partner throughout Build Week. It helped turn the product claim into executable invariants, wrote red-first regressions for authority and recovery gaps, integrated the real OpenClaw/Telegram/Google path, ran the attack and privacy suites, and maintained [BUILD_WITH_CODEX.md](BUILD_WITH_CODEX.md) as an evidence ledger of decisions and observed failures.
+Codex was the implementation and verification partner in the primary build task. It translated the human-selected product boundary into executable invariants, implemented integrations and parent-facing flows, wrote red-first regressions, performed deliberate safety mutations, ran the attack/privacy/recovery matrices, and maintained [BUILD_WITH_CODEX.md](BUILD_WITH_CODEX.md). Human decisions remained the product promise, supported actions, failure semantics, copy, visual identity, privacy tradeoffs, and which real evidence was acceptable.
 
-In the real product, `gpt-5.6-sol` has bounded conversational, Calendar, Gmail-read, and action-routing roles. OpenClaw uses it for ordinary conversation and genuine tool selection. Bander uses strict Structured Outputs to extract only the minimum Calendar, inbox-search, reply-body, or family-message hints from the parent’s newest request. It cannot choose Gmail or Calendar identities, recipient addresses, Telegram routing, MIME headers, credentials, effects, authority, or execution parameters. The exact email reply or independent family text is stored, hashed, shown, and later reproduced unchanged; Calendar-bound family updates remain deterministic renderings of authoritative Calendar state.
+Three assumptions disproved during implementation became permanent tests: Gmail rewrote the planned `Message-ID`; the first compound approval exposed a state-lock deadlock; and an ambiguous Calendar execution was initially about to be described as “nothing changed.” Codex accelerated the loop from reproduction to bounded fix, but the evidence ledger distinguishes tests actually observed red from static coverage.
+
+In the real product, `gpt-5.6-sol` operates only inside deterministic guardrails. OpenClaw uses it for conversation and genuine tool selection; Bander uses strict Structured Outputs for bounded Calendar, inbox-search, reply-body, and family-message hints. Sol cannot choose Gmail or Calendar identities, recipient addresses, Telegram routing, MIME headers, credentials, effects, authority, or execution parameters. Codex built and tested the system; Sol handles bounded live-language interpretation inside it. The `/feedback` Session ID from the primary task will be supplied directly in Devpost and is intentionally not committed or represented by a placeholder.
+
+Strong live evidence is indexed in [Real Calendar](BUILD_WITH_CODEX.md#checkpoint-22--real-google-calendar-risk-spike), [schedule read](BUILD_WITH_CODEX.md#july-16-2026--bounded-real-schedule-read-lane), [family pairing and delivery](BUILD_WITH_CODEX.md#july-16-2026--replay-safe-family-notification-delivery), [Calendar creation/cancellation](BUILD_WITH_CODEX.md#2026-07-16--checkpoint-7b-precondition-pinned-real-calendar-cancellation), [Gmail and direct family coordination](BUILD_WITH_CODEX.md#2026-07-16--checkpoint-8-family-coordination-concierge), and the [public browser product](BUILD_WITH_CODEX.md#2026-07-16--combined-checkpoint-9-public-product-surface).
 
 ## Roadmap
 
-Future work may add a safe additive installer for existing OpenClaw configurations, restart-durable production authority storage, startup reconciliation, more independently credentialed action adapters, and additional human channels. Those are roadmap items, not current capabilities.
+Future work may add restart-durable production authority storage, startup reconciliation, more independently credentialed action adapters, and additional human channels. Additive modification of an existing OpenClaw is not supported by this product; the repository deliberately launches an isolated pinned runtime instead.
 
 ## License
 

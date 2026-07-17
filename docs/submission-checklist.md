@@ -46,9 +46,9 @@ Current required form fields also include submitter type, country of residence, 
 - [x] No tracked `.env`, `.bander/`, OAuth client/token, bot token, personal screenshot, or current transcript
 - [ ] Run `npm run verify:clean-clone` on the final public checkpoint
 - [ ] Complete the unmoderated protocol in [parent-test.md](parent-test.md) with an actual parent or honestly labelled non-builder adult proxy
-- [ ] Make `gowtham0992/bander` public, or keep private and share with both judge addresses
-- [ ] Verify repository rendering and links on GitHub after push
-- [ ] Enable GitHub Pages with **GitHub Actions** as the source if the repository setting is not already enabled, then verify the public sandbox signed out
+- [ ] Reverify that `gowtham0992/bander` is public from a signed-out browser on the final submission commit
+- [ ] Reverify <https://gowtham0992.github.io/bander/> signed out after the final Pages deployment
+- [ ] Reverify repository rendering and every README link on the final submission commit
 - [ ] Add one separately sanitized real-product screenshot
 
 ## Video preparation

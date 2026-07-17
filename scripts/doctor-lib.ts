@@ -13,6 +13,7 @@ import {
 import { createGoogleCalendarBoundary } from "../apps/broker/src/google-calendar.js";
 import { parseDesktopOAuthClient } from "../apps/broker/src/google-oauth.js";
 import { BANDER_REAL_OPENCLAW_TOOLS } from "./openclaw-telegram-config.js";
+import { assertExactGmailScopes } from "./setup-lib.js";
 
 export type DoctorStatus = "PASS" | "WARN" | "FAIL";
 
@@ -341,7 +342,10 @@ function dependencyChecks(cwd: string): DoctorCheck[] {
   } catch {
     openclaw = check("FAIL", "OpenClaw", "The pinned OpenClaw package is unavailable.", "Run npm ci.");
   }
-  return [node, dependencies, openclaw];
+  const platform = process.platform === "darwin" && process.arch === "arm64"
+    ? check("PASS", "Platform", "macOS on Apple Silicon is the tested and supported real-product platform.")
+    : check("WARN", "Platform", "This platform is not verified for Bander real mode. The deterministic sandbox may still work.", "Use macOS on Apple Silicon for the supported real-product setup; see SETUP.md.");
+  return [platform, node, dependencies, openclaw];
 }
 
 function documentationCheck(cwd: string): DoctorCheck {
@@ -350,7 +354,7 @@ function documentationCheck(cwd: string): DoctorCheck {
       scripts?: Record<string, string>;
     };
     const scripts = packageValue.scripts ?? {};
-    const commands = ["doctor", "demo", "real", "pair:real", "pair:family", "revoke:family"];
+    const commands = ["doctor", "setup", "demo", "real", "pair:real", "pair:family", "revoke:family", "reset:pairing", "reauthorize:google", "uninstall:local"];
     const files = ["README.md", "SETUP.md"];
     if (commands.some((name) => !scripts[name]) || files.some((name) => !fs.existsSync(path.join(cwd, name)))) {
       throw new Error("missing setup surface");
@@ -428,10 +432,11 @@ async function createDefaultLiveProbes(
       const access = await client.getAccessToken();
       if (!access.token) throw new Error("gmail oauth unavailable");
       const info = await client.getTokenInfo(access.token);
-      const required = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"];
+      let scopesValid = true;
+      try { assertExactGmailScopes(info.scopes); } catch { scopesValid = false; }
       return {
         reachable: Boolean(profile.data.emailAddress),
-        scopesValid: JSON.stringify([...info.scopes].sort()) === JSON.stringify([...required].sort()),
+        scopesValid,
       };
     },
     async mcp() {

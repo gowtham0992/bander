@@ -32,24 +32,33 @@ npm run demo
 
 Open <http://127.0.0.1:4310>. This is a deterministic, seeded sandbox. It does not connect to Google, Telegram, or OpenAI and must not be presented as evidence of a live account mutation. It exercises the same Card, approval, outcome, and replay rules as the real product, including secondary add and remove journeys.
 
+On the development machine, clean-clone verification completed in 13–15 seconds with a warm npm cache. A cold network/package download can take materially longer; Bander does not promise a fixed five-minute install time.
+
 ## Real setup
+
+`npm run setup` is a repository-local setup guide and verifier, not an installer. It never reads or modifies `~/.openclaw` or an existing OpenClaw. It creates an ignored 0600 `.env` template when needed, asks you to edit it in a local editor, and records only versioned milestones, configuration digests, and names of template keys it created. It never collects, prints, or stores secret values and never overwrites a differing existing value.
 
 ### 1. Prepare the setup computer
 
 Current verified environment:
 
-- macOS (the first OAuth flow uses the macOS browser launcher);
-- Node.js 22.12 or newer; and
-- the OpenClaw version pinned in this repository. No global OpenClaw install is required.
+- macOS on Apple Silicon;
+- Node.js 22.12 or newer (Node 24 in CI and the isolated runtime);
+- npm through the committed lockfile; and
+- repository-pinned OpenClaw 2026.7.1. No global OpenClaw install is required.
+
+Intel macOS and Linux deterministic tests are expected but unverified. Windows real mode, Docker, remote/headless deployment, other OpenClaw versions, additive modification of an existing OpenClaw, and durable authority across broker restarts are unsupported. The sandbox requires a modern evergreen browser.
+
+Supported and empirically verified OAuth topology: a dedicated Google OAuth Desktop client in External/Testing mode with configured test accounts. Broad production-grade OAuth onboarding for arbitrary public accounts is unsupported.
 
 ```bash
 git clone https://github.com/gowtham0992/bander.git
 cd bander
 npm ci
-cp .env.example .env
+npm run setup
 ```
 
-Edit `.env` in a local editor. Never paste secret values into chat, screenshots, issue reports, documentation, or shell history.
+If setup created `.env`, edit it in a local editor and rerun `npm run setup`. Never paste secret values into chat, screenshots, issue reports, documentation, or shell history. Calendar and Gmail token paths must be separate and confined under this repository's ignored `.bander/`; setup verifies existence and 0600 permissions without printing values.
 
 ### 2. Create two visually distinct Telegram bots
 
@@ -75,7 +84,7 @@ Telegram’s Bot API cannot prove every BotFather privacy setting. `npm run doct
 npm run verify:telegram-privacy
 ```
 
-Follow its empirical owner/non-owner/imitation procedure. The parent’s natural group messages should reach OpenClaw; Bander must not ambient-listen to them.
+Follow its empirical owner/non-owner/imitation procedure. A successful run writes a fresh signed local artifact bound to setup's current challenge and configuration digest. Boolean, stale, mismatched, or manually substituted evidence is rejected. The parent’s natural group messages should reach OpenClaw; Bander must not ambient-listen to them.
 
 ### 3. Configure OpenAI
 
@@ -148,10 +157,16 @@ The same-device account-switch topology is useful for testing but is not require
 
 ### 7. Check setup, then start
 
+In one terminal, start the isolated repository-pinned product. In a second terminal, rerun setup so its final milestone can execute the read-only live doctor, including the exact five-tool inventory:
+
 ```bash
+# Terminal A
+npm run real
+
+# Terminal B
+npm run setup
 npm run doctor
 npm run doctor -- --live
-npm run real
 ```
 
 The default doctor is offline and safe to run before setup is complete. `--live` performs read-only reachability and exact-tool checks. Neither command sends Telegram messages, changes Calendar data, creates authority, or modifies pairing state.
@@ -201,7 +216,25 @@ Revocation is idempotent and removes the routable Telegram destination. Reconnec
 
 ### Google OAuth expired or was revoked
 
-Stop the real stack. Preserve the client file, remove only the ignored expired token after confirming the path, and rerun `npm run pair:real` to authorize again. Never copy token contents into a bug report.
+Stop the real stack, then use exactly one bounded command:
+
+```bash
+npm run reauthorize:google -- --calendar
+npm run reauthorize:google -- --gmail
+npm run reauthorize:google -- --all
+```
+
+It removes only the selected configured token under `.bander/`, preserves OAuth client JSON, and starts the matching Desktop OAuth flow. Cloud-side consent revocation remains manual. Never copy token contents into a bug report.
+
+### Reset owner/group pairing
+
+Stop the real service, then run `npm run reset:pairing`. It invalidates repository-local pairing state without changing bot credentials. If an active family contact exists, the command refuses; review the consequence and explicitly run `npm run reset:pairing -- --include-family` to detach the contact before removing its owning installation.
+
+### Remove local Bander state
+
+`npm run uninstall:local` prints a manifest-driven dry run. Confirm interactively or pass `--yes` only after review. It removes only recorded Bander-owned ignored state and unchanged `.env` keys originally created by setup; unrelated files and changed/user-supplied values survive. OAuth client JSON is preserved unless `--include-oauth-clients` is also explicitly supplied and confirmed. It never touches `~/.openclaw` or revokes a cloud account.
+
+Corrupt or unknown setup/ownership state fails closed. Preserve it for diagnosis and follow the command's recovery guidance; Bander never silently infers that a security gate passed.
 
 ### The Calendar timezone is wrong
 

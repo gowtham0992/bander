@@ -1168,6 +1168,10 @@ try {
   fs.writeFileSync(path.join(runRoot, "result.json"), `${JSON.stringify(evidence, null, 2)}\n`, {
     mode: 0o600,
   });
+  if (scenario === "success") {
+    const { createTelegramPrivacyEvidence, loadSetupState } = await import("./setup-lib.js");
+    if (loadSetupState(process.cwd())) createTelegramPrivacyEvidence(process.cwd());
+  }
   console.log(JSON.stringify(evidence, null, 2));
   }
 } finally {

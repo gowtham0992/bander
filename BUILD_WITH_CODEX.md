@@ -2,6 +2,19 @@
 
 This document is maintained during implementation. It records what Codex actually contributed, which decisions remained human decisions, and which claims have been observed in tests. It is evidence, not a reconstructed launch story.
 
+## Recent evidence index
+
+| Date | Evidence |
+| --- | --- |
+| July 15, 2026 | [Real Google Calendar](#checkpoint-22--real-google-calendar-risk-spike) |
+| July 16, 2026 | [Bounded schedule read](#july-16-2026--bounded-real-schedule-read-lane) |
+| July 16, 2026 | [Family pairing](#july-16-2026--production-single-family-contact-pairing) and [delivery](#july-16-2026--replay-safe-family-notification-delivery) |
+| July 16, 2026 | [Calendar creation](#july-16-2026--checkpoint-7a-retry-safe-calendar-event-creation) and [cancellation](#2026-07-16--checkpoint-7b-precondition-pinned-real-calendar-cancellation) |
+| July 16, 2026 | [Gmail and direct family coordination](#2026-07-16--checkpoint-8-family-coordination-concierge) |
+| July 16, 2026 | [Public browser product surface](#2026-07-16--combined-checkpoint-9-public-product-surface) |
+
+Historical checkpoint names and tool counts below describe the system at that time; they are intentionally not rewritten as current claims.
+
 ## Checkpoint 0 — product and boundary review
 
 **Date:** July 13, 2026
@@ -2553,3 +2566,29 @@ cancel Sol 8/8 with zero false accepts; credential-isolation tests; dependency
 audit with zero vulnerabilities; and read-only doctor with 9 PASS, 3 expected
 WARN, and 0 FAIL. The transcript hashes remain unchanged and both transcript
 files remain ignored and untracked. `/feedback` remains deferred.
+
+## 2026-07-16 — Combined Checkpoint 10: external owner and evaluator surface
+
+**Status:** implementation and local verification complete; signed-out GitHub availability requires owner review
+
+The baseline had no resumable setup command, configuration-bound Telegram privacy artifact, selective owner-pairing reset, path-confined Google reauthorization, or manifest-driven local uninstall. The first focused run failed at module load because `setup-lib` and `local-recovery-lib` did not exist. Permanent tests now cover resumable/idempotent milestones, secret-free state and output, signed fresh privacy evidence, exact Gmail scopes, family-aware reset, token-only reauthorization, selective uninstall, corrupt-state failure, and byte-identical synthetic existing OpenClaw state.
+
+`npm run setup` is a repository-local setup guide and verifier. It creates an ignored 0600 template only when `.env` is absent, asks the operator to edit it locally, and never accepts secret input. State contains only a version, random challenge, configuration digest, milestone names, and names of template keys setup created. It refuses paths outside `.bander`, shared Calendar/Gmail token paths, unsafe permissions, stale/mismatched/unsigned Telegram evidence, wrong Calendar timezone, missing/extra Gmail scopes, invalid pairing, and corrupt state. The real runtime remains isolated under repository-generated state and does not inspect or modify `~/.openclaw`.
+
+Recovery is explicit and narrow: `reset:pairing` refuses an active or pending family relationship without `--include-family`; `reauthorize:google` removes only the selected configured token and preserves Desktop client JSON; `uninstall:local` starts with a dry run and removes only versioned manifest entries and unchanged setup-created environment entries. Tests used injected temporary roots only. Synthetic HOME, an outside-root canary, a beside-state canary, and an unrelated repository canary remained byte-identical/present.
+
+Observed deliberate mutations and restored protections:
+
+| Mutation | Observed red result |
+| --- | --- |
+| Accepted an unexpected Gmail scope | `rejects_extra_or_missing_gmail_scopes` failed because the broad scope no longer threw |
+| Returned unredacted setup output | the fake API/bot-token canaries appeared and the redaction test failed |
+| Wrote a setup canary into synthetic `~/.openclaw` | the byte-level HOME digest changed |
+| Deleted an unrelated canary during uninstall | the isolation test failed with the canary missing |
+| Re-ran the completed doctor milestone | the idempotency test observed two calls instead of one |
+
+Judge and documentation surfaces now lead with two no-account commands, three evaluator paths, the supported platform/OAuth boundary, a factual Codex-versus-Sol account, direct evidence anchors, recovery instructions, and the existing-OpenClaw non-installation boundary. `npm run verify:pages` now runs artifact/security/direct-refresh verification and browser/server parity; both lower-level commands remain independently runnable. Pages Actions explicitly empties current OpenAI, Google, Gmail, Telegram, and service credential variables.
+
+Fresh restored-green results: 42 functional files and 468 runtime cases; 3 adversarial files and 26 cases; 27/27 deterministic demo outcomes; unified Pages artifact/direct-refresh plus 3 browser/server parity cases; one-time and standing recovery; exact five-tool real OpenClaw; live compound Sol 18/18, read Sol 7/7, create Sol 8/8, cancel Sol 8/8, and Gmail Sol 7/7 with zero false accepts; typecheck and production build; dependency audit with zero vulnerabilities; tracked/artifact secret scans; and offline doctor at 10 PASS, 3 expected WARN, 0 FAIL. Clean-clone proof completed in 13 seconds on the final warm-cache run: `npm ci` took 4 seconds, setup started without secrets, scripted recovery/isolation passed, the demo started without accounts, no product endpoint was reachable, and the isolated tree stayed clean. Download speed remains the main timing variable.
+
+The final signed-out HTTP check returned 404 for both the repository and Pages target despite the owner-reported public state. No visibility or Pages setting was changed. This external state must be rechecked after push before submission claims it is publicly reachable. Both transcript files remain ignored, untracked, and untouched. `/feedback` remains deferred.
