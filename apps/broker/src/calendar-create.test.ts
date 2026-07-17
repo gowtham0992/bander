@@ -4,6 +4,7 @@ import {
   AuthorityEngine,
   AuthorityStore,
   ExecutionAmbiguousError,
+  ExecutionRejectedError,
   createFamilyNotificationDocument,
   renderFamilyNotificationDocument,
   type DraftFixture,
@@ -66,6 +67,7 @@ class CreateBoundary implements GoogleCalendarBoundary {
     this.stored = { ...structuredClone(approved), ...structuredClone(input.requestBody) };
     return structuredClone(this.stored);
   }
+  async deleteEvent(): Promise<void> { throw new Error("unused"); }
 }
 
 function createDraft(): DraftDocument {
@@ -199,6 +201,21 @@ describe("real Calendar event creation", () => {
     await expect(
       adapter.executeDraft({ draftHash: "hash", permitNonce: "permit", document: createDraft() }),
     ).resolves.toMatchObject({ calendar: { action: "created", status: "observed_target" } });
+    expect(boundary.inserts).toHaveLength(1);
+  });
+
+  it("definitive_create_rejection_is_not_classified_as_ambiguous", async () => {
+    const boundary = new CreateBoundary();
+    const rejected = new Error("rejected") as Error & { response: { status: number } };
+    rejected.response = { status: 403 };
+    boundary.insertError = rejected;
+    await expect(new GoogleCalendarAdapter(boundary).executeDraft({
+      draftHash: "hash",
+      permitNonce: "permit",
+      document: createDraft(),
+    })).rejects.toEqual(expect.objectContaining<Partial<ExecutionRejectedError>>({
+      action: "create",
+    }));
     expect(boundary.inserts).toHaveLength(1);
   });
 

@@ -35,6 +35,8 @@
     "verify:compound-sol": "tsx scripts/verify-compound-sol.ts",
     "verify:create-sol": "tsx scripts/verify-create-sol.ts",
     "verify:create-live": "tsx scripts/verify-create-live.ts",
+    "verify:cancel-sol": "tsx scripts/verify-cancel-sol.ts",
+    "verify:cancel-live": "tsx scripts/verify-cancel-live.ts",
     "verify:read-sol": "tsx scripts/verify-read-sol.ts",
     "verify:family-notification": "tsx scripts/verify-family-notification.ts",
     "verify:clean-clone": "node --import tsx scripts/verify-clean-clone.ts",

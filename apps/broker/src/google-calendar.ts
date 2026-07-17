@@ -1,4 +1,5 @@
 import type {
+  CalendarCancelEffect,
   CalendarEvent,
   CalendarCreateEffect,
   CalendarRescheduleEffect,
@@ -9,8 +10,10 @@ import type {
   ObservedExecutionResult,
 } from "@bander/contracts";
 import {
+  ExecutionAlreadyAbsentError,
   ExecutionAmbiguousError,
   ExecutionConflictError,
+  ExecutionRejectedError,
   type ExecutionAdapter,
 } from "@bander/core";
 import { google } from "googleapis";
@@ -86,6 +89,12 @@ export interface GoogleCalendarBoundary {
       end: { dateTime: string; timeZone: string };
     };
   }): Promise<GoogleEventResource>;
+  deleteEvent(input: {
+    calendarId: "primary";
+    eventId: string;
+    sendUpdates: "none";
+    ifMatch: string;
+  }): Promise<void>;
 }
 
 export class GoogleCalendarError extends Error {
@@ -95,7 +104,7 @@ export class GoogleCalendarError extends Error {
 }
 
 function normalize(value: string): string {
-  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+  return sanitizeScheduleTitle(value).toLocaleLowerCase("en-US");
 }
 
 function localDateOf(instant: string, timeZone: string): string {
@@ -210,6 +219,9 @@ function isUnsupported(resource: GoogleEventResource): boolean {
     Boolean(resource.start.date || resource.end.date) ||
     Boolean(resource.recurringEventId) ||
     Boolean(resource.recurrence?.length) ||
+    (resource.eventType !== undefined &&
+      resource.eventType !== null &&
+      resource.eventType !== "default") ||
     resource.organizer?.self !== true ||
     Boolean(resource.attendees?.length)
   );
@@ -245,7 +257,7 @@ function toCalendarEvent(resource: GoogleEventResource): CalendarEvent {
   }
   return {
     id: resource.id!,
-    title: resource.summary!,
+    title: sanitizeScheduleTitle(resource.summary!),
     startTime,
     endTime,
     timeZone,
@@ -364,6 +376,7 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     { draftHash: string; result: ObservedExecutionResult }
   >();
   readonly #createDispatches = new Map<string, string>();
+  readonly #cancelDispatches = new Map<string, string>();
   #primaryTimeZone: string | undefined;
 
   constructor(
@@ -561,6 +574,13 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     if (created) {
       return this.#executeCreate(input, created);
     }
+    const cancelled = input.document.effects.find(
+      (effect): effect is CalendarCancelEffect =>
+        effect.type === "calendar.cancel_event",
+    );
+    if (cancelled) {
+      return this.#executeCancel(input, cancelled);
+    }
     const calendar = input.document.effects.find(
       (effect): effect is CalendarRescheduleEffect =>
         effect.type === "calendar.reschedule_event",
@@ -722,10 +742,7 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
         return this.#reconcileCreate(created, input, true);
       }
       if (status && status >= 400 && status < 500 && ![408, 429].includes(status)) {
-        throw new GoogleCalendarError(
-          "google_calendar_unavailable",
-          "Google Calendar rejected the approved event",
-        );
+        throw new ExecutionRejectedError("create");
       }
       return this.#reconcileCreate(created, input, false);
     }
@@ -788,6 +805,108 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
     return structuredClone(result);
   }
 
+  async #executeCancel(
+    input: { draftHash: string; permitNonce: string; document: DraftDocument },
+    cancelled: CalendarCancelEffect,
+  ): Promise<ObservedExecutionResult> {
+    if (
+      input.document.effects.length !== 1 ||
+      cancelled.calendarId !== "primary" ||
+      !cancelled.eventId ||
+      !cancelled.expected.etag ||
+      !cancelled.expected.title ||
+      cancelled.expected.eventType !== "default" ||
+      cancelled.expected.organizerMustBeOwner !== true ||
+      cancelled.expected.attendeeIdsExactly.length !== 0 ||
+      cancelled.expected.recurring !== false ||
+      !cancelled.expected.timeZone ||
+      !Number.isFinite(Date.parse(cancelled.expected.startTime)) ||
+      !Number.isFinite(Date.parse(cancelled.expected.endTime)) ||
+      Date.parse(cancelled.expected.endTime) <= Date.parse(cancelled.expected.startTime)
+    ) {
+      throw new GoogleCalendarError(
+        "unsupported_real_execution_shape",
+        "Real mode accepts one bounded Calendar cancellation",
+      );
+    }
+    const priorDispatch = this.#cancelDispatches.get(input.permitNonce);
+    if (priorDispatch) {
+      if (priorDispatch !== input.draftHash) {
+        throw new GoogleCalendarError(
+          "google_execution_identity_mismatch",
+          "The Calendar execution identity does not match the approved deal",
+        );
+      }
+      return this.#reconcileCancel(cancelled, input);
+    }
+    this.#cancelDispatches.set(input.permitNonce, input.draftHash);
+    try {
+      await this.boundary.deleteEvent({
+        calendarId: "primary",
+        eventId: cancelled.eventId,
+        sendUpdates: "none",
+        ifMatch: cancelled.expected.etag,
+      });
+      return this.#recordCancelResult(input, cancelled, "committed");
+    } catch (error) {
+      const status = responseStatus(error);
+      if (status === 412) throw new ExecutionConflictError();
+      if (status === 404 || status === 410) {
+        throw new ExecutionAlreadyAbsentError();
+      }
+      if (status && status >= 400 && status < 500 && ![408, 429].includes(status)) {
+        throw new ExecutionRejectedError("cancel");
+      }
+      return this.#reconcileCancel(cancelled, input);
+    }
+  }
+
+  async #reconcileCancel(
+    cancelled: CalendarCancelEffect,
+    input: { draftHash: string; permitNonce: string },
+  ): Promise<ObservedExecutionResult> {
+    try {
+      const resource = await this.boundary.getEvent({
+        calendarId: "primary",
+        eventId: cancelled.eventId,
+      });
+      if (resource.id === cancelled.eventId && resource.status === "cancelled") {
+        return this.#recordCancelResult(input, cancelled, "observed_target");
+      }
+      throw new ExecutionAmbiguousError();
+    } catch (error) {
+      const status = responseStatus(error);
+      if (status === 404 || status === 410) {
+        return this.#recordCancelResult(input, cancelled, "observed_target");
+      }
+      if (error instanceof ExecutionAmbiguousError) throw error;
+      throw new ExecutionAmbiguousError();
+    }
+  }
+
+  #recordCancelResult(
+    input: { draftHash: string; permitNonce: string },
+    cancelled: CalendarCancelEffect,
+    status: "committed" | "observed_target",
+  ): ObservedExecutionResult {
+    const result: ObservedExecutionResult = {
+      calendar: {
+        action: "removed",
+        status,
+        completed: {
+          startTime: cancelled.expected.startTime,
+          endTime: cancelled.expected.endTime,
+          timeZone: cancelled.expected.timeZone,
+        },
+      },
+    };
+    this.#executions.set(input.permitNonce, {
+      draftHash: input.draftHash,
+      result,
+    });
+    return structuredClone(result);
+  }
+
   async getExecution(_input: {
     draftHash: string;
     permitNonce: string;
@@ -806,6 +925,21 @@ export class GoogleCalendarAdapter implements ExecutionAdapter {
       }
       try {
         return await this.#reconcileCreate(created, _input, false);
+      } catch (error) {
+        if (error instanceof ExecutionAmbiguousError) return false;
+        throw error;
+      }
+    }
+    const cancelled = _input.document.effects.find(
+      (effect): effect is CalendarCancelEffect =>
+        effect.type === "calendar.cancel_event",
+    );
+    if (cancelled && _input.document.effects.length === 1) {
+      if (this.#cancelDispatches.get(_input.permitNonce) !== _input.draftHash) {
+        return false;
+      }
+      try {
+        return await this.#reconcileCancel(cancelled, _input);
       } catch (error) {
         if (error instanceof ExecutionAmbiguousError) return false;
         throw error;
@@ -943,6 +1077,16 @@ export function createGoogleCalendarBoundary(
         requestBody: input.requestBody,
       });
       return response.data;
+    },
+    async deleteEvent(input) {
+      await calendar.events.delete(
+        {
+          calendarId: input.calendarId,
+          eventId: input.eventId,
+          sendUpdates: input.sendUpdates,
+        },
+        { headers: { "If-Match": input.ifMatch } },
+      );
     },
   };
 }

@@ -1,5 +1,6 @@
 import type {
   ApprovalCard,
+  CalendarCancelEffect,
   CalendarCreateEffect,
   CalendarRescheduleEffect,
   DraftDocument,
@@ -87,20 +88,24 @@ export function renderFamilyNotificationDocument(
   document: FamilyNotificationDocument,
 ): string {
   const interval =
-    document.kind === "calendar_creation"
+    document.kind === "calendar_transition"
       ? formatCalendarIntervalWithContext(
-          document.startTime,
-          document.endTime,
-          document.timeZone,
-        )
-      : formatCalendarIntervalWithContext(
           document.newStartTime,
           document.newEndTime,
           document.timeZone,
+        )
+      : formatCalendarIntervalWithContext(
+          document.startTime,
+          document.endTime,
+          document.timeZone,
         );
+  const stateLine =
+    document.kind === "calendar_cancellation"
+      ? `“${document.eventTitle},” scheduled for ${interval}, is no longer on the calendar.`
+      : `“${document.eventTitle}” ${document.kind === "calendar_creation" ? "was added for" : "is now"} ${interval}.`;
   return [
     "Bander update",
-    `“${document.eventTitle}” ${document.kind === "calendar_creation" ? "was added for" : "is now"} ${interval}.`,
+    stateLine,
     "This is the exact update your family approved Bander to send.",
   ].join("\n");
 }
@@ -129,6 +134,13 @@ export function createFamilyNotificationDocument(
         startTime: string;
         endTime: string;
         timeZone: string;
+      }
+    | {
+        kind: "calendar_cancellation";
+        eventTitle: string;
+        startTime: string;
+        endTime: string;
+        timeZone: string;
       },
 ): FamilyNotificationDocument {
   const document: FamilyNotificationDocument =
@@ -140,6 +152,14 @@ export function createFamilyNotificationDocument(
           endTime: new Date(input.endTime).toISOString(),
           timeZone: input.timeZone,
         }
+      : input.kind === "calendar_cancellation"
+        ? {
+            kind: "calendar_cancellation",
+            eventTitle: sanitizeFamilyNotificationTitle(input.eventTitle),
+            startTime: new Date(input.startTime).toISOString(),
+            endTime: new Date(input.endTime).toISOString(),
+            timeZone: input.timeZone,
+          }
       : {
           kind: "calendar_transition",
           eventTitle: sanitizeFamilyNotificationTitle(input.eventTitle),
@@ -147,8 +167,8 @@ export function createFamilyNotificationDocument(
           newEndTime: new Date(input.newEndTime).toISOString(),
           timeZone: input.timeZone,
         };
-  const start = document.kind === "calendar_creation" ? document.startTime : document.newStartTime;
-  const end = document.kind === "calendar_creation" ? document.endTime : document.newEndTime;
+  const start = document.kind === "calendar_transition" ? document.newStartTime : document.startTime;
+  const end = document.kind === "calendar_transition" ? document.newEndTime : document.endTime;
   if (
     !document.eventTitle ||
     !Number.isFinite(Date.parse(start)) ||
@@ -174,6 +194,9 @@ export function renderApprovalCard(
 ): ApprovalCard {
   const allows = document.effects.map((effect) => {
     if (effect.type === "calendar.reschedule_event") return calendarLine(effect);
+    if (effect.type === "calendar.cancel_event") {
+      return `remove “${effect.expected.title}” from Calendar at ${formatCalendarIntervalWithContext(effect.expected.startTime, effect.expected.endTime, effect.expected.timeZone)}`;
+    }
     if (effect.type === "calendar.create_event") {
       return `add “${effect.title}” to Calendar for ${formatCalendarIntervalWithContext(effect.startTime, effect.endTime, effect.timeZone)}`;
     }
@@ -185,6 +208,8 @@ export function renderApprovalCard(
       document.effects.map((effect) =>
         effect.type === "calendar.reschedule_event"
           ? "Calendar"
+          : effect.type === "calendar.cancel_event"
+            ? "Calendar"
           : effect.type === "calendar.create_event"
             ? "Calendar"
           : effect.type === "messages.send"
@@ -217,6 +242,16 @@ export function renderApprovalCard(
             ),
           };
         })()
+      : effect.type === "calendar.cancel_event"
+        ? {
+            kind: effect.type,
+            eventTitle: effect.expected.title,
+            previousInterval: formatCalendarIntervalWithContext(
+              effect.expected.startTime,
+              effect.expected.endTime,
+              effect.expected.timeZone,
+            ),
+          }
       : effect.type === "calendar.create_event"
         ? {
             kind: effect.type,
@@ -271,6 +306,10 @@ export function renderHumanReceipt(
     (effect): effect is CalendarCreateEffect =>
       effect.type === "calendar.create_event",
   );
+  const cancelledCalendar = document.effects.find(
+    (effect): effect is CalendarCancelEffect =>
+      effect.type === "calendar.cancel_event",
+  );
   const message = document.effects.find(
     (effect): effect is MessageSendEffect => effect.type === "messages.send",
   );
@@ -278,20 +317,24 @@ export function renderHumanReceipt(
     (effect): effect is FamilyTelegramNotificationEffect =>
       effect.type === "family.telegram_notification",
   );
-  if ((!calendar && !createdCalendar) || (calendar && createdCalendar)) {
+  if ([calendar, createdCalendar, cancelledCalendar].filter(Boolean).length !== 1) {
     throw new Error("Draft cannot be rendered as a receipt");
   }
   const completed = observed?.calendar.completed ?? (calendar ? {
     startTime: calendar.changes.startTime,
     endTime: calendar.changes.endTime,
     timeZone: calendar.expected.timeZone,
-  } : {
+  } : createdCalendar ? {
     startTime: createdCalendar!.startTime,
     endTime: createdCalendar!.endTime,
     timeZone: createdCalendar!.timeZone,
+  } : {
+    startTime: cancelledCalendar!.expected.startTime,
+    endTime: cancelledCalendar!.expected.endTime,
+    timeZone: cancelledCalendar!.expected.timeZone,
   });
-  const title = calendar?.expected.title ?? createdCalendar!.title;
-  const timeZone = calendar?.expected.timeZone ?? createdCalendar!.timeZone;
+  const title = calendar?.expected.title ?? createdCalendar?.title ?? cancelledCalendar!.expected.title;
+  const timeZone = calendar?.expected.timeZone ?? createdCalendar?.timeZone ?? cancelledCalendar!.expected.timeZone;
 
   return {
     id,
@@ -299,6 +342,10 @@ export function renderHumanReceipt(
     title: "Done",
     summary: calendar
       ? `Completed as agreed: “${calendar.expected.title}” moved from ${formatInterval(calendar.expected.startTime, calendar.expected.endTime, calendar.expected.timeZone)} to ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
+      : cancelledCalendar
+        ? observed?.calendar.status === "observed_target"
+          ? `Your calendar no longer shows the approved event: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
+          : `Removed as agreed: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
       : observed?.calendar.status === "observed_target"
         ? `Your calendar now shows the approved event: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`
         : `Added as agreed: “${title}” at ${formatInterval(completed.startTime, completed.endTime, completed.timeZone)}.`,
@@ -306,8 +353,8 @@ export function renderHumanReceipt(
       ? observed?.familyNotification?.status === "delivered"
         ? `The approved update was sent to ${familyNotification.binding.displayLabel}.`
         : observed?.familyNotification?.status === "ambiguous"
-          ? `The Calendar moved, but Bander could not confirm whether ${familyNotification.binding.displayLabel} received the update and will not send it again automatically.`
-          : `The Calendar moved, but ${familyNotification.binding.displayLabel} was no longer connected and no family update was sent.`
+          ? `The Calendar action completed, but Bander could not confirm whether ${familyNotification.binding.displayLabel} received the update and will not send it again automatically.`
+          : `The Calendar action completed, but ${familyNotification.binding.displayLabel} was no longer connected and no family update was sent.`
       : message
         ? `${message.expected.displayName.split(" ")[0]} was notified.`
         : "No messages were sent.",
@@ -327,6 +374,17 @@ export function renderHumanReceipt(
             ? { executionStatus: observed.calendar.status }
             : {}),
         }
+      : cancelledCalendar
+        ? {
+            removed: true,
+            title,
+            previous: {
+              startTime: cancelledCalendar.expected.startTime,
+              endTime: cancelledCalendar.expected.endTime,
+            },
+            timeZone,
+            executionStatus: observed?.calendar.status ?? "committed",
+          }
       : {
           created: true,
           title,

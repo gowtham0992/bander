@@ -220,6 +220,9 @@ export interface TelegramProposalBinding {
 
 export type TelegramProposalTerminalFailureCode =
   | "calendar_outcome_ambiguous"
+  | "calendar_event_already_absent"
+  | "calendar_create_rejected"
+  | "calendar_cancel_rejected"
   | "conflict"
   | "draft_expired"
   | "other";
@@ -300,6 +303,9 @@ function emptyState(): TelegramServiceState {
 
 const terminalFailureCodes = new Set<TelegramProposalTerminalFailureCode>([
   "calendar_outcome_ambiguous",
+  "calendar_event_already_absent",
+  "calendar_create_rejected",
+  "calendar_cancel_rejected",
   "conflict",
   "draft_expired",
   "other",
@@ -466,6 +472,12 @@ function cardText(
         safeDisplayText(effect.resultingInterval),
       ];
     }
+    if (effect.kind === "calendar.cancel_event") {
+      return [
+        `${mode === "real" ? "📅 Remove from Calendar" : "• Remove"} “${safeDisplayText(effect.eventTitle)}”`,
+        safeDisplayText(effect.previousInterval),
+      ];
+    }
     return effect.kind === "family.telegram_notification"
       ? [
           `${mode === "real" ? "👤 Family update" : "• Send"} ${firstName(effect.recipientDisplayName)}:`,
@@ -482,6 +494,9 @@ function cardText(
   );
   const includesCreate = card.effectPreviews.some(
     (effect) => effect.kind === "calendar.create_event",
+  );
+  const includesCancel = card.effectPreviews.some(
+    (effect) => effect.kind === "calendar.cancel_event",
   );
   if (mode === "hero") {
     const approvedBoundary =
@@ -501,6 +516,12 @@ function cardText(
         return [
           `📅 Add “${safeDisplayText(effect.eventTitle)}”`,
           safeDisplayText(effect.resultingInterval),
+        ];
+      }
+      if (effect.kind === "calendar.cancel_event") {
+        return [
+          `📅 Remove “${safeDisplayText(effect.eventTitle)}”`,
+          safeDisplayText(effect.previousInterval),
         ];
       }
       return effect.kind === "family.telegram_notification"
@@ -538,7 +559,12 @@ function cardText(
             "Not included:",
             "No one will be invited. No recurring event or reservation will be created.",
           ]
-        : ["Nothing else will change."]
+        : includesCancel
+          ? [
+              "Bander will not automatically restore this event after you approve.",
+              "No one will be contacted through the Calendar.",
+            ]
+          : ["Nothing else will change."]
       : ["Not included:", "• Any other events, messages or payments"]),
     "",
     `Closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
@@ -566,6 +592,18 @@ function receiptText(
   mode: TelegramCopyMode,
 ): string {
   if (mode === "hero") {
+    if ("removed" in receipt.calendar) {
+      return [
+        "Removed ✓",
+        `📅 “${safeDisplayText(receipt.calendar.title)}”`,
+        formatCalendarIntervalWithContext(
+          receipt.calendar.previous.startTime,
+          receipt.calendar.previous.endTime,
+          receipt.calendar.timeZone,
+        ),
+        "No one was messaged.",
+      ].join("\n");
+    }
     return [
       "Done ✓",
       `📅 “${safeDisplayText(receipt.calendar.title)}” is now ${compactReceiptInterval(
@@ -583,24 +621,61 @@ function receiptText(
   if (receipt.familyNotification) {
     if (receipt.familyNotification.status === "ambiguous") {
       return [
-        "Calendar updated ✓",
-        `“${safeDisplayText(receipt.calendar.title)}” is now ${formatCalendarIntervalWithContext(
-          receipt.calendar.completed.startTime,
-          receipt.calendar.completed.endTime,
-          receipt.calendar.timeZone,
-        )}.`,
+        "removed" in receipt.calendar ? "Event removed ✓" : "Calendar updated ✓",
+        ...( "removed" in receipt.calendar
+          ? [
+              `“${safeDisplayText(receipt.calendar.title)}”`,
+              formatCalendarIntervalWithContext(
+                receipt.calendar.previous.startTime,
+                receipt.calendar.previous.endTime,
+                receipt.calendar.timeZone,
+              ),
+            ]
+          : [
+              `“${safeDisplayText(receipt.calendar.title)}” is now ${formatCalendarIntervalWithContext(
+                receipt.calendar.completed.startTime,
+                receipt.calendar.completed.endTime,
+                receipt.calendar.timeZone,
+              )}.`,
+            ]),
         `I couldn’t confirm whether ${firstName(receipt.familyNotification.recipientDisplayName)} received the update, so I won’t send it again automatically.`,
       ].join("\n");
     }
     if (receipt.familyNotification.status === "not_sent") {
       return [
-        "Calendar updated ✓",
-        `“${safeDisplayText(receipt.calendar.title)}” is now ${formatCalendarIntervalWithContext(
-          receipt.calendar.completed.startTime,
-          receipt.calendar.completed.endTime,
-          receipt.calendar.timeZone,
-        )}.`,
+        "removed" in receipt.calendar ? "Event removed ✓" : "Calendar updated ✓",
+        ...( "removed" in receipt.calendar
+          ? [
+              `“${safeDisplayText(receipt.calendar.title)}”`,
+              formatCalendarIntervalWithContext(
+                receipt.calendar.previous.startTime,
+                receipt.calendar.previous.endTime,
+                receipt.calendar.timeZone,
+              ),
+            ]
+          : [
+              `“${safeDisplayText(receipt.calendar.title)}” is now ${formatCalendarIntervalWithContext(
+                receipt.calendar.completed.startTime,
+                receipt.calendar.completed.endTime,
+                receipt.calendar.timeZone,
+              )}.`,
+            ]),
         `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected, so no family update was sent.`,
+      ].join("\n");
+    }
+    if ("removed" in receipt.calendar) {
+      return [
+        receipt.calendar.executionStatus === "observed_target"
+          ? "Your calendar no longer shows the approved event ✓"
+          : "Removed ✓",
+        `“${safeDisplayText(receipt.calendar.title)}”`,
+        formatCalendarIntervalWithContext(
+          receipt.calendar.previous.startTime,
+          receipt.calendar.previous.endTime,
+          receipt.calendar.timeZone,
+        ),
+        `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
+        "Nothing else changed through Bander.",
       ].join("\n");
     }
     if ("created" in receipt.calendar) {
@@ -633,6 +708,21 @@ function receiptText(
         receipt.calendar.timeZone,
       )}`,
       `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
+      "Nothing else changed through Bander.",
+    ].join("\n");
+  }
+  if ("removed" in receipt.calendar) {
+    return [
+      receipt.calendar.executionStatus === "observed_target"
+        ? "Your calendar no longer shows the approved event ✓"
+        : "Removed ✓",
+      `“${safeDisplayText(receipt.calendar.title)}”`,
+      formatCalendarIntervalWithContext(
+        receipt.calendar.previous.startTime,
+        receipt.calendar.previous.endTime,
+        receipt.calendar.timeZone,
+      ),
+      "No one was contacted through the Calendar or Bander.",
       "Nothing else changed through Bander.",
     ].join("\n");
   }
@@ -716,18 +806,41 @@ function refusalText(
     const includesCreate = card.effectPreviews.some(
       (effect) => effect.kind === "calendar.create_event",
     );
+    const includesCancel = card.effectPreviews.some(
+      (effect) => effect.kind === "calendar.cancel_event",
+    );
     return [
       includesCreate
         ? "I couldn’t confirm whether the event was added."
-        : "I couldn’t confirm whether your calendar changed.",
+        : includesCancel
+          ? "I couldn’t confirm whether the event was removed."
+          : "I couldn’t confirm whether your calendar changed.",
       ...(includesFamily ? ["No family update was sent."] : []),
       includesCreate
         ? "I won’t try to add it again automatically."
-        : "I won’t try this request again automatically.",
-      includesCreate
-        ? "Please check your calendar before asking again."
-        : "Please check your calendar before asking OpenClaw again.",
+        : includesCancel
+          ? "I won’t try to remove it again automatically."
+          : "I won’t try this request again automatically.",
+      "Please check your calendar before asking OpenClaw again.",
     ].join("\n");
+  }
+  if (code === "calendar_event_already_absent") {
+    const includesFamily = card.effectPreviews.some(
+      (effect) => effect.kind === "family.telegram_notification",
+    );
+    return [
+      "I stopped—the event was already gone from the calendar.",
+      includesFamily
+        ? "I didn’t remove anything or send a family update."
+        : "I didn’t remove anything.",
+      "Ask OpenClaw to check again if needed.",
+    ].join("\n");
+  }
+  if (code === "calendar_create_rejected") {
+    return "I couldn’t add that because the calendar service rejected it. Nothing was added.";
+  }
+  if (code === "calendar_cancel_rejected") {
+    return "I couldn’t remove that because the calendar service rejected it. Nothing was removed.";
   }
   if (code !== "conflict") {
     return [
@@ -739,11 +852,18 @@ function refusalText(
     const includesFamily = card.effectPreviews.some(
       (effect) => effect.kind === "family.telegram_notification",
     );
+    const includesCancel = card.effectPreviews.some(
+      (effect) => effect.kind === "calendar.cancel_event",
+    );
     return [
       "I stopped—your calendar changed since you asked.",
       includesFamily
-        ? "Nothing was moved, and no family update was sent."
-        : "Nothing was moved.",
+        ? includesCancel
+          ? "I didn’t remove the event or send a family update."
+          : "Nothing was moved, and no family update was sent."
+        : includesCancel
+          ? "I didn’t remove the event."
+          : "Nothing was moved.",
       "Ask OpenClaw to check again.",
     ].join("\n");
   }
@@ -761,6 +881,9 @@ function refusalText(
 
 function terminalFailureCode(code: string): TelegramProposalTerminalFailureCode {
   if (code === "calendar_outcome_ambiguous") return code;
+  if (code === "calendar_event_already_absent") return code;
+  if (code === "calendar_create_rejected") return code;
+  if (code === "calendar_cancel_rejected") return code;
   if (code === "conflict") return code;
   if (code === "draft_expired") return code;
   return "other";
@@ -777,6 +900,15 @@ function terminalCallbackText(
     return includesFamily
       ? "Calendar result unconfirmed. No family update was sent."
       : "Calendar result unconfirmed.";
+  }
+  if (code === "calendar_event_already_absent") {
+    return "The event was already gone. No family update was sent.";
+  }
+  if (code === "calendar_create_rejected") {
+    return "Calendar rejected the event. Nothing was added.";
+  }
+  if (code === "calendar_cancel_rejected") {
+    return "Calendar rejected the removal. Nothing was removed.";
   }
   if (code === "draft_expired") {
     return "That request expired. Nothing happened.";
@@ -798,8 +930,8 @@ function standingOutcomeText(
   actionsUsed: number,
   maxActions: number,
 ): string {
-  if ("created" in receipt.calendar) {
-    throw new Error("Standing Calendar creation is unsupported");
+  if ("created" in receipt.calendar || "removed" in receipt.calendar) {
+    throw new Error("Standing Calendar create/cancel is unsupported");
   }
   return [
     "Handled automatically ✓",
@@ -1258,7 +1390,14 @@ export class TelegramService {
           inline_keyboard: [
             [
               {
-                text: this.#mode === "hero" ? "Yes, do this" : "Do exactly this",
+                text:
+                  this.#mode === "hero"
+                    ? "Yes, do this"
+                    : card.effectPreviews.some(
+                          (effect) => effect.kind === "calendar.cancel_event",
+                        )
+                      ? "Remove this event"
+                      : "Do exactly this",
                 callback_data: callbackValue,
               },
               { text: "Not now", callback_data: declineCallbackValue },

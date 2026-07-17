@@ -110,6 +110,23 @@ export interface CalendarCreateEffect {
   eventType: "default";
 }
 
+export interface CalendarCancelEffect {
+  type: "calendar.cancel_event";
+  calendarId: "primary";
+  eventId: string;
+  expected: {
+    etag: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+    timeZone: string;
+    eventType: "default";
+    organizerMustBeOwner: true;
+    attendeeIdsExactly: [];
+    recurring: false;
+  };
+}
+
 export interface MessageSendEffect {
   type: "messages.send";
   recipientId: string;
@@ -134,6 +151,13 @@ export type FamilyNotificationDocument =
       startTime: string;
       endTime: string;
       timeZone: string;
+    }
+  | {
+      kind: "calendar_cancellation";
+      eventTitle: string;
+      startTime: string;
+      endTime: string;
+      timeZone: string;
     };
 
 export interface FamilyTelegramNotificationEffect {
@@ -150,6 +174,7 @@ export interface FamilyTelegramNotificationEffect {
 export type DraftEffect =
   | CalendarRescheduleEffect
   | CalendarCreateEffect
+  | CalendarCancelEffect
   | MessageSendEffect
   | FamilyTelegramNotificationEffect;
 
@@ -199,6 +224,11 @@ export interface ApprovalCard {
 }
 
 export type ApprovalEffectPreview =
+  | {
+      kind: "calendar.cancel_event";
+      eventTitle: string;
+      previousInterval: string;
+    }
   | {
       kind: "calendar.create_event";
       eventTitle: string;
@@ -336,6 +366,13 @@ export interface HumanReceipt {
         completed: { startTime: string; endTime: string };
         timeZone: string;
         executionStatus: "committed" | "observed_target";
+      }
+    | {
+        removed: true;
+        title: string;
+        previous: { startTime: string; endTime: string };
+        timeZone: string;
+        executionStatus: "committed" | "observed_target";
       };
   message?: {
     recipientDisplayName: string;
@@ -352,7 +389,7 @@ export interface HumanReceipt {
 export interface ObservedExecutionResult {
   calendar: {
     status: "committed" | "observed_target";
-    action?: "created";
+    action?: "created" | "removed";
     completed: {
       startTime: string;
       endTime: string;

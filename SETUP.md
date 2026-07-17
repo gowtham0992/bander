@@ -198,7 +198,7 @@ Use `Ctrl-C` once in the terminal running `npm run real`, wait for both supervis
 
 ## Honest current limitations
 
-- Real writes are limited to adding one timed default event or moving one timed, non-recurring, owner-organized, attendee-free event in the connected primary Calendar. Creation has no attendees, recurrence, location, description, conferencing, attachments, custom reminders, or reservation; rescheduling preserves exact duration.
+- Real writes are limited to adding one timed default event or moving or cancelling one timed, non-recurring, owner-organized, attendee-free event in the connected primary Calendar. Creation has no attendees, recurrence, location, description, conferencing, attachments, custom reminders, or reservation; rescheduling preserves exact duration; cancellation removes only the exact event version shown on the Card and never contacts an external clinic, restaurant, or service.
 - Schedule reads are capped at 31 days and 50 sanitized events. Calendar titles remain untrusted model input; sanitization and prompting reduce but do not eliminate prompt-injection or mis-summary risk.
 - Exactly one family contact is supported. Bander can send only the deterministic appointment update shown on the approved compound Card.
 - Telegram delivery is not exactly once. A confirmed response is replay-safe; an ambiguous response is reported as unconfirmed and never retried automatically. Acceptance is not proof of reading.

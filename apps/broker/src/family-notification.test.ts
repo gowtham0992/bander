@@ -24,4 +24,18 @@ describe("family notification boundary", () => {
       "This is the exact update your family approved Bander to send.",
     ].join("\n"));
   });
+  it("renders a cancellation update only from the bounded structured document", () => {
+    const document = parseFamilyNotificationDocument({
+      kind: "calendar_cancellation",
+      eventTitle: "Dentist appointment",
+      startTime: "2026-07-23T19:00:00.000Z",
+      endTime: "2026-07-23T20:00:00.000Z",
+      timeZone: "America/Denver",
+    });
+    expect(renderFamilyNotification(document)).toBe([
+      "Bander update",
+      "“Dentist appointment,” scheduled for Thu, Jul 23, 1:00–2:00 PM MDT, is no longer on the calendar.",
+      "This is the exact update your family approved Bander to send.",
+    ].join("\n"));
+  });
 });

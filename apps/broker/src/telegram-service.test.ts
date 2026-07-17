@@ -6,8 +6,10 @@ import type { ApprovalCard, CalendarEvent, DraftDocument, ObservedExecutionResul
 import {
   AuthorityEngine,
   AuthorityStore,
+  ExecutionAlreadyAbsentError,
   ExecutionAmbiguousError,
   ExecutionConflictError,
+  ExecutionRejectedError,
   type DraftFixture,
   type ExecutionAdapter,
 } from "@bander/core";
@@ -49,6 +51,16 @@ const standingFixture: DraftFixture = {
   },
 };
 
+const cancelFixture: DraftFixture = {
+  id: "telegram-cancel-fixture",
+  claimedUserRequest: "Cancel my dentist appointment on Thursday.",
+  calendar: {
+    kind: "cancel",
+    eventId: "event-dentist",
+    expectedEtag: "event-dentist-r1",
+  },
+};
+
 const familyNotificationDocument = {
   kind: "calendar_transition",
   eventTitle: "Bander Demo Appointment",
@@ -61,6 +73,8 @@ class FakeAdapter implements ExecutionAdapter {
   executions = 0;
   ambiguous = false;
   conflict = false;
+  alreadyAbsent = false;
+  rejectedAction?: "create" | "cancel";
   focusEvent: CalendarEvent = {
     id: "event-focus-block",
     title: "Focus block",
@@ -77,6 +91,19 @@ class FakeAdapter implements ExecutionAdapter {
   ) => Promise<{ status: "delivered" | "ambiguous" | "not_sent" }>;
 
   async resolveEvent(id: string): Promise<CalendarEvent> {
+    if (id === "event-dentist") {
+      return {
+        id,
+        title: "Dentist appointment",
+        startTime: "2026-07-23T13:00:00-06:00",
+        endTime: "2026-07-23T14:00:00-06:00",
+        timeZone: "America/Denver",
+        organizerId: "person-owner",
+        attendeeIds: [],
+        revision: 1,
+        etag: "event-dentist-r1",
+      };
+    }
     if (id === "event-focus-block") {
       return structuredClone(this.focusEvent);
     }
@@ -110,6 +137,8 @@ class FakeAdapter implements ExecutionAdapter {
     this.executions += 1;
     if (this.ambiguous) throw new ExecutionAmbiguousError();
     if (this.conflict) throw new ExecutionConflictError();
+    if (this.alreadyAbsent) throw new ExecutionAlreadyAbsentError();
+    if (this.rejectedAction) throw new ExecutionRejectedError(this.rejectedAction);
     const calendar = input.document.effects.find(
       (effect) => effect.type === "calendar.reschedule_event",
     );
@@ -125,6 +154,22 @@ class FakeAdapter implements ExecutionAdapter {
     const family = input.document.effects.find(
       (effect) => effect.type === "family.telegram_notification",
     );
+    const cancelled = input.document.effects.find(
+      (effect) => effect.type === "calendar.cancel_event",
+    );
+    if (cancelled) {
+      return {
+        calendar: {
+          action: "removed",
+          status: "committed",
+          completed: {
+            startTime: cancelled.expected.startTime,
+            endTime: cancelled.expected.endTime,
+            timeZone: cancelled.expected.timeZone,
+          },
+        },
+      };
+    }
     if (calendar && family && this.compoundDelivery) {
       const delivery = await this.compoundDelivery({
         requestId: `compound-${input.permitNonce}`,
@@ -469,8 +514,136 @@ describe("Bander Telegram service", () => {
     expect(current.api.messages.at(-1)?.text).toBe([
       "I couldn’t confirm whether the event was added.",
       "I won’t try to add it again automatically.",
-      "Please check your calendar before asking again.",
+      "Please check your calendar before asking OpenClaw again.",
     ].join("\n"));
+  });
+
+  it("renders and executes one calm real cancellation Card", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(cancelFixture);
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals.at(-1)!;
+    const proposal = current.api.messages.at(-1)!;
+    expect(proposal.text).toContain("📅 Remove from Calendar “Dentist appointment”");
+    expect(proposal.text).toContain("Thu, Jul 23, 1:00–2:00 PM MDT");
+    expect(proposal.text).toContain(
+      "Bander will not automatically restore this event after you approve.",
+    );
+    expect(proposal.text).toContain("No one will be contacted through the Calendar.");
+    expect(proposal.replyMarkup).toMatchObject({
+      inline_keyboard: [[{ text: "Remove this event" }, { text: "Not now" }]],
+    });
+    await current.service.handleUpdate({
+      update_id: 705,
+      callback_query: {
+        id: "cancel-confirmed",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    });
+    expect(current.api.messages.at(-1)?.text).toBe([
+      "Removed ✓",
+      "“Dentist appointment”",
+      "Thu, Jul 23, 1:00–2:00 PM MDT",
+      "No one was contacted through the Calendar or Bander.",
+      "Nothing else changed through Bander.",
+    ].join("\n"));
+  });
+
+  it("ambiguous cancellation never claims nothing changed or retries", async () => {
+    const current = setup("real");
+    await pairOwner(current);
+    const card = await current.engine.proposeFixture(cancelFixture);
+    await current.service.deliverProposal(card);
+    const binding = current.store.read().proposals.at(-1)!;
+    current.adapter.ambiguous = true;
+    const callback: TelegramUpdate = {
+      update_id: 706,
+      callback_query: {
+        id: "cancel-ambiguous",
+        from: { id: 101, is_bot: false },
+        data: binding.callbackValue,
+        message: {
+          message_id: binding.messageId,
+          chat: { id: -500, type: "supergroup" },
+        },
+      },
+    };
+    await current.service.handleUpdate(callback);
+    const firstExecutions = current.adapter.executions;
+    expect(current.api.messages.at(-1)?.text).toBe([
+      "I couldn’t confirm whether the event was removed.",
+      "I won’t try to remove it again automatically.",
+      "Please check your calendar before asking OpenClaw again.",
+    ].join("\n"));
+    await current.service.handleUpdate({
+      ...callback,
+      update_id: 707,
+      callback_query: { ...callback.callback_query!, id: "cancel-ambiguous-replay" },
+    });
+    expect(current.adapter.executions).toBe(firstExecutions);
+    expect(current.store.read().proposals.at(-1)).toMatchObject({
+      terminalFailureCode: "calendar_outcome_ambiguous",
+      lifecycle: "conflict",
+    });
+  });
+
+  it("initially absent and definitive create rejection use distinct truthful copy", async () => {
+    const absent = setup("real");
+    await pairOwner(absent);
+    const cancelCard = await absent.engine.proposeFixture(cancelFixture);
+    await absent.service.deliverProposal(cancelCard);
+    absent.adapter.alreadyAbsent = true;
+    const cancelBinding = absent.store.read().proposals.at(-1)!;
+    await absent.service.handleUpdate({
+      update_id: 708,
+      callback_query: {
+        id: "cancel-absent",
+        from: { id: 101, is_bot: false },
+        data: cancelBinding.callbackValue,
+        message: { message_id: cancelBinding.messageId, chat: { id: -500, type: "supergroup" } },
+      },
+    });
+    expect(absent.api.messages.at(-1)?.text).toBe([
+      "I stopped—the event was already gone from the calendar.",
+      "I didn’t remove anything.",
+      "Ask OpenClaw to check again if needed.",
+    ].join("\n"));
+
+    const rejected = setup("real");
+    await pairOwner(rejected);
+    const createCard = await rejected.engine.proposeFixture({
+      id: "create-rejected",
+      claimedUserRequest: "Add lunch Tuesday at noon.",
+      calendar: {
+        kind: "create",
+        eventId: "b0123456789abcdefghijklmnopqrstuv",
+        title: "Lunch",
+        startTime: "2026-07-21T18:00:00.000Z",
+        endTime: "2026-07-21T19:00:00.000Z",
+        timeZone: "America/Denver",
+      },
+    });
+    await rejected.service.deliverProposal(createCard);
+    rejected.adapter.rejectedAction = "create";
+    const createBinding = rejected.store.read().proposals.at(-1)!;
+    await rejected.service.handleUpdate({
+      update_id: 709,
+      callback_query: {
+        id: "create-rejected",
+        from: { id: 101, is_bot: false },
+        data: createBinding.callbackValue,
+        message: { message_id: createBinding.messageId, chat: { id: -500, type: "supergroup" } },
+      },
+    });
+    expect(rejected.api.messages.at(-1)?.text).toBe(
+      "I couldn’t add that because the calendar service rejected it. Nothing was added.",
+    );
   });
 
   it("protected_group_receives_one_bander_introduction", async () => {

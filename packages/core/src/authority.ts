@@ -39,13 +39,18 @@ export interface DraftFixture {
         expectedEtag: string;
         newStartTime: string;
       }
-    | {
+      | {
         kind: "create";
         eventId: string;
         title: string;
         startTime: string;
         endTime: string;
         timeZone: string;
+      }
+    | {
+        kind: "cancel";
+        eventId: string;
+        expectedEtag: string;
       };
   message?: {
     recipientId: string;
@@ -88,6 +93,18 @@ export class ExecutionAmbiguousError extends Error {
   }
 }
 
+export class ExecutionAlreadyAbsentError extends Error {
+  constructor() {
+    super("The downstream resource was already absent before this execution");
+  }
+}
+
+export class ExecutionRejectedError extends Error {
+  constructor(readonly action: "create" | "cancel") {
+    super(`The downstream service definitively rejected the ${action} operation`);
+  }
+}
+
 export class AuthorityError extends Error {
   constructor(
     readonly code: string,
@@ -124,6 +141,13 @@ export function digestStandingRequest(fixture: DraftFixture): string {
     throw new AuthorityError(
       "standing_create_unsupported",
       "Calendar creation requires one-time review",
+      422,
+    );
+  }
+  if (fixture.calendar.kind === "cancel") {
+    throw new AuthorityError(
+      "standing_cancel_unsupported",
+      "Calendar cancellation requires one-time review",
       422,
     );
   }
@@ -838,10 +862,14 @@ export class AuthorityEngine {
     bindToCurrentState = false,
   ): Promise<StoredDraft> {
     const creating = fixture.calendar.kind === "create";
+    const cancelling = fixture.calendar.kind === "cancel";
     const createFixture = creating
       ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "create" }>)
       : undefined;
-    const rescheduleFixture = !creating
+    const cancelFixture = cancelling
+      ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "cancel" }>)
+      : undefined;
+    const rescheduleFixture = !creating && !cancelling
       ? (fixture.calendar as Extract<DraftFixture["calendar"], { kind: "reschedule" }>)
       : undefined;
     if (creating) {
@@ -868,12 +896,18 @@ export class AuthorityEngine {
     }
     const event = creating
       ? undefined
-      : await this.#adapter.resolveEvent(rescheduleFixture!.eventId);
+      : await this.#adapter.resolveEvent(
+          cancelling ? cancelFixture!.eventId : rescheduleFixture!.eventId,
+        );
     const person = fixture.message
       ? await this.#adapter.resolvePerson(fixture.message.recipientId)
       : undefined;
 
-    if (!creating && !bindToCurrentState && event!.etag !== rescheduleFixture!.expectedEtag) {
+    if (
+      !creating &&
+      !bindToCurrentState &&
+      event!.etag !== (cancelling ? cancelFixture!.expectedEtag : rescheduleFixture!.expectedEtag)
+    ) {
       throw new AuthorityError(
         "fixture_precondition_mismatch",
         "The seeded calendar no longer matches this proposal",
@@ -905,6 +939,25 @@ export class AuthorityEngine {
             eventType: "default",
           },
         ]
+      : cancelling
+        ? [
+            {
+              type: "calendar.cancel_event",
+              calendarId: "primary",
+              eventId: event!.id,
+              expected: {
+                etag: event!.etag,
+                title: event!.title,
+                startTime: event!.startTime,
+                endTime: event!.endTime,
+                timeZone: event!.timeZone,
+                eventType: "default",
+                organizerMustBeOwner: true,
+                attendeeIdsExactly: [],
+                recurring: false,
+              },
+            },
+          ]
       : [
       {
         type: "calendar.reschedule_event",
@@ -958,7 +1011,15 @@ export class AuthorityEngine {
             endTime: createFixture!.endTime,
             timeZone: createFixture!.timeZone,
           })
-        : createFamilyNotificationDocument({
+        : cancelling
+          ? createFamilyNotificationDocument({
+              kind: "calendar_cancellation",
+              eventTitle: event!.title,
+              startTime: event!.startTime,
+              endTime: event!.endTime,
+              timeZone: event!.timeZone,
+            })
+          : createFamilyNotificationDocument({
             kind: "calendar_transition",
             eventTitle: event!.title,
             newStartTime: rescheduleFixture!.newStartTime,
@@ -1143,6 +1204,34 @@ export class AuthorityEngine {
           409,
         );
       }
+      if (error instanceof ExecutionAlreadyAbsentError) {
+        const completedAt = this.#now().toISOString();
+        this.#store.updatePermit({ ...permit, consumedAt: completedAt });
+        if (band.mode === "one_time") {
+          this.#store.updateBand({ ...band, status: "consumed" });
+        }
+        this.#store.updateDraft({ ...draft, status: "conflict" });
+        throw new AuthorityError(
+          "calendar_event_already_absent",
+          "The approved Calendar event was already absent before execution",
+          409,
+        );
+      }
+      if (error instanceof ExecutionRejectedError) {
+        const completedAt = this.#now().toISOString();
+        this.#store.updatePermit({ ...permit, consumedAt: completedAt });
+        if (band.mode === "one_time") {
+          this.#store.updateBand({ ...band, status: "consumed" });
+        }
+        this.#store.updateDraft({ ...draft, status: "conflict" });
+        throw new AuthorityError(
+          error.action === "create"
+            ? "calendar_create_rejected"
+            : "calendar_cancel_rejected",
+          `The Calendar service rejected the approved ${error.action} operation`,
+          409,
+        );
+      }
       if (error instanceof ExecutionAmbiguousError) {
         const completedAt = this.#now().toISOString();
         this.#store.updatePermit({ ...permit, consumedAt: completedAt });
@@ -1173,21 +1262,39 @@ export class AuthorityEngine {
     const createdCalendar = draft.document.effects.find(
       (effect) => effect.type === "calendar.create_event",
     );
+    const cancelledCalendar = draft.document.effects.find(
+      (effect) => effect.type === "calendar.cancel_event",
+    );
     const family = draft.document.effects.find(
       (effect) => effect.type === "family.telegram_notification",
     );
+    const actionCount = [calendar, createdCalendar, cancelledCalendar].filter(Boolean).length;
+    const expectedStart = calendar
+      ? calendar.changes.startTime
+      : createdCalendar
+        ? createdCalendar.startTime
+        : cancelledCalendar?.expected.startTime;
+    const expectedEnd = calendar
+      ? calendar.changes.endTime
+      : createdCalendar
+        ? createdCalendar.endTime
+        : cancelledCalendar?.expected.endTime;
+    const expectedTimeZone = calendar
+      ? calendar.expected.timeZone
+      : createdCalendar
+        ? createdCalendar.timeZone
+        : cancelledCalendar?.expected.timeZone;
     if (
-      (!calendar && !createdCalendar) ||
-      (calendar && createdCalendar) ||
-      (createdCalendar && !observed) ||
+      actionCount !== 1 ||
+      ((createdCalendar || cancelledCalendar) && !observed) ||
       (observed &&
         (Date.parse(observed.calendar.completed.startTime) !==
-          Date.parse(calendar ? calendar.changes.startTime : createdCalendar!.startTime) ||
+          Date.parse(expectedStart!) ||
           Date.parse(observed.calendar.completed.endTime) !==
-            Date.parse(calendar ? calendar.changes.endTime : createdCalendar!.endTime) ||
-          observed.calendar.completed.timeZone !==
-            (calendar ? calendar.expected.timeZone : createdCalendar!.timeZone) ||
-          (createdCalendar && observed.calendar.action !== "created"))) ||
+            Date.parse(expectedEnd!) ||
+          observed.calendar.completed.timeZone !== expectedTimeZone ||
+          (createdCalendar && observed.calendar.action !== "created") ||
+          (cancelledCalendar && observed.calendar.action !== "removed"))) ||
       (family && !observed?.familyNotification) ||
       (!family && observed?.familyNotification)
     ) {

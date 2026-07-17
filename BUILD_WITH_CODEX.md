@@ -2219,3 +2219,80 @@ Transcript SHA-256 values remain
 `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557`
 and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
 both files remain ignored and untracked. `/feedback` remains deferred.
+
+## 2026-07-16 — Checkpoint 7B: precondition-pinned real Calendar cancellation
+
+Checkpoint 7B added one explicit `calendar.cancel_event` action to the existing
+four-tool proposal path. Eligibility is intentionally narrow: the connected
+`primary` Calendar, one active timed `default` event, non-recurring,
+owner-organized, attendee-free, and resolved by the existing exact normalized
+title rule with an optional source date. The immutable action commits the
+canonical event identity, exact approved ETag, complete original interval,
+timezone, eligibility facts, and optional deterministic family document.
+Approval supplies no fresh execution parameters. Standing authority rejects
+cancellation.
+
+The first focused run was deliberately red: 14 of 15 cancellation cases failed
+because the compiler, contract, authority engine, Google adapter, Telegram
+Card/outcome renderer, compound ordering, and recovery classifier had no
+cancellation shape. The restored focused cancellation suite passes 25 cases.
+The load-bearing mutation checks were also observed red before restoration:
+
+- removing `If-Match` exposed the missing approved ETag in the Google call;
+- removing the dispatched-delete guard produced two delete attempts after a
+  lost response;
+- moving family delivery before Calendar confirmation produced an unsafe
+  attempt on stale-world refusal;
+- treating an initial 404/410 as success misreported an already-absent event;
+- rendering observed absence as causal success failed the observation-safe
+  wording assertion; and
+- adding compensating insertion after cancellation violated the no-recreation
+  invariant.
+
+The production adapter now calls `events.delete` once with the stored event ID,
+`sendUpdates: "none"`, an empty request body, and the stored ETag in
+`If-Match`. A 412 is changed world. An initial 404/410 is definitively already
+absent and is not Bander success. Once dispatch may have begun, Bander never
+deletes again: it performs only `events.get` for the exact ID. A cancelled
+tombstone or definitive absence becomes observation-safe removal without a
+causality claim; an active, changed, unreadable, or unclassifiable event becomes
+a typed ambiguous terminal outcome. No unresolved Calendar result can send a
+family update, and no path recreates a cancelled event. The 7A wording follow-up
+also separates a definitive create rejection from a lost-response create
+outcome and consistently asks the parent to check the Calendar before asking
+OpenClaw again.
+
+Live bounded Sol evidence passed 8/8 cancellation cases with zero false
+accepts: supported Calendar cancellation with and without a family alias, and
+safe rejection of restaurant reservation, external-clinic contact, bulk-day,
+whole-afternoon, recurring, and free-form-message requests. The existing read
+probe passed 7/7, create passed 8/8, and compound passed 18/18 across the final
+chunks with zero authority or Calendar mutation. A stale legacy compound label
+was corrected from blanket “cancellation unsupported” to the actual unsupported
+external-restaurant boundary; no compiler behavior changed.
+
+Real Google evidence used only fictional events in the dedicated account and
+printed no identifiers. `Bander 7B Dentist Appointment`, Thu, Jul 23,
+1:00–2:00 PM MDT, produced one genuine Telegram Card, one confirmed conditional
+delete, and zero matching active events afterward. Approval replay displayed
+“Already Done. Nothing ran again,” emitted no second Bander message, and caused
+zero additional deletes. The explicit lost-response probe deleted `Bander 7B
+Lost Delete Probe`, Sat, Jul 25, 11:00 AM–12:00 PM MDT, discarded Google's
+successful response, observed the exact ID absent, and returned
+`observed_target` on both initial recovery and replay with exactly one delete
+attempt. The stale-world journey pinned `Bander 7B Changed World Appointment`
+at Fri, Jul 24, 10:00–11:00 AM MDT; an independent Google change moved it to
+10:15–11:15 AM before approval. Bander received the stale precondition,
+reported that it did not remove the event, and a read-only check confirmed one
+active event remained. Family contact state was revoked throughout, so every
+live cancellation path made zero family-delivery attempts; live cancellation
+with family remains a pre-film gate rather than a 7B gate.
+
+Final restored-green matrix: typecheck and production build; 31 functional
+files with 388 tests; 20 adversarial tests; all nine unchanged deterministic
+sandbox outcomes; one-time and standing recovery verifiers; real OpenClaw with
+exactly four tools; live compound Sol 18/18, read Sol 7/7, create Sol 8/8, and
+cancel Sol 8/8 with zero false accepts; credential-isolation tests; dependency
+audit with zero vulnerabilities; and read-only doctor with 9 PASS, 3 expected
+WARN, and 0 FAIL. The transcript hashes remain unchanged and both transcript
+files remain ignored and untracked. `/feedback` remains deferred.

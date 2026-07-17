@@ -94,7 +94,7 @@ export class CompilerError extends Error {
 
 const CalendarIntentSchema = z
   .object({
-    actionKind: z.enum(["reschedule_event", "create_event"]),
+    actionKind: z.enum(["reschedule_event", "create_event", "cancel_event"]),
     eventTitleHint: z.string().trim().max(160),
     sourceLocalDateHint: z.string().trim().max(10).nullable(),
     targetLocalDate: z.string().trim().max(10),
@@ -175,9 +175,29 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
     if (
       !intent.eventTitleHint ||
       (intent.sourceLocalDateHint !== null &&
-        !/^\d{4}-\d{2}-\d{2}$/.test(intent.sourceLocalDateHint)) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(intent.targetLocalDate) ||
-      !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(intent.targetLocalStart)
+        !/^\d{4}-\d{2}-\d{2}$/.test(intent.sourceLocalDateHint))
+    ) {
+      throw new CompilerError(
+        "invalid_model_output",
+        "The model did not return one bounded Calendar event identity.",
+      );
+    }
+    const cancelling = intent.actionKind === "cancel_event";
+    if (
+      cancelling &&
+      (intent.targetLocalDate !== "" ||
+        intent.targetLocalStart !== "" ||
+        intent.durationMinutes !== null)
+    ) {
+      throw new CompilerError(
+        "invalid_model_output",
+        "A Calendar cancellation cannot contain destination or duration fields.",
+      );
+    }
+    if (
+      !cancelling &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(intent.targetLocalDate) ||
+        !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(intent.targetLocalStart))
     ) {
       throw new CompilerError(
         "invalid_model_output",
@@ -185,6 +205,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       );
     }
     if (
+      intent.actionKind === "create_event" &&
       intent.durationMinutes !== null &&
       (intent.durationMinutes < 15 || intent.durationMinutes > 12 * 60)
     ) {
@@ -271,7 +292,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       return compiled;
     }
 
-    if (intent.durationMinutes !== null) {
+    if (intent.actionKind === "reschedule_event" && intent.durationMinutes !== null) {
       throw new CompilerError(
         "invalid_model_output",
         "A Calendar reschedule cannot change the event duration.",
@@ -304,7 +325,8 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
           );
         }
         if (error.code === "unsupported_event_shape") {
-          const humanMessage = `I found “${title}”, but it isn’t a Calendar event Bander can safely move yet.\nNothing happened.`;
+          const verb = cancelling ? "remove" : "move";
+          const humanMessage = `I found “${title}”, but it isn’t a Calendar event Bander can safely ${verb} yet.\nNothing happened.`;
           throw new CompilerError(
             "unsupported_request",
             humanMessage,
@@ -313,6 +335,30 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
         }
       }
       throw error;
+    }
+    if (cancelling) {
+      const compiled: DraftFixture = {
+        id: "real-google-calendar-cancel",
+        claimedUserRequest: agentClaimedRequest,
+        calendar: {
+          kind: "cancel",
+          eventId: event.id,
+          expectedEtag: event.etag,
+        },
+      };
+      if (intent.familyNotificationRequested) {
+        compiled.familyNotification = {
+          ...familyBinding!,
+          document: createFamilyNotificationDocument({
+            kind: "calendar_cancellation",
+            eventTitle: event.title,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            timeZone: event.timeZone,
+          }),
+        };
+      }
+      return compiled;
     }
     const newStartTime = resolveLocalStart({
       localDate: intent.targetLocalDate,
@@ -368,19 +414,20 @@ export class OpenAISolIntentSelector implements CalendarIntentSelector {
         reasoning: { effort: "low" },
         max_output_tokens: 300,
         instructions: [
-          "Extract one narrow Calendar action for Bander: reschedule_event or create_event.",
-          "Return only the action kind, event-title hint, optional current/source local date hint, required destination local date, required destination local start, and optional duration minutes for creation.",
+          "Extract one narrow Calendar action for Bander: reschedule_event, create_event, or cancel_event.",
+          "Return only the action kind, event-title hint, optional current/source local date hint, destination local date/start for create or reschedule, and optional duration minutes for creation.",
           "Also say whether the person requested a notification to one already-connected family contact and, if so, return only the human alias they used.",
           "Do not choose or emit a Calendar ID, event ID, ETag, end time, duration, recipient address, Telegram ID, chat ID, username, message body, effects, execution order, execution parameters, approval, authority, callback, permit, receipt, or idempotency value.",
           `The connected Calendar's authoritative timezone is ${this.#calendarTimeZone}; resolve dates in that timezone.`,
           `Today's date in that Calendar timezone is ${currentInstallationLocalDate(new Date(), this.#calendarTimeZone)}.`,
-          "sourceLocalDateHint identifies an existing event's current date only for reschedule_event when the person actually supplied it; for create_event always return null.",
-          "targetLocalDate and targetLocalStart describe where the person wants the event moved.",
+          "sourceLocalDateHint identifies an existing event's current date for reschedule_event or cancel_event only when the person supplied it; for create_event always return null.",
+          "For cancel_event, targetLocalDate and targetLocalStart must be empty strings and durationMinutes must be null.",
+          "For create_event or reschedule_event, targetLocalDate and targetLocalStart describe the requested destination.",
           "Resolve a month and day without a year to its next unambiguous occurrence relative to today's local date.",
           "For create_event, durationMinutes is the explicit duration when clearly requested, otherwise null so Bander applies its disclosed 60-minute default. Never infer a duration from the title.",
           "If the event title, target date, or target start time is missing or ambiguous, set needsClarification true and leave the missing target field empty.",
           "Set clarificationReason to none for a complete supported action; otherwise classify only as missing_event, missing_target_date, missing_target_time, missing_destination, unsupported_action, or ambiguous.",
-          "A Calendar create or reschedule plus a short deterministic Bander update to one connected family alias is supported. Adding a meal as a Calendar event is creation; booking or reserving a table is unsupported. A medication item explicitly requested as a Calendar event is creation, but never present Bander as a medical reminder service. Recurrence, invitations or attendees, conferencing, locations, descriptions, custom reminder settings, arbitrary or free-form message content, pronoun-only contacts, multiple contacts, cancellation, deletion, spending, and every other action are unsupported_action or ambiguous.",
+          "A Calendar create, reschedule, or removal plus a short deterministic Bander update to one connected family alias is supported. 'Remove the dentist event from my calendar' is cancel_event. 'Cancel my appointment with the clinic' or 'call the clinic and cancel' is unsupported because it may mean contacting an external party. Booking or cancelling a reservation, order, subscription, ride, or non-Calendar appointment is unsupported. Bulk, multiple-event, all-day, recurring, attendee-bearing, externally organized, arbitrary-message, pronoun-only contact, and multiple-contact requests are unsupported or ambiguous.",
           "You are advisory extraction only. Deterministic Bander code resolves the event and constructs the action.",
         ].join(" "),
         input: agentClaimedRequest,
@@ -428,7 +475,7 @@ function deterministicIntentClarification(
       : "Which Calendar event would you like to move?\nNothing happened.";
   }
   if (intent.clarificationReason === "unsupported_action") {
-    return "I can add one timed Calendar event or move one eligible event, but I can’t make reservations, invite people, or create recurring events.\nNothing happened.";
+    return "I can add, move, or remove one eligible Calendar event, but I can’t contact a business, cancel reservations, handle recurring events, or remove events in bulk.\nNothing happened.";
   }
   if (intent.clarificationReason === "missing_contact") {
     return "Who should I let know? Please use their name, like Gil.\nNothing happened.";

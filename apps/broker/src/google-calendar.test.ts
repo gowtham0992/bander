@@ -72,6 +72,10 @@ class FakeBoundary implements GoogleCalendarBoundary {
     throw new Error("unused");
   }
 
+  async deleteEvent(): Promise<void> {
+    throw new Error("unused");
+  }
+
 }
 
 function calendarOnlyDraft(): DraftDocument {

@@ -40,6 +40,7 @@ Implemented in real mode:
 - a separate sanitized read DTO with at most 50 events and no Calendar identifiers, descriptions, locations, attendees, links, ETags, or OAuth data;
 - natural-language Google Calendar rescheduling;
 - natural-language creation of one timed default Calendar event;
+- natural-language cancellation of one narrowly eligible Calendar event;
 - primary Calendar only;
 - timed, non-recurring, owner-organized, attendee-free events only;
 - one exact normalized title match, optionally narrowed by a source date;
@@ -57,7 +58,7 @@ Implemented in real mode:
 - replay-safe confirmed family delivery and permanent no-retry reporting after an ambiguous Telegram response; and
 - a human-only outcome constructed from observed effect results rather than intended effects.
 
-Schedule reads create no Card, approval authority, or mutation. Zero or multiple writable matches, missing destination fields, unknown or unconnected family references, free-form family messages, unsupported cancellation, unsupported event shapes, malformed or broadened model output, and Google failures create no authority.
+Schedule reads create no Card, approval authority, or mutation. Zero or multiple writable matches, missing action-specific fields, unknown or unconnected family references, free-form family messages, bulk or non-Calendar cancellation, unsupported event shapes, malformed or broadened model output, and Google failures create no authority.
 
 ## 4. Parent-facing experience
 
@@ -100,11 +101,13 @@ The parent interface avoids these terms; the technical implementation uses them 
 
 Approval does not accept fresh agent parameters. It loads the stored Draft, verifies the same owner/chat/Bander-authored message/callback binding, mints authority once, records dispatch before the downstream call, and reuses the same operation identity on replay. A different Draft hash, terminal decline, revocation, conflict, or expired-undispatched Permit fails closed.
 
-Reschedule execution uses the canonical event ID and approved ETag stored in the Draft. It updates only start and end, preserves exact duration, fixes Calendar ID to `primary`, and uses `sendUpdates: "none"`. Create execution inserts one stored timed `default` event with the stored client ID, title, complete interval, and timezone, while deterministically omitting attendees, recurrence, location, description, conferencing, attachments, and custom reminders. Bander never automatically refetches and executes a different plan after a precondition failure. For compound deals, Calendar execution always precedes family delivery.
+Reschedule execution uses the canonical event ID and approved ETag stored in the Draft. It updates only start and end, preserves exact duration, fixes Calendar ID to `primary`, and uses `sendUpdates: "none"`. Create execution inserts one stored timed `default` event with the stored client ID, title, complete interval, and timezone, while deterministically omitting attendees, recurrence, location, description, conferencing, attachments, and custom reminders. Cancellation deletes only the stored event ID under the stored ETag with `sendUpdates: "none"`; it never reissues a dispatched delete or recreates the event. Bander never automatically refetches and executes a different plan after a precondition failure. For compound deals, Calendar execution always precedes family delivery.
 
 If a Google write response is lost, Bander re-reads the exact event. It may report that the approved target was observed, but it does not claim causality it cannot prove. If the target cannot be confirmed, it does not notify the family contact and reports the Calendar result as unconfirmed.
 
 After a create insert is marked dispatched, Bander never inserts again automatically. It reconciles only by the exact stored client event ID. An exact match becomes an observation-safe success; different content is an identity collision and fails closed; a missing event remains permanently unconfirmed with no family delivery.
+
+After a cancellation delete is marked dispatched, Bander never deletes again automatically. A lost response is reconciled only by reading the exact stored event ID. A cancelled tombstone or definitive absence supports observation-safe state wording without claiming causality; an active, changed, unreadable, or otherwise unclassifiable event remains ambiguous and produces no family delivery. An initial 404/410 is reported as already absent, not as Bander success.
 
 Family delivery is bound to the opaque contact and pairing revision stored in the approved deal. A revoked or replaced contact is never substituted. Telegram has no client idempotency key: confirmed delivery is replay-safe; an ambiguous transport response is recorded permanently, is not retried automatically, and is never described as confirmed. Telegram acceptance is not proof that the human read the update. Owner-facing Card and outcome delivery retain their separately documented at-least-once tradeoff.
 
@@ -115,11 +118,10 @@ Real mode uses the exact model ID `gpt-5.6-sol` in three roles:
 1. OpenClaw uses it for conversation and genuine tool selection.
 2. Bander uses a separate Responses API Structured Output call to compile a bounded schedule range.
 3. Bander uses another strict Structured Output call to extract writable intent:
-   - action kind (`reschedule_event` or `create_event`);
+   - action kind (`reschedule_event`, `create_event`, or `cancel_event`);
    - `eventTitleHint`;
    - optional `sourceLocalDateHint`;
-   - required `targetLocalDate`; and
-   - required `targetLocalStart`;
+   - action-specific target date/time for create or reschedule;
    - optional bounded `durationMinutes` for creation;
    - whether a family update was requested; and
    - the human alias used.
@@ -188,7 +190,7 @@ Observed evidence and command outputs live in [BUILD_WITH_CODEX.md](BUILD_WITH_C
 Bander does not currently claim:
 
 - arbitrary Calendar search, descriptions, locations, attendee details, or ranges longer than 31 days;
-- Calendar cancellation, recurrence creation, attendee invitations, conferencing, reservations, locations, descriptions, attachments, or custom reminders;
+- bulk Calendar deletion, recurring/all-day/attendee-bearing/external-organizer cancellation, recurrence creation, attendee invitations, conferencing, reservations, locations, descriptions, attachments, or custom reminders;
 - arbitrary Telegram messages, email, or model-authored family updates;
 - more than one active family contact;
 - reservations, purchases, payments, transportation, medical actions, locks, or smart-home control;
@@ -214,7 +216,7 @@ Future work may add:
 
 - an additive installer that preserves an existing OpenClaw configuration;
 - durable transactional production authority storage and startup reconciliation;
-- real independently credentialed adapters beyond narrow Calendar creation and rescheduling;
+- real independently credentialed adapters beyond narrow Calendar creation, rescheduling, and cancellation;
 - reset/uninstall workflows;
 - additional human channels; and
 - carefully bounded real standing autonomy.

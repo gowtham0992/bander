@@ -115,8 +115,8 @@ const cases: readonly { name: string; request: string; expected: Expected }[] = 
     expected: { status: "clarification_required", reason: "unpaired_contact" },
   },
   {
-    name: "unsupported_cancellation",
-    request: "Cancel Bander Demo Appointment and tell Gil.",
+    name: "unsupported_external_cancellation",
+    request: "Cancel my restaurant reservation and tell Gil.",
     expected: { status: "unsupported", reason: "unsupported_action" },
   },
   {

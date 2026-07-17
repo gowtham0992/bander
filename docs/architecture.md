@@ -38,6 +38,8 @@ Real reschedule eligibility is narrow: timed, non-recurring, owner-organized, no
 
 Real creation is a separate action shape: one timed `default` event on `primary`, no attendees, recurrence, location, description, conferencing, attachments, custom reminders, booking, or reservation. Bander generates a cryptographically random lowercase base32hex-compatible client event ID once per proposal and commits it with the sanitized title, exact start/end, and configured IANA timezone. After dispatch it never issues another insert automatically. A lost response or duplicate-ID result is reconciled only with `events.get` for that exact stored ID; exact content is reported as observed, different content fails closed, and a missing event remains unconfirmed.
 
+Real cancellation is a third explicit action shape for one active timed `default` event on `primary` that is non-recurring, owner-organized, and attendee-free. The immutable action stores the canonical event ID, exact ETag, complete original interval, timezone, and eligibility facts. Execution calls `events.delete` once with `sendUpdates: "none"` and the stored ETag in `If-Match`; it sends no body and never recreates the event. A stale ETag is changed world. An initial 404/410 is already absent rather than success. After an ambiguous dispatched delete, Bander never deletes again: it reads only the exact ID, treats a cancelled tombstone or definitive absence as observation-safe removal, and otherwise records an ambiguous terminal result with no family delivery.
+
 A 412 is a changed-world conflict, not permission to re-plan. Bander performs no automatic refetch-and-write. Concurrent empirical tests show that two writes using the same approved ETag allow one commit and make the other fail precondition. Timeout reconciliation may describe only the Calendar state Bander later observes; it must not claim causality it cannot prove.
 
 ## ADR-004: GPT-5.6 Sol compiles intent but cannot author authority
@@ -46,7 +48,7 @@ A 412 is a changed-world conflict, not permission to re-plan. Bander performs no
 
 Real mode uses a separate strict Structured Output call with exact model ID `gpt-5.6-sol`. The output contract contains:
 
-- action kind (`reschedule_event` or `create_event`);
+- action kind (`reschedule_event`, `create_event`, or `cancel_event`);
 - event-title hint;
 - optional source-local-date hint;
 - required target local date;
@@ -76,7 +78,7 @@ Every execution shape has one idempotent downstream operation identity. Bander r
 The sandbox mock service can truthfully reconcile an operation after a lost response. The current real Google adapter uses observed Google state and ETag behavior; it does not overclaim that Bander caused a state merely because the state matches.
 
 For a compound deal, the immutable Draft contains both the complete Calendar
-action and the exact opaque family-contact pairing revision plus canonical
+create, reschedule, or cancellation action and the exact opaque family-contact pairing revision plus canonical
 notification document. The Card and delivery use the same renderer. Execution
 is deliberately ordered: validate and conditionally update Calendar first,
 then attempt the bound family update. This is not an atomic distributed

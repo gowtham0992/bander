@@ -80,6 +80,7 @@ async function main() {
       await boundary.insertEvent(input);
       throw new Error("simulated_response_loss_after_google_acceptance");
     },
+    deleteEvent: (input) => boundary.deleteEvent(input),
   };
   const adapter = new GoogleCalendarAdapter(lossyBoundary);
   const document: DraftDocument = {

@@ -651,6 +651,53 @@ describe("broker approval boundary", () => {
     }
   });
 
+  it("openclaw_receives_only_minimal_cancel_status", async () => {
+    const setup = createApp();
+    const cancelFixture: DraftFixture = {
+      id: "cancel-private",
+      claimedUserRequest: "Cancel my dentist appointment Thursday.",
+      calendar: {
+        kind: "cancel",
+        eventId: "event-dinner-sarah",
+        expectedEtag: "event-dinner-sarah-r1",
+      },
+    };
+    let humanCard: unknown;
+    const server = createBanderMcpServer({
+      engine: setup.engine,
+      fixtures: new Map(),
+      runtimeMode: "real",
+      agentCompiler: { compile: async () => structuredClone(cancelFixture) },
+      deliverAgentProposal: async (card) => { humanCard = card; },
+      readSchedule: async () => ({
+        requestedRange: { startLocalDate: "2026-07-18", endLocalDateExclusive: "2026-07-19" },
+        timeZone: "America/Denver",
+        events: [],
+        empty: true,
+        truncated: false,
+        maxEvents: 50,
+      }),
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "cancel-privacy", version: "1" });
+    try {
+      await server.connect(serverTransport as Parameters<typeof server.connect>[0]);
+      await client.connect(clientTransport as Parameters<Client["connect"]>[0]);
+      const result = await client.callTool({
+        name: "propose_action",
+        arguments: { request: cancelFixture.claimedUserRequest },
+      });
+      const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "";
+      expect(JSON.parse(text)).toMatchObject({ status: "proposed" });
+      expect(text).not.toMatch(/dentist|Dinner|event-dinner|etag|Calendar|remove/i);
+      expect(JSON.stringify(humanCard)).toContain("calendar.cancel_event");
+      expect(setup.adapter.executions).toBe(0);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("returns a minimal non-error status for unsupported wording", async () => {
     const setup = createApp();
     const delivered: string[] = [];

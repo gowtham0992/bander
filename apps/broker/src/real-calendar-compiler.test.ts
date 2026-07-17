@@ -403,7 +403,7 @@ describe("real Calendar intent compiler", () => {
 
     await expect(compiler.compile("Cancel the planning block")).rejects.toMatchObject({
       humanMessage:
-        "I can add one timed Calendar event or move one eligible event, but I can’t make reservations, invite people, or create recurring events.\nNothing happened.",
+        "I can add, move, or remove one eligible Calendar event, but I can’t contact a business, cancel reservations, handle recurring events, or remove events in bulk.\nNothing happened.",
     });
     expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });
