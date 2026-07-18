@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type {
   ApprovalCard,
   ApprovalEffectPreview,
@@ -8,6 +8,7 @@ import type {
   ScheduleReadResult,
 } from "@bander/contracts";
 import { createDemoBackend } from "./backend/index.js";
+import { initialFamilyThreadState, reduceFamilyThread } from "./family-thread-state.js";
 
 const demoBackend = createDemoBackend();
 
@@ -140,6 +141,14 @@ function RealServicesLink({ label = "See how this works with real services →" 
 
 function SandboxNotice({ browserOnly }: { browserOnly: boolean }) {
   return <p className="sandbox-notice">{browserOnly ? browserSandboxNotice : localSandboxNotice}</p>;
+}
+
+function R1SandboxNotice() {
+  return (
+    <p className="r1-sandbox-notice">
+      Seeded browser data <span aria-hidden="true">·</span> Cannot touch real accounts or services <span aria-hidden="true">·</span> Same Bander authority engine and Card rendering
+    </p>
+  );
 }
 
 function ScheduleReadView({ result, onBack }: { result: ScheduleReadResult; onBack: () => void }) {
@@ -512,6 +521,286 @@ function GuidedEpisode() {
   );
 }
 
+function WorldGlyph({ kind }: { kind: "calendar" | "inbox" | "phone" }) {
+  if (kind === "calendar") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path className="glyph-body" d="M8.5 14h31v25H8.5z" />
+        <path className="glyph-fold" d="M8.5 14h31v7H8.5z" />
+        <path d="M8.5 21h31M16 9.5v8M32 9.5v8" />
+        <path className="glyph-accent" d="M16.5 26h7v7h-7z" />
+        <path className="glyph-detail" d="M27 27.5h7M27 32h5" />
+      </svg>
+    );
+  }
+  if (kind === "inbox") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path className="glyph-body" d="M7.5 13.5h33v24h-33z" />
+        <path className="glyph-fold" d="m8.5 15 15.5 13L39.5 15" />
+        <path d="m8.5 36 10.5-9M39.5 36 29 27" />
+        <path className="glyph-accent" d="M31 30h9v7h-9z" />
+        <path className="glyph-detail" d="m33 33 2 2 4-5" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <rect className="glyph-body" x="13" y="5.5" width="22" height="37" rx="6" />
+      <path className="glyph-fold" d="M17 11.5h14v20H17z" />
+      <path d="M20.5 9h7M21.5 37.5h5" />
+      <path className="glyph-accent" d="M27 17h9v9h-9z" />
+      <path className="glyph-detail" d="m29 21.5 2 2 4-5" />
+    </svg>
+  );
+}
+
+function WorldObject({
+  kind,
+  title,
+  detail,
+  active = false,
+}: {
+  kind: "calendar" | "inbox" | "phone";
+  title: string;
+  detail: string;
+  active?: boolean;
+}) {
+  return (
+    <article className="world-object" data-active={active || undefined} aria-label={`${title}: ${detail}`}>
+      <span className="world-glyph"><WorldGlyph kind={kind} /></span>
+      <span className="world-copy"><strong>{title}</strong><small>{detail}</small></span>
+      <span className="world-seeded">SANDBOX</span>
+    </article>
+  );
+}
+
+function FamilyThread() {
+  const [flow, dispatch] = useReducer(reduceFamilyThread, initialFamilyThreadState);
+  const [card, setCard] = useState<ApprovalCard | null>(null);
+  const [state, setState] = useState<DemoSandboxState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const askButtonRef = useRef<HTMLButtonElement>(null);
+  const suggestionRef = useRef<HTMLButtonElement>(null);
+  const outcomeRef = useRef<HTMLDivElement>(null);
+  const approvalInFlight = useRef(false);
+  const cardActive = flow.stage === "card";
+  const lineState = flow.stage === "preparing" || flow.stage === "card"
+    ? "waiting"
+    : flow.stage === "sent"
+      ? "crossed"
+      : "idle";
+
+  useEffect(() => {
+    if (flow.stage === "card") {
+      dialogRef.current?.querySelector<HTMLButtonElement>("button.primary")?.focus();
+    } else if (flow.stage === "declined") {
+      suggestionRef.current?.focus();
+    } else if (flow.stage === "sent") {
+      outcomeRef.current?.focus();
+      if (window.matchMedia("(max-width: 640px)").matches) {
+        outcomeRef.current?.scrollIntoView({ block: "center", behavior: "auto" });
+      }
+    }
+  }, [flow.stage]);
+
+  const refreshState = async () => {
+    const next = await api<DemoSandboxState>("/api/demo/state");
+    setState(next);
+    return next;
+  };
+
+  const ask = async () => {
+    if (busy || flow.stage !== "idle") return;
+    dispatch({ type: "ask" });
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/demo/reset", { method: "POST" });
+      await api("/api/demo/inbox/guided");
+      await refreshState();
+      dispatch({ type: "read_completed" });
+    } catch {
+      setError("The seeded conversation could not open. Nothing was sent or changed.");
+      dispatch({ type: "ask_failed" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const prepare = async () => {
+    if (busy || (flow.stage !== "read" && flow.stage !== "declined")) return;
+    dispatch({ type: "prepare" });
+    setBusy(true);
+    setError(null);
+    try {
+      const [nextCard] = await Promise.all([
+        api<ApprovalCard>("/api/demo/proposals", {
+          method: "POST",
+          body: JSON.stringify({ fixtureId: "reply-to-dr-rao-about-thursday" }),
+        }),
+        new Promise((resolve) => window.setTimeout(resolve, 190)),
+      ]);
+      setCard(nextCard);
+      dispatch({ type: "card_ready" });
+    } catch {
+      setError("Bander couldn’t prepare the seeded deal. Nothing was sent or changed.");
+      dispatch({ type: "prepare_failed" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approve = async () => {
+    if (!card || busy || approvalInFlight.current) return;
+    approvalInFlight.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await api<HumanReceipt>(`/api/drafts/${card.draftId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ draftHash: card.draftHash }),
+      });
+      await refreshState();
+      dispatch({ type: "approved" });
+    } catch {
+      setError("Bander couldn’t confirm the seeded result. It will not retry automatically.");
+    } finally {
+      approvalInFlight.current = false;
+      setBusy(false);
+    }
+  };
+
+  const decline = async () => {
+    if (!card || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/drafts/${card.draftId}/decline`, { method: "POST" });
+      dispatch({ type: "declined" });
+    } catch {
+      setError("Bander couldn’t close the seeded deal. Nothing was sent or changed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const trapDialogFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab" || !dialogRef.current) return;
+    const controls = [...dialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")];
+    if (controls.length === 0) return;
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  };
+
+  const latestInbox = state?.inbox.find((message) => message.subject === "Appointment options");
+  const sentReply = state?.sentEmails.find((message) => message.subject === "Re: Appointment options");
+
+  return (
+    <main className={`family-thread-shell stage-${flow.stage}${cardActive ? " card-active" : ""}`}>
+      <h1 className="visually-hidden">Bander family conversation sandbox</h1>
+      <p className="family-whisper">The assistant you can hand to your parents.</p>
+
+      <div className="family-stage" inert={cardActive} aria-hidden={cardActive || undefined}>
+        <section className="family-conversation" aria-labelledby="family-thread-title">
+          <header className="thread-heading">
+            <span>FAMILY THREAD</span>
+            <h2 id="family-thread-title">Mum, your assistant, and Bander</h2>
+          </header>
+          <div className="thread-log" role="log" aria-live="polite" aria-relevant="additions text">
+            <article className="thread-message parent-message">
+              <span className="speaker-label">Mum</span>
+              <p>What did Dr. Rao’s office say?</p>
+            </article>
+
+            {flow.stage === "idle" || flow.stage === "asking" ? (
+              <button ref={askButtonRef} className="thread-advance ask-advance" aria-label="Tap to ask — you drive everything here." onClick={ask} disabled={busy}>
+                <span aria-hidden="true">↗</span>{busy ? "Asking…" : "Tap to ask — you drive everything here."}
+              </button>
+            ) : (
+              <>
+                <article className="thread-message assistant-message message-arrival">
+                  <span className="speaker-label">Your assistant</span>
+                  <p>Dr. Rao’s office says Thursday at 2 PM is available and asks whether that works for you.</p>
+                </article>
+                <p className="read-rule"><span aria-hidden="true">○</span>Reading never crosses the line.</p>
+                {flow.stage !== "sent" && (
+                  <button ref={suggestionRef} className="thread-message parent-message suggested-message" onClick={prepare} disabled={busy || flow.stage === "preparing" || flow.stage === "card"}>
+                    <span className="speaker-label">Tap Mum’s next message</span>
+                    <span>{flow.stage === "preparing" ? "Preparing the exact deal…" : "Reply that Thursday at 2 works."}</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {flow.stage === "declined" && (
+              <article className="thread-message bander-message message-arrival">
+                <span className="speaker-label">Bander</span>
+                <p><strong>Not now.</strong> Your calendar and messages were left exactly as they were.</p>
+              </article>
+            )}
+
+            {flow.stage === "sent" && (
+              <>
+                <article ref={outcomeRef} tabIndex={-1} className="thread-message bander-message authoritative-outcome message-arrival">
+                  <span className="speaker-label"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />Bander</span>
+                  <p><strong>Email sent ✓</strong><br /><span>The exact approved reply is in seeded Sent Mail. No one else was included.</span></p>
+                </article>
+                <aside className="next-preview" aria-disabled="true">Next: add it to the calendar and let Gil know.</aside>
+              </>
+            )}
+            {error && <p className="thread-error" role="alert">{error}</p>}
+          </div>
+        </section>
+
+        <div className="line-zone">
+          {(flow.stage === "preparing" || flow.stage === "card" || flow.stage === "sent") && (
+            <span className="deal-marker" data-marker-state={lineState} aria-label={lineState === "crossed" ? "Approved email crossed the Bander Line" : "Email deal waiting at the Bander Line"}>EMAIL</span>
+          )}
+          <div className="bander-line" data-line-state={lineState} role="img" aria-label="Bander Line">
+            {lineState === "idle" ? (
+              <span className="line-seal" aria-hidden="true"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /></span>
+            ) : (
+              <span className="line-state-label">{lineState === "waiting" ? "WAITING FOR YOU" : "APPROVED"}</span>
+            )}
+          </div>
+        </div>
+
+        <aside className="world-dock" aria-label="Seeded outside world">
+          <p className="world-heading">Beyond the Line</p>
+          <WorldObject kind="calendar" title="Calendar" detail="No change" />
+          <WorldObject kind="inbox" title="Inbox" detail={sentReply ? "Sent ✓" : latestInbox ? "1 message" : "Seeded mail"} active={flow.stage === "sent"} />
+          <WorldObject kind="phone" title="Gil’s phone" detail="Quiet" />
+        </aside>
+
+        {flow.stage === "sent" && (
+          <article className="approved-deal-proof" aria-label="Approved Bander email deal">
+            <img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />
+            <span><strong>Approved word-for-word</strong><small>Reply sent to Dr. Rao’s office</small></span>
+          </article>
+        )}
+      </div>
+
+      {cardActive && card && (
+        <div className="deal-modal-backdrop">
+          <div ref={dialogRef} className="deal-modal" role="dialog" aria-modal="true" aria-label="Exact Bander email deal" onKeyDown={trapDialogFocus}>
+            <DealCard card={card} embedded busy={busy} onApprove={approve} onDecline={decline} onChange={decline} showChange={false} />
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
 const verifiedExamples = [
   { id: "schedule", label: "What’s on tomorrow?" },
   { id: "inbox", label: "What did the latest email say?" },
@@ -772,6 +1061,7 @@ function DealCard({
   onChange,
   busy,
   embedded = false,
+  showChange = true,
 }: {
   card: ApprovalCard;
   onApprove: () => void;
@@ -779,6 +1069,7 @@ function DealCard({
   onChange: () => void;
   busy: boolean;
   embedded?: boolean;
+  showChange?: boolean;
 }) {
   const expiry = new Date(card.expiresAt);
   const creates = card.effectPreviews.some((preview) => preview.kind === "calendar.create_event");
@@ -844,7 +1135,7 @@ function DealCard({
           <button className="primary" onClick={onApprove} disabled={busy}>
              {busy ? "Completing…" : cancels ? "Remove this event" : "Do exactly this"}
           </button>
-          <button className="secondary" onClick={onChange} disabled={busy}>Change it</button>
+          {showChange && <button className="secondary" onClick={onChange} disabled={busy}>Change it</button>}
           <button className="quiet" onClick={onDecline} disabled={busy}>Not now</button>
         </div>
       </article>
@@ -1275,16 +1566,14 @@ export function App() {
 
   return (
     <div className="app-frame">
-      <header><Brand /><span className="tagline">Help without surprises.</span></header>
-      <SandboxNotice browserOnly={status?.browserOnly === true || demoBackend.kind === "browser"} />
-      {screen.kind === "welcome" && (
-        <Welcome
-          onStart={start}
-          onSchedule={readTomorrow}
-          onCompile={compileRequest}
-          status={status}
-        />
-      )}
+      <header className={screen.kind === "welcome" ? "r1-header" : undefined}>
+        <Brand />
+        {screen.kind !== "welcome" && <span className="tagline">Help without surprises.</span>}
+      </header>
+      {screen.kind === "welcome"
+        ? <R1SandboxNotice />
+        : <SandboxNotice browserOnly={status?.browserOnly === true || demoBackend.kind === "browser"} />}
+      {screen.kind === "welcome" && <FamilyThread />}
       {screen.kind === "loading" && (
         <main className="state-screen" aria-live="polite">
           <div className="loader" />
