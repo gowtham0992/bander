@@ -91,7 +91,16 @@ body {
 .authoritative-outcome > p { font-family: "Iowan Old Style", "Palatino Linotype", serif; font-size: 18px; }
 .authoritative-outcome > p strong { display: block; margin-bottom: 9px; font-size: 20px; }
 .authoritative-outcome > p span { display: block; }
-.authoritative-outcome:focus { outline: none; }
+.authoritative-outcome:focus, .thread-terminal:focus { outline: none; }
+.thread-terminal > p { display: grid; gap: 7px; }
+.thread-terminal > p strong { font-family: "Iowan Old Style", "Palatino Linotype", serif; font-size: 19px; }
+.crossing-beat { justify-self: start; display: grid; gap: 3px; margin: 2px 0 2px 5px; padding: 10px 13px; border-left: 2px solid var(--r1-teal); color: #60716e; font-size: 12px; }
+.crossing-beat span { color: var(--r1-teal); font-weight: 800; }
+.crossing-beat strong { font-weight: 600; }
+.episode-choice { justify-self: start; text-align: left; }
+.returned-outcome > p { background: #e3efeb; }
+.held-outcome > p { border-style: dashed; background: rgba(255,253,248,.82); }
+.held-outcome > p strong { color: #385e5a; }
 .thread-advance { justify-self: end; min-height: 48px; padding: 0 18px; border: 1px solid rgba(13,112,105,.3); border-radius: 999px; background: rgba(255,253,248,.72); color: var(--r1-teal); font-weight: 700; box-shadow: 0 9px 22px rgba(30,68,63,.07); transition: transform var(--r1-motion-fast) var(--r1-ease), background var(--r1-motion-fast) var(--r1-ease); }
 .thread-advance span { margin-right: 8px; }
 .thread-advance:hover:not(:disabled) { transform: translateY(-1px); background: #fffdf8; }
@@ -106,6 +115,8 @@ body {
 .bander-line { position: absolute; inset: 0 auto 0 50%; width: 0; border-left: var(--r1-line-width) solid var(--r1-teal); transition: border-color var(--r1-motion-fast) var(--r1-ease); }
 .bander-line[data-line-state="waiting"] { border-left-style: dashed; }
 .bander-line[data-line-state="crossed"] { border-left-color: var(--r1-teal-deep); }
+.bander-line[data-line-state="returned"] { border-left-width: 3px; border-left-color: var(--r1-teal-deep); animation: r2-line-return var(--r1-motion-fast) var(--r1-ease) both; }
+.bander-line[data-line-state="held"] { border-left-style: dashed; border-left-color: #4f7773; }
 .line-state-label { position: absolute; top: 28px; left: 0; padding: 6px 8px; border: 1px solid rgba(13,112,105,.25); border-radius: 999px; background: var(--r1-paper-warm); color: var(--r1-teal); font-size: 9px; font-weight: 800; letter-spacing: .12em; white-space: nowrap; transform: translateX(-50%) rotate(-90deg) translateX(-100%); transform-origin: left top; }
 .line-seal { position: absolute; top: 28px; left: 0; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(13,112,105,.4); border-radius: 50%; background: var(--r1-paper-warm); box-shadow: 0 0 0 4px rgba(251,247,239,.85), 0 0 0 5px rgba(216,93,82,.22), 0 8px 18px rgba(18,70,65,.13); transform: translate(-50%, -50%); }
 .line-seal::before, .line-seal::after { content: ""; position: absolute; width: 7px; height: 7px; background: var(--r1-paper-warm); border: solid var(--r1-teal); transform: rotate(45deg); }
@@ -115,11 +126,16 @@ body {
 .deal-marker { position: absolute; top: 48%; left: -52px; z-index: 4; min-width: 58px; padding: 8px 9px; border: 1px solid var(--r1-teal); border-radius: 7px; background: var(--r1-card-surface); color: var(--r1-teal-deep); font-family: "Iowan Old Style", "Palatino Linotype", serif; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-align: center; box-shadow: 0 8px 20px rgba(18,70,65,.12); }
 .deal-marker[data-marker-state="waiting"] { animation: r1-approach var(--r1-motion-standard) var(--r1-ease) both; }
 .deal-marker[data-marker-state="crossed"] { left: 52px; border-style: solid; animation: r1-cross var(--r1-motion-fast) var(--r1-ease) both; }
+.deal-marker[data-marker-state="returned"] { left: -52px; border-style: solid; color: var(--r1-teal-deep); animation: r2-return var(--r1-motion-fast) var(--r1-ease) both; }
+.deal-marker[data-marker-state="held"] { left: 7px; border-style: dashed; background: rgba(251,247,239,.88); color: #4f7773; box-shadow: none; }
+.deal-marker.marker-calendar { top: 43%; }
+.deal-marker.marker-gil { top: 56%; }
 
 .world-dock { min-width: 0; align-self: stretch; display: grid; align-content: center; gap: 13px; padding: 38px 28px 38px 10px; }
 .world-heading { margin: 0 0 4px; color: #73817e; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .world-object { position: relative; min-height: 104px; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 13px; align-items: center; padding: 17px; overflow: hidden; border: 1px solid rgba(48,82,77,.14); border-radius: var(--r1-radius-object); background: rgba(238,235,226,.65); color: #62706e; opacity: .58; filter: saturate(.45); transform: translateZ(0); transition: opacity var(--r1-motion-fast) var(--r1-ease), filter var(--r1-motion-fast) var(--r1-ease), transform var(--r1-motion-fast) var(--r1-ease), background var(--r1-motion-fast) var(--r1-ease); }
 .world-object[data-active] { background: #e4f1ed; color: var(--r1-teal-deep); opacity: 1; filter: none; transform: translateX(3px); box-shadow: 0 13px 28px rgba(21,76,70,.12); }
+.world-object[data-unconfirmed] { border-style: dashed; background: rgba(247,244,236,.8); color: #4f6f6b; opacity: 1; filter: none; }
 .world-glyph { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid rgba(13,112,105,.12); border-radius: 14px; background: linear-gradient(145deg, rgba(255,255,255,.9), rgba(233,239,234,.72)); box-shadow: inset 0 1px rgba(255,255,255,.9), 0 5px 12px rgba(34,68,63,.08); }
 .world-glyph svg { width: 39px; height: 39px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .world-glyph .glyph-body { fill: rgba(255,253,248,.9); }
@@ -129,13 +145,17 @@ body {
 .world-copy { min-width: 0; display: grid; gap: 4px; }
 .world-copy strong { color: currentColor; font-size: 16px; }
 .world-copy small { color: currentColor; font-size: 12px; }
+.world-message { grid-column: 1 / -1; margin: 1px 0 0; padding: 10px 11px; border-left: 2px solid var(--r1-teal); border-radius: 8px; background: rgba(255,253,248,.78); color: var(--r1-teal-deep); font: 11px/1.45 "Avenir Next", Avenir, "Segoe UI", sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
 .world-seeded { position: absolute; top: 9px; right: 9px; color: #8b9592; font-size: 7px; font-weight: 800; letter-spacing: .12em; }
+.world-object[data-active]:has(.world-message) { min-height: 196px; align-content: center; }
+.mobile-phone-light { display: none; }
 
 .approved-deal-proof { position: absolute; left: calc(60% - 62px); bottom: 28px; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 13px; border: 1px solid var(--r1-teal); border-radius: 12px; background: var(--r1-card-surface); color: var(--r1-teal-deep); box-shadow: 0 12px 30px rgba(22,72,67,.16); animation: r1-seal var(--r1-motion-fast) var(--r1-ease) both; }
 .approved-deal-proof img { width: 31px; height: 31px; object-fit: contain; }
 .approved-deal-proof span { display: grid; gap: 2px; }
 .approved-deal-proof strong { font-family: "Iowan Old Style", "Palatino Linotype", serif; font-size: 14px; }
 .approved-deal-proof small { color: #6a7976; font-size: 10px; }
+.compound-proof { right: 28px; left: auto; min-width: 250px; }
 
 .deal-modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgba(17,38,35,.4); backdrop-filter: blur(3px); animation: r1-fade var(--r1-motion-fast) var(--r1-ease) both; }
 .deal-modal { width: min(700px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; outline: none; }
@@ -157,6 +177,8 @@ body {
 @keyframes r1-message-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes r1-approach { from { opacity: .3; transform: translateX(-55px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes r1-cross { from { opacity: .6; transform: translateX(-70px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes r2-return { from { opacity: .7; transform: translateX(92px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes r2-line-return { 0% { border-color: var(--r1-teal-deep); } 100% { border-color: var(--r1-teal); } }
 @keyframes r1-card-unfold { from { opacity: 0; transform: scale(.985) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes r1-seal { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
 @keyframes r1-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -498,19 +520,29 @@ header {
   .thread-message > p, .suggested-message > span:last-child { padding: 13px 15px; font-size: 15px; }
   .thread-advance { max-width: 100%; min-height: 48px; padding: 0 14px; font-size: 13px; }
   .read-rule { font-size: 11px; }
-  .stage-sent .thread-log { gap: 9px; }
-  .stage-sent .authoritative-outcome > p { font-size: 16px; }
-  .stage-sent .authoritative-outcome > p strong { margin-bottom: 6px; font-size: 18px; }
+  .stage-email_confirmed .thread-log, .stage-compound_confirmed .thread-log, .stage-conflict_returned .thread-log, .stage-uncertainty_held .thread-log { gap: 9px; }
+  .stage-email_confirmed .authoritative-outcome > p, .stage-compound_confirmed .authoritative-outcome > p { font-size: 16px; }
+  .stage-email_confirmed .authoritative-outcome > p strong, .stage-compound_confirmed .authoritative-outcome > p strong { margin-bottom: 6px; font-size: 18px; }
   .line-zone { position: fixed; inset: auto 0 98px; z-index: 29; min-width: 0; height: 22px; pointer-events: none; transition: opacity var(--r1-motion-fast) var(--r1-ease); }
   .stage-idle .line-zone, .stage-idle .world-dock { visibility: hidden; opacity: 0; }
   .bander-line { inset: auto 0 0; width: auto; height: 0; border-top: var(--r1-line-width) solid var(--r1-teal); border-left: 0; }
   .bander-line[data-line-state="waiting"] { border-top-style: dashed; border-left-style: none; }
+  .bander-line[data-line-state="returned"] { border-top-width: 3px; border-left: 0; animation: r2-line-return var(--r1-motion-fast) var(--r1-ease) both; }
+  .bander-line[data-line-state="held"] { border-top-style: dashed; border-left: 0; }
   .line-state-label { top: -13px; left: 50%; padding: 4px 8px; font-size: 8px; transform: translateX(-50%); }
   .line-seal { top: 0; left: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); }
   .line-seal img { width: 20px; height: 20px; }
   .deal-marker { top: -18px; left: calc(50% - 29px); }
   .deal-marker[data-marker-state="waiting"] { animation-name: r1-mobile-approach; }
   .deal-marker[data-marker-state="crossed"] { left: calc(74% - 29px); animation-name: r1-mobile-cross; }
+  .deal-marker[data-marker-state="returned"] { left: calc(26% - 29px); animation-name: r2-return; }
+  .deal-marker[data-marker-state="held"] { left: calc(50% - 29px); }
+  .deal-marker.marker-calendar { top: -18px; }
+  .deal-marker.marker-gil { top: -18px; }
+  .deal-marker.marker-calendar[data-marker-state="waiting"] { left: calc(40% - 29px); }
+  .deal-marker.marker-gil[data-marker-state="waiting"] { left: calc(60% - 29px); }
+  .deal-marker.marker-calendar[data-marker-state="crossed"] { left: calc(66% - 29px); }
+  .deal-marker.marker-gil[data-marker-state="crossed"] { left: calc(82% - 29px); }
   .world-dock { position: fixed; inset: auto 0 0; z-index: 28; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 10px 8px 12px; border-top: 0; background: rgba(243,237,227,.97); box-shadow: 0 -12px 28px rgba(27,57,52,.11); backdrop-filter: blur(10px); transition: opacity var(--r1-motion-fast) var(--r1-ease); }
   .world-heading { display: none; }
   .world-object { min-height: 76px; grid-template-columns: 30px minmax(0, 1fr); gap: 6px; padding: 10px 7px; border-radius: 13px; }
@@ -519,8 +551,14 @@ header {
   .world-copy { gap: 2px; }
   .world-copy strong { font-size: 11px; }
   .world-copy small { font-size: 9px; }
+  .world-message { display: none; }
   .world-seeded { top: 4px; right: 5px; font-size: 5px; }
   .approved-deal-proof { left: 14px; right: 14px; bottom: 111px; justify-content: center; }
+  .stage-compound_confirmed .family-conversation { padding-bottom: 382px; }
+  .stage-compound_confirmed .approved-deal-proof { position: fixed; left: 12px; right: 12px; bottom: 343px; z-index: 32; }
+  .mobile-phone-light { position: fixed; inset: auto 12px 218px; z-index: 31; display: block; max-height: 188px; overflow: auto; padding: 12px 14px; border: 1px solid rgba(13,112,105,.42); border-radius: 17px; background: #e5f1ed; color: var(--r1-teal-deep); box-shadow: 0 16px 38px rgba(21,76,70,.2); animation: r2-phone-light var(--r1-motion-standard) var(--r1-ease) both; }
+  .mobile-phone-light > span { display: block; margin-bottom: 7px; color: var(--r1-red); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  .mobile-phone-light pre { margin: 0; font: 12px/1.45 "Avenir Next", Avenir, "Segoe UI", sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
   .deal-modal-backdrop { align-items: end; padding: 8px 8px 108px; backdrop-filter: none; }
   .deal-modal { width: 100%; max-height: calc(100svh - 116px); }
   .deal-modal .embedded-deal { padding: 8px; border-radius: 18px 18px 13px 13px; }
@@ -539,6 +577,7 @@ header {
 
 @keyframes r1-mobile-approach { from { opacity: .3; transform: translateY(34px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes r1-mobile-cross { from { opacity: .6; transform: translateX(-64px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes r2-phone-light { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

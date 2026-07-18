@@ -10,12 +10,12 @@ describe("R1 Family Thread presentation contract", () => {
     expect(app).toContain("What did Dr. Rao’s office say?");
     expect(app).toContain("Tap to ask — you drive everything here.");
     expect(app).toContain("Reading never crosses the line.");
-    expect(app).toContain("Next: add it to the calendar and let Gil know.");
+    expect(app).toContain("Add it to my calendar and let Gil know.");
     expect(app).toContain("<FamilyThread");
   });
 
   it("gives the Line and three seeded world objects semantic state", () => {
-    expect(app).toContain('aria-label="Bander Line"');
+    expect(app).toContain('aria-label={`Bander Line: ${lineState}`}');
     expect(app).toContain('data-line-state={lineState}');
     expect(app).toContain("Calendar");
     expect(app).toContain("Inbox");
@@ -48,7 +48,7 @@ describe("R1 Family Thread presentation contract", () => {
   });
 
   it("keeps announcement focus non-visual without leaving a clipped Card ornament", () => {
-    expect(styles).toMatch(/\.authoritative-outcome:focus\s*\{[^}]*outline:\s*none/s);
+    expect(styles).toMatch(/\.authoritative-outcome:focus[^\{]*\{[^}]*outline:\s*none/s);
     expect(styles).not.toContain(".deal-modal .deal-card::before");
     expect(styles).toContain("button:focus-visible, a:focus-visible");
   });
@@ -61,5 +61,14 @@ describe("R1 Family Thread presentation contract", () => {
     expect(styles).toContain(".family-thread-shell");
     expect(styles).toContain(".bander-line");
     expect(styles).toContain(".world-dock");
+  });
+
+  it("scopes family delivery to sending without claiming device receipt or human reading", () => {
+    expect(app).not.toMatch(/Gil(?:’s phone)?[^\n<]{0,100}\b(?:received|got|read|saw)\b/i);
+    expect(app).not.toMatch(/No family update (?:received|got|read|seen)\./i);
+    expect(app).toContain("Bander sent the exact approved update to Gil.");
+    expect(app).toContain('detail={compoundPhoneCrossed ? "Update sent"');
+    expect(app).toContain('aria-label="Exact approved sandbox update sent to Gil"');
+    expect(app).toContain("No family update sent.");
   });
 });

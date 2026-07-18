@@ -8,7 +8,7 @@ import type {
   ScheduleReadResult,
 } from "@bander/contracts";
 import { createDemoBackend } from "./backend/index.js";
-import { initialFamilyThreadState, reduceFamilyThread } from "./family-thread-state.js";
+import { R2_PRESENTATION_BEAT_MS, familyThreadWorldPresentation, initialFamilyThreadState, reduceFamilyThread } from "./family-thread-state.js";
 
 const demoBackend = createDemoBackend();
 
@@ -195,7 +195,7 @@ function FamilyPhone({ state }: { state: DemoSandboxState }) {
   return (
     <aside className="sandbox-phone" aria-label="Gil’s phone sandbox">
       <span>Gil’s phone — sandbox</span>
-      {state.familyUpdates.length === 0 ? <p>No family update received.</p> : state.familyUpdates.map((update) => (
+      {state.familyUpdates.length === 0 ? <p>No family update sent.</p> : state.familyUpdates.map((update) => (
         <article key={`${update.sentAt}-${update.body}`}><strong>Bander</strong><pre>{update.body}</pre></article>
       ))}
     </aside>
@@ -216,7 +216,7 @@ function CompoundResult({ screen, onReplay, onBack }: { screen: Extract<Screen, 
             : "The exact approved action completed.";
   return (
     <main className="compound-result" aria-live="polite">
-      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>{outcome}</p>{screen.receipt.familyNotification && <p>Gil’s phone received the exact text shown on the Card.</p>}<button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button><RealServicesLink /></section>
+      <section className="result-shell"><div className="result-mark">✓</div><h1>Done exactly as approved.</h1><p>{outcome}</p>{screen.receipt.familyNotification && <p>Bander sent the exact approved update to Gil.</p>}<button className="secondary" onClick={onReplay}>{screen.replayed ? "Replay changed nothing" : "Replay the same approval"}</button><button className="quiet" onClick={onBack}>Back to the sandbox</button><RealServicesLink /></section>
       {screen.receipt.emailReply ? (
         <aside className="sandbox-phone" aria-label="Seeded Sent mail"><span>Sent mail — sandbox</span>{screen.state.sentEmails.map((email) => <article key={`${email.sentAt}-${email.subject}`}><strong>To {email.recipient}</strong><pre>{email.body}</pre></article>)}</aside>
       ) : <FamilyPhone state={screen.state} />}
@@ -507,7 +507,7 @@ function GuidedEpisode() {
         </section>
         <section className="external-pane phone-pane" aria-label="Gil’s seeded phone">
           <span className="surface-label">GIL’S PHONE — SANDBOX</span>
-          {state?.familyUpdates.length ? state.familyUpdates.map((update) => <article key={update.sentAt}><strong>Bander</strong><pre>{update.body}</pre></article>) : <p className="surface-empty">No family update received.</p>}
+          {state?.familyUpdates.length ? state.familyUpdates.map((update) => <article key={update.sentAt}><strong>Bander</strong><pre>{update.body}</pre></article>) : <p className="surface-empty">No family update sent.</p>}
         </section>
       </div>
       {stage === "complete" && (
@@ -560,51 +560,92 @@ function WorldObject({
   title,
   detail,
   active = false,
+  unconfirmed = false,
+  message,
 }: {
   kind: "calendar" | "inbox" | "phone";
   title: string;
   detail: string;
   active?: boolean;
+  unconfirmed?: boolean;
+  message?: string;
 }) {
   return (
-    <article className="world-object" data-active={active || undefined} aria-label={`${title}: ${detail}`}>
+    <article className="world-object" data-active={active || undefined} data-unconfirmed={unconfirmed || undefined} aria-label={`${title}: ${detail}`}>
       <span className="world-glyph"><WorldGlyph kind={kind} /></span>
       <span className="world-copy"><strong>{title}</strong><small>{detail}</small></span>
+      {message && <pre className="world-message">{message}</pre>}
       <span className="world-seeded">SANDBOX</span>
     </article>
   );
 }
 
+type FamilyThreadDeal = "email" | "compound" | "conflict" | "uncertainty";
+
 function FamilyThread() {
   const [flow, dispatch] = useReducer(reduceFamilyThread, initialFamilyThreadState);
   const [card, setCard] = useState<ApprovalCard | null>(null);
   const [state, setState] = useState<DemoSandboxState | null>(null);
+  const [ambiguousMessage, setAmbiguousMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const askButtonRef = useRef<HTMLButtonElement>(null);
-  const suggestionRef = useRef<HTMLButtonElement>(null);
-  const outcomeRef = useRef<HTMLDivElement>(null);
+  const emailSuggestionRef = useRef<HTMLButtonElement>(null);
+  const compoundSuggestionRef = useRef<HTMLButtonElement>(null);
+  const conflictOfferRef = useRef<HTMLButtonElement>(null);
+  const uncertaintyOfferRef = useRef<HTMLButtonElement>(null);
+  const outcomeRef = useRef<HTMLElement>(null);
   const approvalInFlight = useRef(false);
-  const cardActive = flow.stage === "card";
-  const lineState = flow.stage === "preparing" || flow.stage === "card"
-    ? "waiting"
-    : flow.stage === "sent"
-      ? "crossed"
-      : "idle";
+  const presentationTimer = useRef<number | undefined>(undefined);
+
+  const waitingDeal: FamilyThreadDeal | null = flow.stage === "email_waiting"
+    ? "email"
+    : flow.stage === "compound_waiting"
+      ? "compound"
+      : flow.stage === "conflict_waiting"
+        ? "conflict"
+        : flow.stage === "uncertainty_waiting"
+          ? "uncertainty"
+          : null;
+  const cardActive = waitingDeal !== null;
+  const emailConfirmed = !["idle", "asking", "read", "email_preparing", "email_waiting", "email_declined"].includes(flow.stage);
+  const worldPresentation = familyThreadWorldPresentation(flow.stage);
+  const compoundCalendarCrossed = worldPresentation.calendar === "confirmed";
+  const compoundPhoneCrossed = worldPresentation.phone === "confirmed";
+  const held = flow.stage === "uncertainty_held";
+  const familyUpdate = state?.familyUpdates[0];
+  const drRaoEvent = state?.calendar.find((event) => event.title === "Appointment with Dr. Rao");
+  const latestInbox = state?.inbox.find((message) => message.subject === "Appointment options");
+
+  const lineState = held
+    ? "held"
+    : flow.stage === "conflict_returned"
+      ? "returned"
+      : ["email_preparing", "email_waiting", "compound_preparing", "compound_waiting", "conflict_preparing", "conflict_waiting", "uncertainty_preparing", "uncertainty_waiting"].includes(flow.stage)
+        ? "waiting"
+        : ["email_confirmed", "compound_calendar_crossed", "compound_confirmed"].includes(flow.stage)
+          ? "crossed"
+          : "idle";
+
+  useEffect(() => () => {
+    if (presentationTimer.current !== undefined) window.clearTimeout(presentationTimer.current);
+  }, []);
 
   useEffect(() => {
-    if (flow.stage === "card") {
+    if (cardActive) {
       dialogRef.current?.querySelector<HTMLButtonElement>("button.primary")?.focus();
-    } else if (flow.stage === "declined") {
-      suggestionRef.current?.focus();
-    } else if (flow.stage === "sent") {
+      return;
+    }
+    if (flow.stage === "email_declined") emailSuggestionRef.current?.focus();
+    else if (flow.stage === "compound_declined") compoundSuggestionRef.current?.focus();
+    else if (flow.stage === "email_confirmed" || flow.stage === "compound_confirmed" || flow.stage === "conflict_returned" || flow.stage === "uncertainty_held") {
       outcomeRef.current?.focus();
       if (window.matchMedia("(max-width: 640px)").matches) {
-        outcomeRef.current?.scrollIntoView({ block: "center", behavior: "auto" });
+        outcomeRef.current?.scrollIntoView({ block: flow.stage === "compound_confirmed" ? "start" : "center", behavior: "auto" });
+        if (flow.stage === "compound_confirmed") window.scrollBy({ top: 80, behavior: "auto" });
       }
     }
-  }, [flow.stage]);
+  }, [cardActive, flow.stage]);
 
   const refreshState = async () => {
     const next = await api<DemoSandboxState>("/api/demo/state");
@@ -625,46 +666,94 @@ function FamilyThread() {
     } catch {
       setError("The seeded conversation could not open. Nothing was sent or changed.");
       dispatch({ type: "ask_failed" });
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
-  const prepare = async () => {
-    if (busy || (flow.stage !== "read" && flow.stage !== "declined")) return;
-    dispatch({ type: "prepare" });
+  const prepareDeal = async (deal: FamilyThreadDeal) => {
+    if (busy) return;
+    const canPrepare = (deal === "email" && (flow.stage === "read" || flow.stage === "email_declined"))
+      || (deal === "compound" && (flow.stage === "email_confirmed" || flow.stage === "compound_declined"))
+      || (deal === "conflict" && flow.stage === "compound_confirmed")
+      || (deal === "uncertainty" && flow.stage === "conflict_returned");
+    if (!canPrepare) return;
+    if (deal === "email") dispatch({ type: "prepare_email" });
+    if (deal === "compound") dispatch({ type: "prepare_compound" });
+    if (deal === "conflict") {
+      dispatch({ type: "offer_conflict" });
+      dispatch({ type: "prepare_conflict" });
+    }
+    if (deal === "uncertainty") {
+      dispatch({ type: "offer_uncertainty" });
+      dispatch({ type: "prepare_uncertainty" });
+    }
     setBusy(true);
     setError(null);
     try {
+      if (deal === "conflict" || deal === "uncertainty") {
+        await api("/api/demo/reset", { method: "POST" });
+        await refreshState();
+      }
+      const fixtureId = deal === "email"
+        ? "reply-to-dr-rao-about-thursday"
+        : deal === "compound"
+          ? "add-dr-rao-appointment-and-notify-gil"
+          : deal === "conflict"
+            ? "cancel-dentist-and-notify-gil"
+            : "move-demo-appointment-and-notify-gil";
       const [nextCard] = await Promise.all([
-        api<ApprovalCard>("/api/demo/proposals", {
-          method: "POST",
-          body: JSON.stringify({ fixtureId: "reply-to-dr-rao-about-thursday" }),
-        }),
+        api<ApprovalCard>("/api/demo/proposals", { method: "POST", body: JSON.stringify({ fixtureId }) }),
         new Promise((resolve) => window.setTimeout(resolve, 190)),
       ]);
       setCard(nextCard);
-      dispatch({ type: "card_ready" });
+      if (deal === "email") dispatch({ type: "email_card_ready" });
+      if (deal === "compound") dispatch({ type: "compound_card_ready" });
+      if (deal === "conflict") dispatch({ type: "conflict_card_ready" });
+      if (deal === "uncertainty") dispatch({ type: "uncertainty_card_ready" });
     } catch {
       setError("Bander couldn’t prepare the seeded deal. Nothing was sent or changed.");
-      dispatch({ type: "prepare_failed" });
-    } finally {
-      setBusy(false);
-    }
+      if (deal === "email") dispatch({ type: "email_prepare_failed" });
+      if (deal === "compound") dispatch({ type: "compound_prepare_failed" });
+      if (deal === "conflict") dispatch({ type: "conflict_prepare_failed" });
+      if (deal === "uncertainty") dispatch({ type: "uncertainty_prepare_failed" });
+    } finally { setBusy(false); }
   };
 
   const approve = async () => {
-    if (!card || busy || approvalInFlight.current) return;
+    if (!card || !waitingDeal || busy || approvalInFlight.current) return;
     approvalInFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      await api<HumanReceipt>(`/api/drafts/${card.draftId}/approve`, {
-        method: "POST",
-        body: JSON.stringify({ draftHash: card.draftHash }),
-      });
+      if (waitingDeal === "conflict") {
+        try {
+          await api(`/api/demo/drafts/${card.draftId}/approve-after-cancel-calendar-change`, { method: "POST", body: JSON.stringify({ draftHash: card.draftHash }) });
+          throw new Error("The changed-world sandbox did not refuse the stale deal");
+        } catch (failure) {
+          if (!(failure instanceof ApiError) || failure.code !== "conflict") throw failure;
+        }
+        await refreshState();
+        dispatch({ type: "conflict_returned" });
+        return;
+      }
+      if (waitingDeal === "uncertainty") {
+        const result = await api<{ status: string; message: string }>(`/api/demo/drafts/${card.draftId}/approve-ambiguous`, { method: "POST", body: JSON.stringify({ draftHash: card.draftHash }) });
+        if (result.status !== "calendar_outcome_ambiguous") throw new Error("The uncertainty sandbox returned an unexpected result");
+        setAmbiguousMessage(result.message);
+        await refreshState();
+        dispatch({ type: "uncertainty_held" });
+        return;
+      }
+      await api<HumanReceipt>(`/api/drafts/${card.draftId}/approve`, { method: "POST", body: JSON.stringify({ draftHash: card.draftHash }) });
       await refreshState();
-      dispatch({ type: "approved" });
+      if (waitingDeal === "email") dispatch({ type: "email_approved" });
+      else {
+        dispatch({ type: "compound_backend_confirmed" });
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        presentationTimer.current = window.setTimeout(() => {
+          dispatch({ type: "compound_phone_presented" });
+          presentationTimer.current = undefined;
+        }, reducedMotion ? 0 : R2_PRESENTATION_BEAT_MS);
+      }
     } catch {
       setError("Bander couldn’t confirm the seeded result. It will not retry automatically.");
     } finally {
@@ -674,129 +763,116 @@ function FamilyThread() {
   };
 
   const decline = async () => {
-    if (!card || busy) return;
+    if (!card || !waitingDeal || busy) return;
     setBusy(true);
     setError(null);
     try {
       await api(`/api/drafts/${card.draftId}/decline`, { method: "POST" });
-      dispatch({ type: "declined" });
+      if (waitingDeal === "email") dispatch({ type: "email_declined" });
+      if (waitingDeal === "compound") dispatch({ type: "compound_declined" });
+      if (waitingDeal === "conflict") dispatch({ type: "conflict_declined" });
+      if (waitingDeal === "uncertainty") dispatch({ type: "uncertainty_declined" });
+      await refreshState();
     } catch {
       setError("Bander couldn’t close the seeded deal. Nothing was sent or changed.");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
+  };
+
+  const resetEpisode = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api("/api/demo/reset", { method: "POST" });
+      setState(null);
+      setCard(null);
+      setAmbiguousMessage("");
+      setError(null);
+      dispatch({ type: "reset" });
+    } finally { setBusy(false); }
   };
 
   const trapDialogFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Tab" || !dialogRef.current) return;
     const controls = [...dialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")];
-    if (controls.length === 0) return;
     const first = controls[0];
     const last = controls[controls.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   };
 
-  const latestInbox = state?.inbox.find((message) => message.subject === "Appointment options");
-  const sentReply = state?.sentEmails.find((message) => message.subject === "Re: Appointment options");
+  const showEmailSuggestion = flow.stage === "read" || flow.stage === "email_preparing" || flow.stage === "email_waiting" || flow.stage === "email_declined";
+  const showEmailOutcome = ["email_confirmed", "compound_preparing", "compound_waiting", "compound_declined"].includes(flow.stage);
+  const showCompoundRequest = ["compound_preparing", "compound_waiting", "compound_calendar_crossed", "compound_confirmed"].includes(flow.stage);
+  const showCompoundOutcome = flow.stage === "compound_confirmed";
+  const showConflictRequest = ["conflict_offered", "conflict_preparing", "conflict_waiting", "conflict_returned"].includes(flow.stage);
+  const showUncertaintyRequest = ["uncertainty_offered", "uncertainty_preparing", "uncertainty_waiting", "uncertainty_held"].includes(flow.stage);
+
+  const markers: Array<{ label: string; state: "waiting" | "crossed" | "returned" | "held"; className?: string }> = [];
+  if (flow.stage === "email_preparing" || flow.stage === "email_waiting" || flow.stage === "email_confirmed") markers.push({ label: "EMAIL", state: flow.stage === "email_confirmed" ? "crossed" : "waiting" });
+  if (["compound_preparing", "compound_waiting", "compound_calendar_crossed", "compound_confirmed"].includes(flow.stage)) {
+    markers.push({ label: "CALENDAR", state: compoundCalendarCrossed ? "crossed" : "waiting", className: "marker-calendar" });
+    markers.push({ label: "GIL", state: compoundPhoneCrossed ? "crossed" : "waiting", className: "marker-gil" });
+  }
+  if (flow.stage === "conflict_preparing" || flow.stage === "conflict_waiting" || flow.stage === "conflict_returned") markers.push({ label: "CALENDAR", state: flow.stage === "conflict_returned" ? "returned" : "waiting" });
+  if (flow.stage === "uncertainty_preparing" || flow.stage === "uncertainty_waiting" || flow.stage === "uncertainty_held") markers.push({ label: "CALENDAR", state: held ? "held" : "waiting" });
 
   return (
     <main className={`family-thread-shell stage-${flow.stage}${cardActive ? " card-active" : ""}`}>
       <h1 className="visually-hidden">Bander family conversation sandbox</h1>
       <p className="family-whisper">The assistant you can hand to your parents.</p>
-
       <div className="family-stage" inert={cardActive} aria-hidden={cardActive || undefined}>
         <section className="family-conversation" aria-labelledby="family-thread-title">
-          <header className="thread-heading">
-            <span>FAMILY THREAD</span>
-            <h2 id="family-thread-title">Mum, your assistant, and Bander</h2>
-          </header>
+          <header className="thread-heading"><span>FAMILY THREAD</span><h2 id="family-thread-title">Mum, your assistant, and Bander</h2></header>
           <div className="thread-log" role="log" aria-live="polite" aria-relevant="additions text">
-            <article className="thread-message parent-message">
-              <span className="speaker-label">Mum</span>
-              <p>What did Dr. Rao’s office say?</p>
-            </article>
-
+            <article className="thread-message parent-message"><span className="speaker-label">Mum</span><p>What did Dr. Rao’s office say?</p></article>
             {flow.stage === "idle" || flow.stage === "asking" ? (
-              <button ref={askButtonRef} className="thread-advance ask-advance" aria-label="Tap to ask — you drive everything here." onClick={ask} disabled={busy}>
-                <span aria-hidden="true">↗</span>{busy ? "Asking…" : "Tap to ask — you drive everything here."}
-              </button>
+              <button className="thread-advance ask-advance" aria-label="Tap to ask — you drive everything here." onClick={ask} disabled={busy}><span aria-hidden="true">↗</span>{busy ? "Asking…" : "Tap to ask — you drive everything here."}</button>
             ) : (
-              <>
-                <article className="thread-message assistant-message message-arrival">
-                  <span className="speaker-label">Your assistant</span>
-                  <p>Dr. Rao’s office says Thursday at 2 PM is available and asks whether that works for you.</p>
-                </article>
-                <p className="read-rule"><span aria-hidden="true">○</span>Reading never crosses the line.</p>
-                {flow.stage !== "sent" && (
-                  <button ref={suggestionRef} className="thread-message parent-message suggested-message" onClick={prepare} disabled={busy || flow.stage === "preparing" || flow.stage === "card"}>
-                    <span className="speaker-label">Tap Mum’s next message</span>
-                    <span>{flow.stage === "preparing" ? "Preparing the exact deal…" : "Reply that Thursday at 2 works."}</span>
-                  </button>
-                )}
-              </>
+              <><article className="thread-message assistant-message message-arrival"><span className="speaker-label">Your assistant</span><p>Dr. Rao’s office says Thursday at 2 PM is available and asks whether that works for you.</p></article><p className="read-rule"><span aria-hidden="true">○</span>Reading never crosses the line.</p></>
             )}
 
-            {flow.stage === "declined" && (
-              <article className="thread-message bander-message message-arrival">
-                <span className="speaker-label">Bander</span>
-                <p><strong>Not now.</strong> Your calendar and messages were left exactly as they were.</p>
-              </article>
-            )}
+            {showEmailSuggestion && <button ref={emailSuggestionRef} className="thread-message parent-message suggested-message" onClick={() => prepareDeal("email")} disabled={busy || flow.stage === "email_waiting"}><span className="speaker-label">Tap Mum’s next message</span><span>{flow.stage === "email_preparing" ? "Preparing the exact deal…" : "Reply that Thursday at 2 works."}</span></button>}
+            {flow.stage === "email_declined" && <article className="thread-message bander-message message-arrival"><span className="speaker-label">Bander</span><p><strong>Not now.</strong> Your calendar and messages were left exactly as they were.</p></article>}
 
-            {flow.stage === "sent" && (
-              <>
-                <article ref={outcomeRef} tabIndex={-1} className="thread-message bander-message authoritative-outcome message-arrival">
-                  <span className="speaker-label"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />Bander</span>
-                  <p><strong>Email sent ✓</strong><br /><span>The exact approved reply is in seeded Sent Mail. No one else was included.</span></p>
-                </article>
-                <aside className="next-preview" aria-disabled="true">Next: add it to the calendar and let Gil know.</aside>
-              </>
-            )}
+            {showEmailOutcome && <article ref={flow.stage === "email_confirmed" ? outcomeRef as React.RefObject<HTMLElement> : undefined} tabIndex={flow.stage === "email_confirmed" ? -1 : undefined} className="thread-message bander-message authoritative-outcome message-arrival"><span className="speaker-label"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />Bander</span><p><strong>Email sent ✓</strong><br /><span>The exact approved reply is in seeded Sent Mail. No one else was included.</span></p></article>}
+            {(flow.stage === "email_confirmed" || flow.stage === "compound_declined") && <button ref={compoundSuggestionRef} className="thread-message parent-message suggested-message compound-suggestion" onClick={() => prepareDeal("compound")} disabled={busy}><span className="speaker-label">Tap Mum’s next message</span><span>Add it to my calendar and let Gil know.</span></button>}
+            {flow.stage === "compound_declined" && <article className="thread-message bander-message message-arrival"><span className="speaker-label">Bander</span><p><strong>Not now.</strong> Nothing was added to the Calendar and no family update was sent.</p></article>}
+            {showCompoundRequest && <article className="thread-message parent-message message-arrival"><span className="speaker-label">Mum</span><p>Add it to my calendar and let Gil know.</p></article>}
+            {flow.stage === "compound_calendar_crossed" && <p className="crossing-beat" aria-live="polite"><span>Calendar confirmed</span><strong>Holding the exact family update for the same approved deal…</strong></p>}
+            {showCompoundOutcome && <article ref={outcomeRef as React.RefObject<HTMLElement>} tabIndex={-1} className="thread-message bander-message authoritative-outcome thread-terminal message-arrival"><span className="speaker-label"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />Bander</span><p><strong>Done exactly as approved ✓</strong><span>“Appointment with Dr. Rao” was added to the seeded Calendar.</span><span>Bander sent the exact approved update to Gil.</span></p></article>}
+            {flow.stage === "compound_confirmed" && <button ref={conflictOfferRef} className="thread-advance episode-choice" onClick={() => prepareDeal("conflict")} disabled={busy}><span aria-hidden="true">↩</span>See what happens when the calendar changed first?</button>}
+
+            {showConflictRequest && <article className="thread-message parent-message message-arrival"><span className="speaker-label">Mum</span><p>Show me what happens when the calendar changed first.</p></article>}
+            {flow.stage === "conflict_returned" && <article ref={outcomeRef as React.RefObject<HTMLElement>} tabIndex={-1} className="thread-message bander-message thread-terminal returned-outcome message-arrival"><span className="speaker-label"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />Bander</span><p><strong>I stopped—the calendar changed since this deal was prepared.</strong><span>Bander did not remove the event or send a family update.</span><span>Review the changed event before asking your assistant again.</span></p></article>}
+            {flow.stage === "conflict_returned" && <button ref={uncertaintyOfferRef} className="thread-advance episode-choice" onClick={() => prepareDeal("uncertainty")} disabled={busy}><span aria-hidden="true">◇</span>See what Bander does when it can’t confirm?</button>}
+
+            {showUncertaintyRequest && <article className="thread-message parent-message message-arrival"><span className="speaker-label">Mum</span><p>Show me what happens when the result can’t be confirmed.</p></article>}
+            {held && <article ref={outcomeRef as React.RefObject<HTMLElement>} tabIndex={-1} className="thread-message bander-message thread-terminal held-outcome message-arrival"><span className="speaker-label"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />Bander</span><p><strong>Calendar result unconfirmed.</strong><span className="preserve-lines">{ambiguousMessage}</span></p></article>}
+            {held && <button className="thread-advance episode-choice completion-choice" onClick={resetEpisode} disabled={busy}>Continue exploring Bander</button>}
             {error && <p className="thread-error" role="alert">{error}</p>}
           </div>
         </section>
 
         <div className="line-zone">
-          {(flow.stage === "preparing" || flow.stage === "card" || flow.stage === "sent") && (
-            <span className="deal-marker" data-marker-state={lineState} aria-label={lineState === "crossed" ? "Approved email crossed the Bander Line" : "Email deal waiting at the Bander Line"}>EMAIL</span>
-          )}
-          <div className="bander-line" data-line-state={lineState} role="img" aria-label="Bander Line">
-            {lineState === "idle" ? (
-              <span className="line-seal" aria-hidden="true"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /></span>
-            ) : (
-              <span className="line-state-label">{lineState === "waiting" ? "WAITING FOR YOU" : "APPROVED"}</span>
-            )}
+          {markers.map((marker) => <span key={`${marker.label}-${marker.state}`} className={`deal-marker ${marker.className ?? ""}`} data-marker-state={marker.state} aria-label={`${marker.label} ${marker.state} at the Bander Line`}>{marker.label}</span>)}
+          <div className="bander-line" data-line-state={lineState} role="img" aria-label={`Bander Line: ${lineState}`}>
+            {lineState === "idle" ? <span className="line-seal" aria-hidden="true"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /></span> : <span className="line-state-label">{lineState === "waiting" ? "WAITING FOR YOU" : lineState === "crossed" ? "APPROVED" : lineState === "returned" ? "RETURNED" : "UNCONFIRMED"}</span>}
           </div>
         </div>
 
         <aside className="world-dock" aria-label="Seeded outside world">
           <p className="world-heading">Beyond the Line</p>
-          <WorldObject kind="calendar" title="Calendar" detail="No change" />
-          <WorldObject kind="inbox" title="Inbox" detail={sentReply ? "Sent ✓" : latestInbox ? "1 message" : "Seeded mail"} active={flow.stage === "sent"} />
-          <WorldObject kind="phone" title="Gil’s phone" detail="Quiet" />
+          <WorldObject kind="calendar" title="Calendar" detail={compoundCalendarCrossed && drRaoEvent ? "Dr. Rao · Thu 2 PM" : held ? "Result unconfirmed" : "No Bander change"} active={compoundCalendarCrossed} unconfirmed={held} />
+          <WorldObject kind="inbox" title="Inbox" detail={emailConfirmed ? "Sent ✓" : latestInbox ? "1 message" : "Seeded mail"} active={emailConfirmed} />
+          <WorldObject kind="phone" title="Gil’s phone" detail={compoundPhoneCrossed ? "Update sent" : held ? "No update sent" : "Quiet"} active={compoundPhoneCrossed} {...(compoundPhoneCrossed && familyUpdate ? { message: familyUpdate.body } : {})} />
         </aside>
 
-        {flow.stage === "sent" && (
-          <article className="approved-deal-proof" aria-label="Approved Bander email deal">
-            <img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />
-            <span><strong>Approved word-for-word</strong><small>Reply sent to Dr. Rao’s office</small></span>
-          </article>
-        )}
+        {compoundPhoneCrossed && familyUpdate && <article className="mobile-phone-light" aria-label="Exact approved sandbox update sent to Gil"><span>Gil’s phone · sandbox</span><pre>{familyUpdate.body}</pre></article>}
+        {flow.stage === "email_confirmed" && <article className="approved-deal-proof" aria-label="Approved Bander email deal"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /><span><strong>Approved word-for-word</strong><small>Reply sent to Dr. Rao’s office</small></span></article>}
+        {compoundPhoneCrossed && <article className="approved-deal-proof compound-proof" aria-label="One approved Bander deal with two confirmed effects"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /><span><strong>One approved deal</strong><small>Calendar first · exact family update second</small></span></article>}
       </div>
 
-      {cardActive && card && (
-        <div className="deal-modal-backdrop">
-          <div ref={dialogRef} className="deal-modal" role="dialog" aria-modal="true" aria-label="Exact Bander email deal" onKeyDown={trapDialogFocus}>
-            <DealCard card={card} embedded busy={busy} onApprove={approve} onDecline={decline} onChange={decline} showChange={false} />
-          </div>
-        </div>
-      )}
+      {cardActive && card && <div className="deal-modal-backdrop"><div ref={dialogRef} className="deal-modal" role="dialog" aria-modal="true" aria-label={`Exact Bander ${waitingDeal} deal`} onKeyDown={trapDialogFocus}><DealCard card={card} embedded busy={busy} onApprove={approve} onDecline={decline} onChange={decline} showChange={false} /></div></div>}
     </main>
   );
 }
