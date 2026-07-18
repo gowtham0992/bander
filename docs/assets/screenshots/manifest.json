@@ -25,6 +25,36 @@
       "file": "bander-social-preview.png",
       "caption": "She read the exact sentence. She tapped once. Her son’s phone told the truth.",
       "sources": ["curated compound-family evidence"]
+    },
+    {
+      "file": "story-card.png",
+      "caption": "The exact approval card, cropped at native resolution for story-column readability.",
+      "sources": ["real owner Telegram capture"]
+    },
+    {
+      "file": "story-gil-phone.png",
+      "caption": "Gil's phone receiving precisely the approved sentence.",
+      "sources": ["real family-contact Telegram capture"]
+    },
+    {
+      "file": "story-refusal.png",
+      "caption": "Approval tapped, world changed, Bander stopped both effects.",
+      "sources": ["real owner Telegram capture"]
+    },
+    {
+      "file": "story-full-flow.png",
+      "caption": "The full loop in one thread: request, exact Card, approval, truthful outcome, and a read confirming the new time.",
+      "sources": ["real protected-group Telegram capture"]
+    },
+    {
+      "file": "story-full-changed-world.png",
+      "caption": "Both identities in action: OpenClaw answers freely; Bander shows the deal, then refuses because the calendar changed first.",
+      "sources": ["real protected-group Telegram capture"]
+    },
+    {
+      "file": "story-gil-full.png",
+      "caption": "Gil's phone with the Bander bot header visible: a separate device, Bander's own identity, exactly the approved sentence.",
+      "sources": ["real family-contact Telegram capture"]
     }
   ]
 }
