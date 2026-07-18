@@ -80,6 +80,35 @@ async function capture(path: string): Promise<void> {
   fs.writeFileSync(path, Buffer.from(screenshot.data, "base64"), { mode: 0o600 });
 }
 
+async function resetViewportTop(): Promise<void> {
+  await evaluate(`window.scrollTo({top:0,left:0,behavior:"instant"})`);
+  if (!(await waitFor(`window.scrollY===0`))) throw new Error("The mobile capture viewport did not return to scrollY = 0");
+  await new Promise((resolve) => setTimeout(resolve, 220));
+}
+
+async function settleAndCapture(path: string, selector?: string): Promise<void> {
+  if (selector) await evaluate(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({block:"center",inline:"nearest"});window.scrollTo({left:0})`);
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  await capture(path);
+}
+
+async function captureGlyphContactSheet(path: string): Promise<void> {
+  const created = await evaluate<boolean>(`(()=>{
+    const glyphs=[...document.querySelectorAll(".world-glyph,.setup-glyph")];
+    if(glyphs.length!==8)return false;
+    const sheet=document.createElement("section");
+    sheet.id="qa-glyph-contact-sheet";
+    sheet.setAttribute("aria-hidden","true");
+    Object.assign(sheet.style,{position:"fixed",inset:"0",zIndex:"9999",background:"#f3ede3",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"24px",padding:"48px",fontFamily:"system-ui"});
+    const names=["Calendar","Inbox","Family phone","OpenClaw window","Two bots","Google keys","Family group","Family contact"];
+    glyphs.forEach((glyph,index)=>{const item=document.createElement("article");Object.assign(item.style,{display:"grid",placeItems:"center",gap:"12px",padding:"20px",border:"1px solid #b8cbc6",borderRadius:"22px",background:"#fbf7ef",color:"#124641",fontWeight:"700"});const clone=glyph.cloneNode(true);clone.style.width="76px";clone.style.height="76px";item.append(clone);const label=document.createElement("span");label.textContent=names[index]??("Glyph "+(index+1));item.append(label);sheet.append(item)});
+    document.body.append(sheet);return true;
+  })()`);
+  if (!created) throw new Error("The unified world/setup glyph family was not available for visual QA");
+  await capture(path);
+  await evaluate(`document.querySelector("#qa-glyph-contact-sheet")?.remove()`);
+}
+
 async function assertSettledProofDrawer(label: string): Promise<{ opacity: string; background: string; headingContrast: number; rowContrast: number }> {
   await new Promise((resolve) => setTimeout(resolve, 320));
   const result = await evaluate<{ opacity: string; background: string; backgroundAlpha: number; headingContrast: number; rowContrast: number }>(`(()=>{
@@ -105,8 +134,10 @@ try {
   await command("Runtime.enable");
   await command("Network.enable");
   await command("Accessibility.enable");
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   requests.length = 0;
   await reload();
+  await settleAndCapture("/private/tmp/bander-r56-desktop-s0.png", ".family-stage");
 
   const ax = await command<{ nodes: Array<{ role?: { value?: string }; name?: { value?: string } }> }>("Accessibility.getFullAXTree");
   const buttons = ax.nodes.filter((node) => node.role?.value === "button");
@@ -145,6 +176,7 @@ try {
   if (!(await waitFor(`document.querySelector("[role=dialog]") && document.body.textContent.includes("Do exactly this")`))) throw new Error("Space did not prepare the exact email Card");
   const cardState = await evaluate<{ modal: boolean; focus: string; inert: boolean; recipient: boolean; reply: boolean; changeButton: boolean; line: string; headingVisible: boolean }>(`(()=>{const heading=document.querySelector("[role=dialog] .deal-heading");const box=heading?.getBoundingClientRect();const style=heading?getComputedStyle(heading):null;return{modal:document.querySelector("[role=dialog]")?.getAttribute("aria-modal")==="true",focus:document.activeElement?.textContent?.trim()??"",inert:document.querySelector(".family-stage")?.hasAttribute("inert")??false,recipient:document.body.textContent.includes("office@example.test"),reply:document.body.textContent.includes("Thursday at 2 works."),changeButton:[...document.querySelectorAll("button")].some(button=>button.textContent?.trim()==="Change it"),line:document.querySelector(".bander-line")?.getAttribute("data-line-state")??"",headingVisible:Boolean(heading?.textContent?.includes("Bander hasn’t done anything yet — please check:")&&box&&box.width>0&&box.height>0&&style?.display!=="none"&&style?.visibility!=="hidden")}})()`);
   if (!cardState.modal || cardState.focus !== "Do exactly this" || !cardState.inert || !cardState.recipient || !cardState.reply || cardState.changeButton || cardState.line !== "waiting" || !cardState.headingVisible) throw new Error(`The exact Card modal is incomplete: ${JSON.stringify(cardState)}`);
+  await settleAndCapture("/private/tmp/bander-r56-desktop-s3.png", "[role=dialog]");
 
   await clickButton("Not now");
   if (!(await waitFor(`document.body.textContent.includes("Your calendar and messages were left exactly as they were.")`))) throw new Error("Decline did not return the truthful no-action outcome");
@@ -177,6 +209,7 @@ try {
   if (!(await waitFor(`document.querySelector(".family-thread-shell")?.classList.contains("stage-compound_confirmed")`, 1_500))) throw new Error("The exact family update did not cross after the 400ms presentation beat");
   const compoundDone = await evaluate<{ activeCalendar: boolean; activePhone: boolean; crossed: number; exactMessage: string; proof: boolean; outline: string }>(`(()=>{const outcome=document.querySelector(".thread-terminal.authoritative-outcome");return{activeCalendar:document.querySelectorAll(".world-object")[0]?.hasAttribute("data-active")??false,activePhone:document.querySelectorAll(".world-object")[2]?.hasAttribute("data-active")??false,crossed:document.querySelectorAll('.deal-marker[data-marker-state="crossed"]').length,exactMessage:document.querySelector(".world-object:nth-of-type(3) .world-message")?.textContent??"",proof:document.body.textContent.includes("One approved deal")&&document.body.textContent.includes("Calendar first · exact family update second"),outline:outcome?getComputedStyle(outcome).outlineStyle:"missing"}})()`);
   if (!compoundDone.activeCalendar || !compoundDone.activePhone || compoundDone.crossed !== 2 || !compoundDone.exactMessage.includes("Approved word-for-word before Bander sent it.") || !compoundDone.proof || compoundDone.outline !== "none") throw new Error(`The completed compound Cross is incomplete: ${JSON.stringify(compoundDone)}`);
+  await settleAndCapture("/private/tmp/bander-r56-desktop-s5.png", ".thread-terminal.authoritative-outcome");
 
   await evaluate(`document.querySelector(".stage-compound_confirmed .episode-choice")?.click()`);
   if (!(await waitFor(`Boolean(document.querySelector(".stage-conflict_waiting [role=dialog]"))`))) throw new Error("The visitor-triggered changed-world Card did not appear");
@@ -184,6 +217,7 @@ try {
   if (!(await waitFor(`document.querySelector(".family-thread-shell")?.classList.contains("stage-conflict_returned")`))) throw new Error("The existing changed-world path did not Return the deal");
   const returned = await evaluate<{ calendarActive: boolean; phoneActive: boolean; marker: boolean; success: boolean; focusOutline: string }>(`(()=>{const outcome=document.querySelector(".returned-outcome");return{calendarActive:document.querySelectorAll(".world-object")[0]?.hasAttribute("data-active")??false,phoneActive:document.querySelectorAll(".world-object")[2]?.hasAttribute("data-active")??false,marker:Boolean(document.querySelector('.deal-marker[data-marker-state="returned"]')),success:document.querySelector(".returned-outcome")?.textContent?.includes("✓")??false,focusOutline:outcome?getComputedStyle(outcome).outlineStyle:"missing"}})()`);
   if (returned.calendarActive || returned.phoneActive || !returned.marker || returned.success || returned.focusOutline !== "none") throw new Error(`Return displayed a Bander effect or success: ${JSON.stringify(returned)}`);
+  await settleAndCapture("/private/tmp/bander-r56-desktop-s6.png", ".returned-outcome");
 
   await evaluate(`document.querySelector(".stage-conflict_returned .episode-choice")?.click()`);
   if (!(await waitFor(`Boolean(document.querySelector(".stage-uncertainty_waiting [role=dialog]"))`))) throw new Error("The visitor-triggered uncertainty Card did not appear");
@@ -194,8 +228,23 @@ try {
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await evaluate(`document.querySelector(".held-outcome")?.scrollIntoView({block:"center",inline:"nearest"});window.scrollTo({left:0})`);
   await capture("/private/tmp/bander-r34-desktop-complete-thread.png");
-  await new Promise((resolve) => setTimeout(resolve, 350));
+  await settleAndCapture("/private/tmp/bander-r56-desktop-s7.png", ".held-outcome");
+  await new Promise((resolve) => setTimeout(resolve, 30_000));
   if (!(await evaluate<string>(`document.querySelector(".family-thread-shell")?.className??""`)).includes("stage-uncertainty_held")) throw new Error("The held state retried or advanced automatically");
+
+  await clickButton("Continue exploring Bander");
+  if (!(await waitFor(`document.querySelector(".closing-panel") && !document.querySelector(".family-stage")`))) throw new Error("The visitor-triggered closing panel did not replace the completed Family Thread");
+  const closing = await evaluate<{ images: number; fit: string[]; disclosure: boolean; links: string[]; heading: boolean; overflow: boolean }>(`(()=>{const panel=document.querySelector(".closing-panel");return{images:panel?.querySelectorAll(".closing-evidence img").length??0,fit:[...panel?.querySelectorAll(".closing-evidence img")??[]].map(image=>getComputedStyle(image).objectFit),disclosure:panel?.textContent?.includes("REAL SERVICES · FICTIONAL TEST DATA")??false,links:[...panel?.querySelectorAll(".closing-actions a")??[]].map(link=>link.textContent?.trim()??""),heading:panel?.querySelector("h2")?.textContent?.includes("This is the OpenClaw I’d actually give my parents.")??false,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth}})()`);
+  if (closing.images !== 3 || closing.fit.some((fit) => fit !== "contain") || !closing.disclosure || closing.links.length !== 3 || !closing.heading || closing.overflow) throw new Error(`The closing proof moment is incomplete or cropped: ${JSON.stringify(closing)}`);
+  await settleAndCapture("/private/tmp/bander-r56-desktop-s8.png", ".closing-panel");
+
+  const evidenceButtonName = await evaluate<string>(`document.querySelector(".evidence-still")?.getAttribute("aria-label")??""`);
+  await evaluate(`(()=>{const button=document.querySelector(".evidence-still");button?.focus();button?.click()})()`);
+  if (!(await waitFor(`Boolean(document.querySelector(".evidence-lightbox[role=dialog]"))`))) throw new Error("The real-evidence lightbox did not open");
+  const evidenceSurface = await evaluate<{ focus: string; fit: string; disclosure: boolean; underlyingInert: boolean }>(`({focus:document.activeElement?.getAttribute("aria-label")??"",fit:getComputedStyle(document.querySelector(".evidence-lightbox img")).objectFit,disclosure:document.querySelector(".evidence-lightbox")?.textContent?.includes("REAL INTEGRATION · FICTIONAL TEST DATA")??false,underlyingInert:document.querySelector(".closing-panel")?.hasAttribute("inert")??false})`);
+  if (evidenceSurface.focus !== "Close enlarged evidence" || evidenceSurface.fit !== "contain" || !evidenceSurface.disclosure || !evidenceSurface.underlyingInert) throw new Error(`The closing evidence lightbox is inaccessible or truth-scoped incorrectly: ${JSON.stringify(evidenceSurface)}`);
+  await key("Escape", "Escape", 27);
+  if (!(await waitFor(`!document.querySelector(".evidence-lightbox") && document.activeElement?.getAttribute("aria-label")===${JSON.stringify("Enlarge real schedule read")}`))) throw new Error(`Escape did not close evidence and restore focus from ${evidenceButtonName}`);
 
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await command("Page.navigate", { url: `${origin}/bander/` });
@@ -298,8 +347,16 @@ try {
     fs.writeFileSync(`/private/tmp/bander-pages-${width}x${height}.png`, Buffer.from(screenshot.data, "base64"), { mode: 0o600 });
   }
 
+  await command("Emulation.setDeviceMetricsOverride", { width: 1200, height: 500, deviceScaleFactor: 1, mobile: false });
+  await reload();
+  await captureGlyphContactSheet("/private/tmp/bander-r56-glyph-contact-sheet.png");
+
   await command("Emulation.setDeviceMetricsOverride", { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
   await reload();
+  await resetViewportTop();
+  const mobileOpening = await evaluate<{ scrollY: number; wordmark: boolean; disclosure: boolean; whisper: boolean; mum: boolean }>(`(()=>{const visible=(selector)=>{const element=document.querySelector(selector);const box=element?.getBoundingClientRect();return Boolean(box&&box.top>=0&&box.bottom<=innerHeight)};return{scrollY:window.scrollY,wordmark:visible(".r1-header .brand"),disclosure:visible(".r1-sandbox-notice"),whisper:visible(".family-whisper"),mum:visible(".stage-idle .parent-message")}})()`);
+  if (mobileOpening.scrollY !== 0 || !mobileOpening.wordmark || !mobileOpening.disclosure || !mobileOpening.whisper || !mobileOpening.mum) throw new Error(`The mobile S0 capture does not show the complete opening at scrollY = 0: ${JSON.stringify(mobileOpening)}`);
+  await capture("/private/tmp/bander-r56-mobile-s0.png");
   await evaluate(`document.querySelector(".proof-drawer-trigger")?.click()`);
   await waitFor(`Boolean(document.querySelector(".proof-drawer"))`);
   const mobileProofSurface = await assertSettledProofDrawer("Mobile");
@@ -323,12 +380,17 @@ try {
   await capture("/private/tmp/bander-r34-mobile-world-sheet.png");
   await key("Escape", "Escape", 27);
   await reload();
+  await resetViewportTop();
   await evaluate(`document.querySelector('[aria-label="Tap to ask — you drive everything here."]')?.click()`);
   if (!(await waitFor(`Boolean(document.querySelector(".suggested-message"))`))) throw new Error("The 375px Card journey did not reach the suggested parent message");
   await evaluate(`document.querySelector(".suggested-message")?.click()`);
   if (!(await waitFor(`Boolean(document.querySelector("[role=dialog]"))`))) throw new Error("The 375px Card journey did not open its dialog");
   const mobileCard = await evaluate<{ headingVisible: boolean; primaryLines: number; primaryHeight: number; primaryWidth: number; quietHeight: number; stacked: boolean }>(`(()=>{const heading=document.querySelector("[role=dialog] .deal-heading");const headingBox=heading?.getBoundingClientRect();const headingStyle=heading?getComputedStyle(heading):null;const primary=document.querySelector("[role=dialog] .primary");const quiet=document.querySelector("[role=dialog] .quiet");const range=document.createRange();if(primary)range.selectNodeContents(primary);const lineTops=new Set([...range.getClientRects()].map(rect=>Math.round(rect.top)));const primaryBox=primary?.getBoundingClientRect();const quietBox=quiet?.getBoundingClientRect();return{headingVisible:Boolean(heading?.textContent?.includes("Bander hasn’t done anything yet — please check:")&&headingBox&&headingBox.width>0&&headingBox.height>0&&headingStyle?.display!=="none"&&headingStyle?.visibility!=="hidden"),primaryLines:lineTops.size,primaryHeight:primaryBox?.height??0,primaryWidth:primaryBox?.width??0,quietHeight:quietBox?.height??0,stacked:Boolean(primaryBox&&quietBox&&quietBox.top>=primaryBox.bottom)}})()`);
   if (!mobileCard.headingVisible || mobileCard.primaryLines !== 1 || mobileCard.primaryHeight < 44 || mobileCard.primaryWidth < 250 || mobileCard.quietHeight < 44 || !mobileCard.stacked) throw new Error(`The 375px Card heading or action hierarchy is incomplete: ${JSON.stringify(mobileCard)}`);
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  const mobileCardBackdrop = await evaluate<{ scrollY: number; familyThreadBehind: boolean; setupBehind: boolean }>(`(()=>{const intersects=(selector)=>{const element=document.querySelector(selector);const box=element?.getBoundingClientRect();return Boolean(box&&box.bottom>0&&box.top<innerHeight)};return{scrollY:window.scrollY,familyThreadBehind:intersects(".family-stage")&&(document.querySelector(".family-stage")?.textContent?.includes("FAMILY THREAD")??false),setupBehind:intersects(".setup-rail")}})()`);
+  if (mobileCardBackdrop.scrollY !== 0 || !mobileCardBackdrop.familyThreadBehind || mobileCardBackdrop.setupBehind) throw new Error(`The mobile S3 backdrop is not the Family Thread at scrollY = 0: ${JSON.stringify(mobileCardBackdrop)}`);
+  await capture("/private/tmp/bander-r56-mobile-s3.png");
   await clickDialogPrimary();
   if (!(await waitFor(`document.querySelector(".family-thread-shell")?.classList.contains("stage-email_confirmed")`))) throw new Error("The mobile R1 approval did not complete");
   await evaluate(`document.querySelector(".compound-suggestion")?.click()`);
@@ -338,11 +400,28 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 420));
   const mobileCompletion = await evaluate<{ exact: boolean; choiceClear: boolean; proofClear: boolean; dockClear: boolean; phoneHeight: number }>(`(()=>{const phone=document.querySelector(".mobile-phone-light")?.getBoundingClientRect();const proof=document.querySelector(".compound-proof")?.getBoundingClientRect();const choice=document.querySelector(".stage-compound_confirmed .episode-choice")?.getBoundingClientRect();const dock=document.querySelector(".world-dock")?.getBoundingClientRect();return{exact:document.querySelector(".mobile-phone-light")?.textContent?.includes("Approved word-for-word before Bander sent it.")??false,choiceClear:Boolean(choice&&proof&&choice.bottom<=proof.top),proofClear:Boolean(proof&&phone&&proof.bottom<=phone.top),dockClear:Boolean(phone&&dock&&phone.bottom<=dock.top),phoneHeight:phone?.height??0}})()`);
   if (!mobileCompletion.exact || !mobileCompletion.choiceClear || !mobileCompletion.proofClear || !mobileCompletion.dockClear || mobileCompletion.phoneHeight < 100) throw new Error(`The mobile phone-light moment obscures content or loses exact text: ${JSON.stringify(mobileCompletion)}`);
+  await settleAndCapture("/private/tmp/bander-r56-mobile-s5.png", ".thread-terminal.authoritative-outcome");
+
+  await evaluate(`document.querySelector(".stage-compound_confirmed .episode-choice")?.click()`);
+  await waitFor(`Boolean(document.querySelector(".stage-conflict_waiting [role=dialog]"))`);
+  await clickDialogPrimary();
+  await waitFor(`document.querySelector(".family-thread-shell")?.classList.contains("stage-conflict_returned")`);
+  await evaluate(`document.querySelector(".stage-conflict_returned .episode-choice")?.click()`);
+  await waitFor(`Boolean(document.querySelector(".stage-uncertainty_waiting [role=dialog]"))`);
+  await clickDialogPrimary();
+  await waitFor(`document.querySelector(".family-thread-shell")?.classList.contains("stage-uncertainty_held")`);
+  await clickButton("Continue exploring Bander");
+  await waitFor(`Boolean(document.querySelector(".closing-panel"))`);
+  await evaluate(`document.querySelector(".closing-panel")?.scrollIntoView({block:"start",inline:"nearest"});window.scrollTo({left:0})`);
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  await capture("/private/tmp/bander-r56-mobile-s8.png");
+  const mobileClosing = await evaluate<{ overflow: boolean; targets: number[]; images: number; objectFits: string[] }>(`(()=>{const panel=document.querySelector(".closing-panel");return{overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth,targets:[...panel?.querySelectorAll("button,a")??[]].map(target=>Math.min(target.getBoundingClientRect().width,target.getBoundingClientRect().height)),images:panel?.querySelectorAll(".closing-evidence img").length??0,objectFits:[...panel?.querySelectorAll(".closing-evidence img")??[]].map(image=>getComputedStyle(image).objectFit)}})()`);
+  if (mobileClosing.overflow || mobileClosing.targets.some((target) => target < 44) || mobileClosing.images !== 3 || mobileClosing.objectFits.some((fit) => fit !== "contain")) throw new Error(`The mobile closing moment is clipped, cropped, or untappable: ${JSON.stringify(mobileClosing)}`);
 
   const finalExternalRequests = requests.filter((url) => new URL(url).origin !== origin);
   if (finalExternalRequests.length > 0) throw new Error("The complete R2 Pages journey made an external network request");
   console.log(`Settled Proof Drawer verified: desktop ${JSON.stringify(desktopProofSurface)}, mobile ${JSON.stringify(mobileProofSurface)}.`);
-  console.log("Pages browser QA verified: R1/R2 Cross/Return/Hold plus the 27-outcome proof drawer, fair visitor-controlled comparison, five-station setup rail, persistent seeded world details, all 14 direct routes, focus/Escape restoration, mobile sheets and targets, scoped axe checks, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.");
+  console.log("Pages browser QA verified: R1–R6 Family Thread Cross/Return/Hold/closing proof, 30-second hands-off stability, evidence lightbox, 27-outcome proof drawer, fair visitor-controlled comparison, five-station setup rail, persistent seeded world details, all 14 direct routes, focus/Escape restoration, mobile sheets and targets, scoped axe checks, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.");
 } finally {
   socket.close();
 }

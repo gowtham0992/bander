@@ -8,9 +8,10 @@ import type {
   ScheduleReadResult,
 } from "@bander/contracts";
 import { createDemoBackend } from "./backend/index.js";
+import { WorldGlyph } from "./family-thread-glyphs.js";
 import { R2_PRESENTATION_BEAT_MS, familyThreadWorldPresentation, initialFamilyThreadState, reduceFamilyThread } from "./family-thread-state.js";
 import { initialProductSurfaceState, reduceProductSurface } from "./family-thread-surfaces.js";
-import { ComparisonThread, ProofDrawer, SetupRail, WorldDetailSheet } from "./family-thread-surface-view.js";
+import { ClosingPanel, ComparisonThread, EvidenceLightbox, ProofDrawer, SetupRail, WorldDetailSheet } from "./family-thread-surface-view.js";
 
 const demoBackend = createDemoBackend();
 
@@ -523,40 +524,6 @@ function GuidedEpisode() {
   );
 }
 
-function WorldGlyph({ kind }: { kind: "calendar" | "inbox" | "phone" }) {
-  if (kind === "calendar") {
-    return (
-      <svg viewBox="0 0 48 48" aria-hidden="true">
-        <path className="glyph-body" d="M8.5 14h31v25H8.5z" />
-        <path className="glyph-fold" d="M8.5 14h31v7H8.5z" />
-        <path d="M8.5 21h31M16 9.5v8M32 9.5v8" />
-        <path className="glyph-accent" d="M16.5 26h7v7h-7z" />
-        <path className="glyph-detail" d="M27 27.5h7M27 32h5" />
-      </svg>
-    );
-  }
-  if (kind === "inbox") {
-    return (
-      <svg viewBox="0 0 48 48" aria-hidden="true">
-        <path className="glyph-body" d="M7.5 13.5h33v24h-33z" />
-        <path className="glyph-fold" d="m8.5 15 15.5 13L39.5 15" />
-        <path d="m8.5 36 10.5-9M39.5 36 29 27" />
-        <path className="glyph-accent" d="M31 30h9v7h-9z" />
-        <path className="glyph-detail" d="m33 33 2 2 4-5" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden="true">
-      <rect className="glyph-body" x="13" y="5.5" width="22" height="37" rx="6" />
-      <path className="glyph-fold" d="M17 11.5h14v20H17z" />
-      <path d="M20.5 9h7M21.5 37.5h5" />
-      <path className="glyph-accent" d="M27 17h9v9h-9z" />
-      <path className="glyph-detail" d="m29 21.5 2 2 4-5" />
-    </svg>
-  );
-}
-
 function WorldObject({
   kind,
   title,
@@ -602,6 +569,7 @@ function FamilyThread() {
   const conflictOfferRef = useRef<HTMLButtonElement>(null);
   const uncertaintyOfferRef = useRef<HTMLButtonElement>(null);
   const outcomeRef = useRef<HTMLElement>(null);
+  const evidenceReturnFocusRef = useRef<HTMLElement | null>(null);
   const approvalInFlight = useRef(false);
   const presentationTimer = useRef<number | undefined>(undefined);
 
@@ -620,6 +588,8 @@ function FamilyThread() {
   const compoundCalendarCrossed = worldPresentation.calendar === "confirmed";
   const compoundPhoneCrossed = worldPresentation.phone === "confirmed";
   const held = flow.stage === "uncertainty_held";
+  const closing = flow.stage === "closing";
+  const surfaceOpen = surface.proof !== "closed" || surface.setupStation !== null || surface.worldSheet !== null || surface.evidenceImage !== null;
   const familyUpdate = state?.familyUpdates[0];
   const drRaoEvent = state?.calendar.find((event) => event.title === "Appointment with Dr. Rao");
   const latestInbox = state?.inbox.find((message) => message.subject === "Appointment options");
@@ -651,6 +621,11 @@ function FamilyThread() {
         outcomeRef.current?.scrollIntoView({ block: flow.stage === "compound_confirmed" ? "start" : "center", behavior: "auto" });
         if (flow.stage === "compound_confirmed") window.scrollBy({ top: 80, behavior: "auto" });
       }
+    }
+    else if (flow.stage === "closing") {
+      const heading = document.getElementById("closing-title");
+      heading?.focus();
+      heading?.scrollIntoView({ block: "start", behavior: "auto" });
     }
   }, [cardActive, flow.stage]);
 
@@ -827,7 +802,8 @@ function FamilyThread() {
     <main className={`family-thread-shell stage-${flow.stage}${cardActive ? " card-active" : ""}`}>
       <h1 className="visually-hidden">Bander family conversation sandbox</h1>
       <p className="family-whisper">The assistant you can hand to your parents.</p>
-      <div className="family-stage" inert={cardActive} aria-hidden={cardActive || undefined}>
+      {!closing && <div className="family-stage" inert={cardActive} aria-hidden={cardActive || surfaceOpen || undefined}>
+        <div className="family-stage-surface-guard" inert={surfaceOpen || undefined}>
         <section className="family-conversation" aria-labelledby="family-thread-title">
           <header className="thread-heading"><span>FAMILY THREAD</span><h2 id="family-thread-title">Mum, your assistant, and Bander</h2></header>
           <div className="thread-log" role="log" aria-live="polite" aria-relevant="additions text">
@@ -855,7 +831,7 @@ function FamilyThread() {
 
             {showUncertaintyRequest && <article className="thread-message parent-message message-arrival"><span className="speaker-label">Mum</span><p>Show me what happens when the result can’t be confirmed.</p></article>}
             {held && <article ref={outcomeRef as React.RefObject<HTMLElement>} tabIndex={-1} className="thread-message bander-message thread-terminal held-outcome message-arrival"><span className="speaker-label"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" />Bander</span><p><strong>Calendar result unconfirmed.</strong><span className="preserve-lines">{ambiguousMessage}</span></p></article>}
-            {held && <button className="thread-advance episode-choice completion-choice" onClick={resetEpisode} disabled={busy}>Continue exploring Bander</button>}
+            {held && <button className="thread-advance episode-choice completion-choice" onClick={() => dispatch({ type: "continue_to_closing" })} disabled={busy}>Continue exploring Bander</button>}
             {error && <p className="thread-error" role="alert">{error}</p>}
           </div>
         </section>
@@ -877,11 +853,17 @@ function FamilyThread() {
         {compoundPhoneCrossed && familyUpdate && <article className="mobile-phone-light" aria-label="Exact approved sandbox update sent to Gil"><span>Gil’s phone · sandbox</span><pre>{familyUpdate.body}</pre></article>}
         {flow.stage === "email_confirmed" && <article className="approved-deal-proof" aria-label="Approved Bander email deal"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /><span><strong>Approved word-for-word</strong><small>Reply sent to Dr. Rao’s office</small></span></article>}
         {compoundPhoneCrossed && <article className="approved-deal-proof compound-proof" aria-label="One approved Bander deal with two confirmed effects"><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /><span><strong>One approved deal</strong><small>Calendar first · exact family update second</small></span></article>}
-      </div>
+        </div>
+      </div>}
+
+      {closing && <ClosingPanel onOpenEvidence={(image) => {
+        evidenceReturnFocusRef.current = document.activeElement as HTMLElement | null;
+        surfaceDispatch({ type: "open_evidence", image });
+      }} onReset={resetEpisode} surfaceOpen={surfaceOpen} />}
 
       {cardActive && card && <div className="deal-modal-backdrop"><div ref={dialogRef} className="deal-modal" role="dialog" aria-modal="true" aria-label={`Exact Bander ${waitingDeal} deal`} onKeyDown={trapDialogFocus}><DealCard card={card} embedded busy={busy} onApprove={approve} onDecline={decline} onChange={decline} showChange={false} /></div></div>}
 
-      <section className="thread-continuation" aria-label="Explore Bander">
+      <section className="thread-continuation" aria-label="Explore Bander" inert={surfaceOpen || undefined}>
         <button className="proof-drawer-trigger" onClick={() => surfaceDispatch({ type: "open_proof" })}><span aria-hidden="true">27</span>All 27 verified outcomes <b aria-hidden="true">→</b></button>
         <ComparisonThread stage={surface.comparison} onOpen={() => surfaceDispatch({ type: "open_comparison" })} onNext={() => surfaceDispatch({ type: "next_comparison_beat" })} onFull={() => surfaceDispatch({ type: "open_full_comparison" })} />
         <SetupRail active={surface.setupStation} onOpen={(stationId) => surfaceDispatch({ type: "open_setup", stationId })} onClose={() => surfaceDispatch({ type: "close_setup" })} />
@@ -889,6 +871,7 @@ function FamilyThread() {
 
       {surface.proof !== "closed" && <ProofDrawer mode={surface.proof === "comparison" ? "comparison" : "outcomes"} onClose={() => surfaceDispatch({ type: "close_proof" })} />}
       {surface.worldSheet && <WorldDetailSheet world={surface.worldSheet} calendarDetail={compoundCalendarCrossed && drRaoEvent ? `Appointment with Dr. Rao · Thu · ${formatReceiptInterval(drRaoEvent, drRaoEvent.timeZone)} MDT` : held ? "The provider result is unconfirmed" : "No Bander Calendar change"} inboxDetail={emailConfirmed ? "The exact approved reply is in seeded Sent Mail" : latestInbox ? "One seeded message from Dr. Rao’s office" : "No seeded message loaded"} phoneDetail={compoundPhoneCrossed ? "Exact approved update sent" : "No family update sent"} {...(compoundPhoneCrossed && familyUpdate ? { phoneMessage: familyUpdate.body } : {})} onClose={() => surfaceDispatch({ type: "close_world" })} />}
+      {surface.evidenceImage && <EvidenceLightbox image={surface.evidenceImage} returnFocus={evidenceReturnFocusRef.current} onClose={() => surfaceDispatch({ type: "close_evidence" })} />}
     </main>
   );
 }

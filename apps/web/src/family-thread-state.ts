@@ -20,7 +20,8 @@ export type FamilyThreadStage =
   | "uncertainty_offered"
   | "uncertainty_preparing"
   | "uncertainty_waiting"
-  | "uncertainty_held";
+  | "uncertainty_held"
+  | "closing";
 
 export interface FamilyThreadState {
   stage: FamilyThreadStage;
@@ -53,6 +54,7 @@ export type FamilyThreadEvent =
   | { type: "uncertainty_prepare_failed" }
   | { type: "uncertainty_held" }
   | { type: "uncertainty_declined" }
+  | { type: "continue_to_closing" }
   | { type: "reset" }
   | { type: "time_elapsed"; milliseconds: number };
 
@@ -106,5 +108,6 @@ export function reduceFamilyThread(
   if (event.type === "uncertainty_prepare_failed" && state.stage === "uncertainty_preparing") return { stage: "conflict_returned" };
   if (event.type === "uncertainty_held" && state.stage === "uncertainty_waiting") return { stage: "uncertainty_held" };
   if (event.type === "uncertainty_declined" && state.stage === "uncertainty_waiting") return { stage: "conflict_returned" };
+  if (event.type === "continue_to_closing" && state.stage === "uncertainty_held") return { stage: "closing" };
   return state;
 }

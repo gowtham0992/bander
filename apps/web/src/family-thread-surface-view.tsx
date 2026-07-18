@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import type { ComparisonStage, SetupStationId, WorldSheet } from "./family-thread-surfaces.js";
+import { SetupGlyph } from "./family-thread-glyphs.js";
+import type { ComparisonStage, EvidenceImageId, SetupStationId, WorldSheet } from "./family-thread-surfaces.js";
 import { SETUP_STATIONS, VERIFIED_OUTCOMES } from "./family-thread-surfaces.js";
 
 const comparisonRows = [
@@ -19,20 +20,24 @@ function SurfaceDialog({
   className,
   title,
   onClose,
+  returnFocus,
   children,
 }: {
   className: string;
   title: string;
   onClose: () => void;
+  returnFocus?: HTMLElement | null;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    returnTo.current = document.activeElement as HTMLElement | null;
+    returnTo.current = returnFocus ?? document.activeElement as HTMLElement | null;
     ref.current?.querySelector<HTMLElement>("button, a[href]")?.focus();
-    return () => returnTo.current?.focus();
+    return () => {
+      window.requestAnimationFrame(() => returnTo.current?.focus());
+    };
   }, []);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -136,10 +141,6 @@ export function ComparisonThread({
   );
 }
 
-function SetupGlyph({ kind }: { kind: string }) {
-  return <span className={`setup-glyph setup-${kind}`} aria-hidden="true"><i /><i /></span>;
-}
-
 export function SetupRail({
   active,
   onOpen,
@@ -169,6 +170,74 @@ export function SetupRail({
         </SurfaceDialog>
       )}
     </section>
+  );
+}
+
+const evidence = {
+  read: {
+    image: "real-read-two-identities.png",
+    label: "Real schedule read",
+    caption: "A parent asks naturally. The assistant answers from bounded real Calendar facts without an approval Card.",
+  },
+  compound: {
+    image: "real-compound-family.png",
+    label: "Real Calendar and family deal",
+    caption: "One exact Card. Calendar first. Then Bander sends the approved sentence to the connected family member.",
+  },
+  changed: {
+    image: "real-changed-world.png",
+    label: "Real changed-world refusal",
+    caption: "The outside state changed before approval, so Bander returned the deal and performed neither effect.",
+  },
+} as const satisfies Record<EvidenceImageId, { image: string; label: string; caption: string }>;
+
+export function ClosingPanel({
+  onOpenEvidence,
+  onReset,
+  surfaceOpen,
+}: {
+  onOpenEvidence: (image: EvidenceImageId) => void;
+  onReset: () => void;
+  surfaceOpen: boolean;
+}) {
+  return (
+    <section className="closing-panel" aria-labelledby="closing-title" inert={surfaceOpen || undefined}>
+      <div className="closing-thread" aria-hidden="true"><span><img src={`${import.meta.env.BASE_URL}bander_mark_transparent.svg`} alt="" /></span></div>
+      <div className="closing-copy">
+        <span>REAL SERVICES · FICTIONAL TEST DATA</span>
+        <h2 id="closing-title" tabIndex={-1}>This is the OpenClaw I’d actually give my parents.</h2>
+        <p>Ask freely. Approve changes. Bander keeps the keys—and tells the truth about what happened.</p>
+        <small>The same boundary shown here has run against real Google Calendar, Gmail, Telegram, and GPT‑5.6 Sol.</small>
+      </div>
+      <div className="closing-evidence" aria-label="Curated real-integration evidence using fictional test data">
+        {(Object.entries(evidence) as Array<[EvidenceImageId, (typeof evidence)[EvidenceImageId]]>).map(([id, item]) => (
+          <button className={`evidence-still evidence-${id}`} key={id} onClick={() => onOpenEvidence(id)} aria-label={`Enlarge ${item.label.toLowerCase()}`}>
+            <span>REAL INTEGRATION · FICTIONAL TEST DATA</span>
+            <img src={`${import.meta.env.BASE_URL}${item.image}`} alt={item.label} />
+            <small>{item.caption}</small>
+          </button>
+        ))}
+      </div>
+      <nav className="closing-actions" aria-label="Bander evidence and setup links">
+        <a href="https://github.com/gowtham0992/bander/blob/main/BUILD_WITH_CODEX.md" target="_blank" rel="noreferrer">Evidence ledger</a>
+        <a href="https://github.com/gowtham0992/bander" target="_blank" rel="noreferrer">Public repository</a>
+        <button onClick={onReset}>Try the sandbox again</button>
+        <a href="https://github.com/gowtham0992/bander/blob/main/SETUP.md" target="_blank" rel="noreferrer">Setup guide</a>
+      </nav>
+    </section>
+  );
+}
+
+export function EvidenceLightbox({ image, onClose, returnFocus }: { image: EvidenceImageId; onClose: () => void; returnFocus?: HTMLElement | null }) {
+  const item = evidence[image];
+  return (
+    <SurfaceDialog className="evidence-lightbox" title={item.label} onClose={onClose} returnFocus={returnFocus ?? null}>
+      <button className="drawer-close" onClick={onClose} aria-label="Close enlarged evidence">×</button>
+      <span>REAL INTEGRATION · FICTIONAL TEST DATA</span>
+      <h2>{item.label}</h2>
+      <img src={`${import.meta.env.BASE_URL}${item.image}`} alt={item.label} />
+      <p>{item.caption}</p>
+    </SurfaceDialog>
   );
 }
 

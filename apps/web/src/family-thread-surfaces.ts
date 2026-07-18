@@ -60,12 +60,14 @@ export const SETUP_STATIONS: readonly SetupStation[] = [
 export type ComparisonStage = "closed" | "beat_1" | "beat_2" | "beat_3" | "complete";
 export type ProofStage = "closed" | "open" | "comparison";
 export type WorldSheet = "calendar" | "inbox" | "phone" | null;
+export type EvidenceImageId = "read" | "compound" | "changed";
 
 export interface ProductSurfaceState {
   proof: ProofStage;
   comparison: ComparisonStage;
   setupStation: SetupStationId | null;
   worldSheet: WorldSheet;
+  evidenceImage: EvidenceImageId | null;
 }
 
 export type ProductSurfaceEvent =
@@ -79,6 +81,8 @@ export type ProductSurfaceEvent =
   | { type: "close_setup" }
   | { type: "open_world"; world: Exclude<WorldSheet, null> }
   | { type: "close_world" }
+  | { type: "open_evidence"; image: EvidenceImageId }
+  | { type: "close_evidence" }
   | { type: "time_elapsed"; milliseconds: number };
 
 export const initialProductSurfaceState: ProductSurfaceState = {
@@ -86,12 +90,13 @@ export const initialProductSurfaceState: ProductSurfaceState = {
   comparison: "closed",
   setupStation: null,
   worldSheet: null,
+  evidenceImage: null,
 };
 
 export function reduceProductSurface(state: ProductSurfaceState, event: ProductSurfaceEvent): ProductSurfaceState {
   if (event.type === "time_elapsed") return state;
-  if (event.type === "open_proof") return { ...state, proof: "open" };
-  if (event.type === "open_full_comparison") return { ...state, proof: "comparison" };
+  if (event.type === "open_proof") return { ...state, proof: "open", setupStation: null, worldSheet: null, evidenceImage: null };
+  if (event.type === "open_full_comparison") return { ...state, proof: "comparison", setupStation: null, worldSheet: null, evidenceImage: null };
   if (event.type === "close_proof") return { ...state, proof: "closed" };
   if (event.type === "open_comparison") return { ...state, comparison: "beat_1" };
   if (event.type === "next_comparison_beat") {
@@ -99,9 +104,11 @@ export function reduceProductSurface(state: ProductSurfaceState, event: ProductS
     return { ...state, comparison: next[state.comparison] };
   }
   if (event.type === "close_comparison") return { ...state, comparison: "closed" };
-  if (event.type === "open_setup") return { ...state, setupStation: event.stationId };
+  if (event.type === "open_setup") return { ...state, proof: "closed", setupStation: event.stationId, worldSheet: null, evidenceImage: null };
   if (event.type === "close_setup") return { ...state, setupStation: null };
-  if (event.type === "open_world") return { ...state, worldSheet: event.world };
+  if (event.type === "open_world") return { ...state, proof: "closed", setupStation: null, worldSheet: event.world, evidenceImage: null };
   if (event.type === "close_world") return { ...state, worldSheet: null };
+  if (event.type === "open_evidence") return { ...state, proof: "closed", setupStation: null, worldSheet: null, evidenceImage: event.image };
+  if (event.type === "close_evidence") return { ...state, evidenceImage: null };
   return state;
 }
