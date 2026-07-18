@@ -95,11 +95,11 @@ export class RealProductDraftCompiler implements DraftCompiler {
     if (route.actionKind === "calendar") return this.options.calendar.compile(request);
     if (route.needsClarification) {
       const human = safe(route.clarification ?? "What should I clarify?") || "What should I clarify?";
-      throw new CompilerError("clarification_required", human, `${human}\nNothing happened.`);
+      throw new CompilerError("clarification_required", human, `${human}\nBander didn’t do anything.`);
     }
     if (route.actionKind === "unsupported") {
       const human = safe(route.clarification ?? "I can’t prepare that action safely.") || "I can’t prepare that action safely.";
-      throw new CompilerError("unsupported_request", human, `${human}\nNothing happened.`);
+      throw new CompilerError("unsupported_request", human, `${human}\nBander didn’t do anything.`);
     }
     if (route.actionKind === "direct_family") {
       if (!route.familyContactAlias || !route.familyMessageBody || route.senderHint || route.subjectHint || route.replyBody) {
@@ -111,32 +111,32 @@ export class RealProductDraftCompiler implements DraftCompiler {
         const human = label
           ? `I can’t message ${safe(route.familyContactAlias)} yet. Right now Bander can only message ${safe(label)}.`
           : "I can’t message family yet. Ask the person who set up Bander to connect someone first.";
-        throw new CompilerError("clarification_required", human, `${human}\nNothing happened.`);
+        throw new CompilerError("clarification_required", human, `${human}\nBander didn’t do anything.`);
       }
       let document;
       try { document = createDirectFamilyDocument(route.familyMessageBody); }
-      catch { throw new CompilerError("unsupported_request", "That family message contains something Bander can’t send safely.", "That family message contains something Bander can’t send safely.\nNothing happened."); }
+      catch { throw new CompilerError("unsupported_request", "That family message contains something Bander can’t send safely.", "That family message contains something Bander can’t send safely.\nBander didn’t do anything."); }
       return { id: "real-direct-family", claimedUserRequest: request, familyNotification: { ...binding, document } };
     }
     if (!route.senderHint && !route.subjectHint) {
-      throw new CompilerError("clarification_required", "Which email should I reply to?", "Which email should I reply to?\nNothing happened.");
+      throw new CompilerError("clarification_required", "Which email should I reply to?", "Which email should I reply to?\nBander didn’t do anything.");
     }
     if (!route.sourceStartLocalDate || !route.sourceEndLocalDateExclusive || !route.replyBody || route.familyContactAlias || route.familyMessageBody) {
-      throw new CompilerError("clarification_required", "Which email and exact reply should I use?", "Which email and exact reply should I use?\nNothing happened.");
+      throw new CompilerError("clarification_required", "Which email and exact reply should I use?", "Which email and exact reply should I use?\nBander didn’t do anything.");
     }
     let matches;
     try {
       matches = await this.options.gmail.resolveInbound({ senderHint: route.senderHint, subjectHint: route.subjectHint, startLocalDate: route.sourceStartLocalDate, endLocalDateExclusive: route.sourceEndLocalDateExclusive });
     } catch {
-      throw new CompilerError("unsupported_request", "I couldn’t safely resolve reply details for that email.", "I couldn’t safely resolve reply details for that email.\nNothing happened.");
+      throw new CompilerError("unsupported_request", "I couldn’t safely resolve reply details for that email.", "I couldn’t safely resolve reply details for that email.\nBander didn’t do anything.");
     }
     const candidates = Array.isArray(matches) ? matches : [matches];
-    if (candidates.length === 0) throw new CompilerError("clarification_required", "I couldn’t find that email. Which sender, subject, or date should I use?", "I couldn’t find that email. Which sender, subject, or date should I use?\nNothing happened.");
-    if (candidates.length !== 1) throw new CompilerError("clarification_required", "I found more than one matching email. Which one should I reply to?", "I found more than one matching email. Which one should I reply to?\nNothing happened.");
+    if (candidates.length === 0) throw new CompilerError("clarification_required", "I couldn’t find that email. Which sender, subject, or date should I use?", "I couldn’t find that email. Which sender, subject, or date should I use?\nBander didn’t do anything.");
+    if (candidates.length !== 1) throw new CompilerError("clarification_required", "I found more than one matching email. Which one should I reply to?", "I found more than one matching email. Which one should I reply to?\nBander didn’t do anything.");
     const stableMessageId = this.options.createMessageId?.() ?? `<bander.${randomBytes(16).toString("hex")}@bander.invalid>`;
     let reply;
     try { reply = buildPinnedReply({ source: candidates[0]!, body: route.replyBody, stableMessageId }); }
-    catch { throw new CompilerError("unsupported_request", "That email can’t receive Bander’s narrow one-person reply.", "That email can’t receive Bander’s narrow one-person reply.\nNothing happened."); }
+    catch { throw new CompilerError("unsupported_request", "That email can’t receive Bander’s narrow one-person reply.", "That email can’t receive Bander’s narrow one-person reply.\nBander didn’t do anything."); }
     return { id: "real-gmail-reply", claimedUserRequest: request, emailReply: reply };
   }
 }

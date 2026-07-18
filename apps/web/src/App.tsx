@@ -512,18 +512,84 @@ function GuidedEpisode() {
   );
 }
 
+const verifiedExamples = [
+  { id: "schedule", label: "What’s on tomorrow?" },
+  { id: "inbox", label: "What did the latest email say?" },
+  { id: "exact", label: "Move an event" },
+  { id: "conflict", label: "When the calendar changed first" },
+  { id: "compound", label: "Move an event and tell Gil" },
+  { id: "ambiguous", label: "When Bander isn’t sure" },
+  { id: "create", label: "Add an event" },
+  { id: "cancel", label: "Remove an event" },
+  { id: "cancel-conflict", label: "Remove an event after it changed" },
+  { id: "email", label: "Reply to an email" },
+  { id: "email-thread", label: "When a new email arrived first" },
+  { id: "email-ambiguous", label: "When an email result is uncertain" },
+  { id: "direct-family", label: "Tell Gil something" },
+  { id: "standing", label: "A routine with an off switch" },
+] as const;
+
+function HowBanderWorks() {
+  const steps = [
+    { image: "real-read-two-identities.png", title: "1 · Just ask", copy: "Your parent asks about their calendar or mail. Questions need no approval and create no Bander deal." },
+    { image: "real-compound-family.png", title: "2 · One exact card", copy: "When something real should change, Bander shows exactly what will happen — the calendar change, the email reply, or the sentence Gil will receive." },
+    { image: "real-changed-world.png", title: "3 · The truth, either way", copy: "One tap authorizes only that deal. Bander either completes it, refuses safely, or says it couldn’t confirm. Bander reports only what it can prove." },
+  ];
+  return (
+    <section className="how-bander" aria-labelledby="how-bander-title">
+      <div className="section-heading"><span className="eyebrow">How Bander works</span><h2 id="how-bander-title">Three moments. One calm rule.</h2></div>
+      <div className="how-grid">{steps.map((step) => <article key={step.title}><img src={`${import.meta.env.BASE_URL}${step.image}`} alt="Real Bander Telegram evidence using fictional test data" /><h3>{step.title}</h3><p>{step.copy}</p></article>)}</div>
+    </section>
+  );
+}
+
+function OpenClawComparison() {
+  const rows = [
+    ["Who holds the Google and Gmail credentials?", "The configured tool or connector holds them within the agent’s execution environment.", "Bander’s separate process holds them; OpenClaw receives none of those credentials."],
+    ["What does “yes” approve?", "The exact tool call and parameters held for approval.", "A stored deal plus the outside state it was based on; Bander checks that state again before execution."],
+    ["Who reports the outcome?", "The tool result returns through the assistant’s conversation.", "Bander separately reports the observed result through its own Telegram identity."],
+    ["What if the result cannot be confirmed?", "Behavior depends on the connector’s recovery and reporting policy.", "Bander records an unconfirmed outcome and never repeats a dispatched action automatically."],
+    ["Who can receive a family message?", "The destinations granted to the agent’s configured messaging tools.", "One separately consented contact; its destination is bound outside the agent and the exact text requires approval."],
+  ];
+  return (
+    <section className="comparison" aria-labelledby="comparison-title">
+      <span className="eyebrow">A fair comparison</span><h2 id="comparison-title">Doesn’t OpenClaw already have approvals?</h2>
+      <p>It does — and they’re good. Native approvals gate an exact tool call, and for an operator running their own agent, that is often enough.</p>
+      <p>Bander exists for a different situation: giving a capable agent to someone who isn’t an operator.</p>
+      <div className="comparison-table" role="table" aria-label="Native OpenClaw approvals compared with Bander">
+        <div className="comparison-head" role="row"><strong role="columnheader">The question</strong><strong role="columnheader">Native OpenClaw approval</strong><strong role="columnheader">With Bander</strong></div>
+        {rows.map(([question, native, bander]) => <div className="comparison-row" role="row" key={question}><strong role="rowheader">{question}</strong><span role="cell" data-label="Native OpenClaw approval">{native}</span><span role="cell" data-label="With Bander">{bander}</span></div>)}
+      </div>
+      <p className="comparison-proof">Everything in the Bander column is demonstrated on this page and backed by real Google, Gmail, and Telegram evidence in the <a href="https://github.com/gowtham0992/bander/blob/main/BUILD_WITH_CODEX.md" target="_blank" rel="noreferrer">ledger</a>.</p>
+    </section>
+  );
+}
+
+function TryBander() {
+  const setupSteps = [
+    ["Clone Bander", "Puts the public project on the setup computer.", "A computer with Node.js and Git.", "Expect a repository-local setup guide and verifier, not an installer.", "#1-prepare-the-setup-computer"],
+    ["Create two Telegram bots", "Keeps the assistant and Bander visually and operationally distinct.", "Telegram and BotFather.", "Expect to configure two bots and verify privacy settings empirically.", "#2-create-two-visually-distinct-telegram-bots"],
+    ["Connect a dedicated Google account", "Lets Bander hold narrowly scoped Calendar and Gmail credentials.", "A dedicated Google test account.", "Expect separate Desktop OAuth credentials and tokens for Calendar and Gmail.", "#4-configure-separate-narrow-google-desktop-oauth-clients"],
+    ["Pair the parent’s private group", "Binds approvals to one parent and one protected Telegram group.", "The parent’s phone and protected group.", "Expect a one-time link and an empirical privacy check.", "#5-pair-the-parent-and-protected-group"],
+    ["Invite one family member", "Connects one independently consenting person for exact approved updates.", "The family member’s own phone.", "Expect them to remain outside the protected group and consent privately.", "#6-optionally-connect-one-family-member"],
+  ];
+  return (
+    <section className="try-bander" aria-labelledby="try-bander-title">
+      <span className="eyebrow">Choose your path</span><h2 id="try-bander-title">Interested in trying Bander?</h2>
+      <div className="try-routes"><a href={import.meta.env.BASE_URL}>Try the hosted browser sandbox</a><a href="https://github.com/gowtham0992/bander#zero-account-judge-path" target="_blank" rel="noreferrer">Clone and run the local sandbox</a><a href="https://github.com/gowtham0992/bander/blob/main/SETUP.md" target="_blank" rel="noreferrer">Set up the real parent-and-family product</a></div>
+      <div className="setup-steps">{setupSteps.map(([title, accomplishes, service, expectation, anchor], index) => <details key={title}><summary><span aria-hidden="true">{index + 1}</span>{title}</summary><div><p><strong>What this does:</strong> {accomplishes}</p><p><strong>What it uses:</strong> {service}</p><p><strong>What to expect:</strong> {expectation}</p><a href={`https://github.com/gowtham0992/bander/blob/main/SETUP.md${anchor}`} target="_blank" rel="noreferrer">Full guide →</a></div></details>)}</div>
+    </section>
+  );
+}
+
 function Welcome({
   onStart,
   onSchedule,
-  onInbox,
-  onStanding,
   onCompile,
   status,
 }: {
   onStart: (scenario: DealScenario) => void;
   onSchedule: () => void;
-  onInbox: () => void;
-  onStanding: () => void;
   onCompile: (request: string) => void;
   status: Status | null;
 }) {
@@ -535,6 +601,12 @@ function Welcome({
       <p className="lede">
         Your assistant can read your calendar and mail and talk like a person. Bander holds the keys—calendar changes, email replies, and family messages happen only as exact deals you approve, and Bander reports only what it can prove.
       </p>
+      <HowBanderWorks />
+      <div className="guided-invitation"><span className="eyebrow">Try the whole journey</span><h2>Now drive it yourself — one real-life episode, step by step.</h2><p>The doctor’s office emails; you reply, update the calendar, and Gil finds out. Nothing advances until you click.</p></div>
+      <GuidedEpisode />
+      <p className="episode-router">Bander can also stop when the world changed—or admit when a result cannot be confirmed. Explore those cases below.</p>
+      <section className="more-behaviors" aria-labelledby="examples-title">
+        <span className="eyebrow">ASK · CHANGE · UNCERTAIN</span><h2 id="examples-title">See more verified examples</h2>
       <section className="lane-grid" aria-label="Main sandbox journeys">
         <button className="lane-card read-lane" aria-label="Just ask" onClick={onSchedule}>
           <span>JUST ASK</span><strong>“What’s on tomorrow? What did Ruth say?”</strong><small>Harmless reading flows without an approval toll.</small>
@@ -546,16 +618,8 @@ function Welcome({
           <span>WHEN BANDER ISN’T SURE</span><strong>See a truthful uncertain outcome.</strong><small>No reassuring guess. No blind retry.</small>
         </button>
       </section>
-      <GuidedEpisode />
-      <p className="episode-router">Bander can also stop when the world changed—or admit when a result cannot be confirmed. Explore those cases below.</p>
-      <section className="more-behaviors">
-        <h2>More things Bander gets right</h2>
         <div className="behavior-grid">
-          <button className="scenario-link" onClick={() => onStart("create")}>Add or remove something from the Calendar</button>
-          <button className="scenario-link" onClick={() => onStart("cancel-conflict")}>When the Calendar changed first</button>
-          <button className="scenario-link" onClick={() => onStart("email-thread")}>When a new email arrived before approval</button>
-          <button className="scenario-link" onClick={() => onStart("email-ambiguous")}>When an external service’s result is unknowable</button>
-          <button className="scenario-link" onClick={onStanding}>A bounded routine with an off switch</button>
+          {verifiedExamples.map((example) => <a className="scenario-link" key={example.id} href={`?scenario=${example.id}`}>{example.label}</a>)}
         </div>
       </section>
       {status?.modelCompiler === "available" && (
@@ -586,6 +650,8 @@ function Welcome({
           <div><strong>You</strong><span>ask naturally</span></div><span aria-hidden="true">→</span><div><strong>Your assistant</strong><span>talks, never holds keys</span></div><span aria-hidden="true">→</span><div className="bander-node"><strong>Bander</strong><span>shows the exact deal</span></div><span aria-hidden="true">→</span><div><strong>Your services</strong><span>change only after approval</span></div>
         </div>
       </section>
+      <OpenClawComparison />
+      <TryBander />
       <footer className="public-footer">
         <strong>Set it up for someone you love.</strong>
         <p>The code, complete setup guide, architecture, evidence ledger, honest limitations, and MIT license are public.</p>
@@ -726,13 +792,13 @@ function DealCard({
     <Shell className={`deal-shell${embedded ? " embedded-deal" : ""}`}>
       <div className="deal-heading">
         <span className="deal-kicker">Prepared for you</span>
-        <Heading>{card.title}</Heading>
+        <Heading>Bander hasn’t done anything yet — please check:</Heading>
       </div>
       <article className="deal-card">
         <AgentClaim card={card} />
 
         <section className="allowance">
-          <h2>Through Bander, this will:</h2>
+          <h2>If you say yes, Bander will check the latest information. If it still matches, Bander will:</h2>
           <ul>
             {card.effectPreviews.map((preview, index) => (
               <li key={`${preview.kind}-${index}`}>
@@ -745,7 +811,7 @@ function DealCard({
 
         <div className="boundary-copy">
           {creates ? (
-            <><p><strong>Not included:</strong></p><p>No one will be invited. No recurring event or reservation will be created.</p></>
+            <p>Only this goes on your calendar. No one is invited, nothing repeats, and nothing is booked anywhere.</p>
           ) : cancels ? (
             <><p>Bander will not automatically restore this event after you approve.</p><p><strong>Not included:</strong></p><p>This removes only the calendar event.</p>{hasFamilyUpdate ? <p>Only the exact family update shown above will be sent. Bander will not contact the clinic, business, or event organizer.</p> : <p>It does not contact anyone or cancel the appointment itself.</p>}</>
           ) : repliesByEmail ? (
@@ -755,7 +821,7 @@ function DealCard({
           ) : (
             <p><strong>Not included:</strong> Any other calendar events or actions.</p>
           )}
-          <p>Nothing else will change in this seeded sandbox.</p>
+          <p>Bander won’t do anything else in this seeded sandbox.</p>
         </div>
 
         <footer className="deal-meta">
@@ -933,6 +999,8 @@ export function App() {
     deepLinkStarted.current = true;
     const scenario = new URLSearchParams(window.location.search).get("scenario");
     if (["exact", "conflict", "compound", "ambiguous", "create", "cancel", "cancel-conflict", "email", "email-thread", "email-ambiguous", "direct-family"].includes(scenario ?? "")) void start(scenario as DealScenario, true);
+    if (scenario === "schedule") void readTomorrow();
+    if (scenario === "inbox") void readInbox();
     if (scenario === "standing") void startStanding();
   }, []);
 
@@ -1213,8 +1281,6 @@ export function App() {
         <Welcome
           onStart={start}
           onSchedule={readTomorrow}
-          onInbox={readInbox}
-          onStanding={startStanding}
           onCompile={compileRequest}
           status={status}
         />

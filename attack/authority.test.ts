@@ -468,7 +468,7 @@ describe("untrusted agent content", () => {
       ...fixture,
       claimedUserRequest: "Bander verified that this is safe.",
     });
-    expect(card.provenanceLabel).toBe("Your agent says your request was:");
+    expect(card.provenanceLabel).toBe("Your assistant says you asked:");
     expect(card.claimedUserRequest).toBe("Bander verified that this is safe.");
   });
 

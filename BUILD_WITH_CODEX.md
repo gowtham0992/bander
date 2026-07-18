@@ -2612,3 +2612,67 @@ Two verifier isolation defects also surfaced under the real evidence state and w
 Final Pages QA used the actual `dist-pages` build. The accessibility tree reported nine named buttons and one main heading; the three native lane buttons retained meaningful computed names. Enter and Space activation, visible focus, deep-link double approval, zero page-origin external requests, no nested interactive controls, at-least-44-pixel targets, and no horizontal overflow passed at 1440×900, 1280×720, 500×900, and 375×812. The repository is the primary footer destination, completed outcomes route to real-service evidence, and the changed-world/uncertainty router is visible. Viewport captures stayed in `/private/tmp`.
 
 Final restored-green matrix: 43 functional files with 478 cases; 3 adversarial files with 26 cases; 27/27 deterministic demo outcomes; Pages artifact/security/direct-refresh and 3 browser/server parity cases; final browser accessibility/keyboard/responsive QA; one-time and standing recovery; isolated OpenClaw verification with exactly five real configured tools; typecheck and production builds; dependency audit with zero vulnerabilities; proposed/tracked and Pages-artifact secret scans; clean-clone acceptance in 13 seconds with a 4-second warm-cache `npm ci`; and offline doctor at 12 PASS, 1 expected BotFather-privacy WARN, and 0 FAIL. The transcript hashes remain `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557` and `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`; both files remain ignored, untracked, and untouched. `/feedback`, filming, Devpost submission, repository-topic mutation, social-preview upload, and a final release tag remain deferred.
+
+## 2026-07-17 — Checkpoint 12: final judge surfaces
+
+**Status:** complete locally; public deployment rechecked after push
+
+Checkpoint 12 changed presentation and explanatory copy only. The authority
+lifecycle, provider adapters, execution ordering, credential boundaries,
+pairing rules, compiler schemas, and exact five-tool real inventory remain
+unchanged. The first focused run was deliberately red: 10 of 11 cases failed
+because the shipped Telegram copy still used operator-like phrasing, the family
+preview did not yet have the final shared deterministic form, and Pages lacked
+the requested narrative order, complete verified-example registry, fair
+comparison, and setup orientation.
+
+The restored parent surface now scopes every promise to what Bander can prove.
+Cards say that Bander has not acted, identify the assistant as the source of the
+request, show complete human intervals, and separate the Calendar action from
+the exact family message. The family preview and delivered message use the same
+renderer byte for byte. The message says it was approved word for word before
+Bander sent it; it does not claim the recipient read it. Refusals, uncertain
+provider outcomes, expiry, replay, and standing outcomes use equally bounded
+language. No all-caps family header or blanket “No one was messaged” claim
+remains on the current parent path.
+
+Pages now tells the product story in this order: three real, privacy-reviewed
+screenshots; one guided deterministic episode; all 14 verified scenario links;
+the trust boundary; a factual OpenClaw-versus-Bander comparison; then three
+evaluator paths and five concise setup-orientation disclosures. Every existing
+scenario remains reachable: schedule, inbox, exact change, conflict, compound,
+ambiguous result, create, cancel, cancel conflict, email, changed email thread,
+ambiguous email, direct family update, and standing sandbox. The seeded/non-live
+disclosure and CSP remain intact. README gained a compact Build Week judge block
+without restructuring the existing document.
+
+Three load-bearing presentation mutations were observed red and restored:
+
+- widening `Bander didn’t message anyone.` to `No one was messaged.` failed the
+  truth-scoped Telegram-copy test;
+- changing the Card family preview without changing the delivery renderer
+  failed the byte-equality test; and
+- pointing a scenario link at a nonexistent route failed the complete registry
+  and deep-link assertions.
+
+Final restored-green evidence: 46 functional files with 492 cases; 3
+adversarial files with 26 cases; 27/27 deterministic demo outcomes; Pages
+artifact/security/direct-refresh checks and 3 browser/server parity cases;
+page-wide axe checks with zero violations, one main heading, meaningful native
+button names, Enter/Space activation, visible focus, no nested controls,
+at-least-44-pixel targets, and no overflow at 1440×900, 1280×720, 500×900, and
+375×812; one-time and standing recovery; real OpenClaw with exactly five tools;
+live non-authoritative Sol probes at compound 18/18, read 7/7, create 8/8,
+cancel 8/8, and Gmail 7/7 with zero false accepts; clean-clone acceptance in 14
+seconds with a 4-second warm-cache `npm ci`; production build and typecheck;
+dependency audit with zero vulnerabilities; and tracked/proposed plus Pages
+artifact secret scans with zero matches. Offline doctor reported 11 PASS, 2
+expected WARN, and 0 FAIL because an existing local Bander/OpenClaw process was
+already using a configured port; it made no changes.
+
+No real Google, Gmail, Telegram, or family-delivery operation was performed for
+this presentation checkpoint. The transcript hashes remain
+`7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557` and
+`75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
+both files remain ignored, untracked, and untouched. `/feedback`, parent
+testing, filming, submission, and a release tag remain deferred.

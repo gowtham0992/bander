@@ -263,7 +263,7 @@ export interface ApprovalCard {
   draftId: string;
   draftHash: string;
   title: "Here’s the deal";
-  provenanceLabel: "Your agent says your request was:";
+  provenanceLabel: "Your assistant says you asked:";
   claimedUserRequest: string;
   allows: string[];
   effectPreviews: ApprovalEffectPreview[];

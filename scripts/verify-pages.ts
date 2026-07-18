@@ -32,7 +32,11 @@ try {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Pages verifier could not reserve a local port");
   const origin = `http://127.0.0.1:${address.port}`;
-  for (const scenario of ["compound", "email", "email-ambiguous", "standing"]) {
+  for (const scenario of [
+    "schedule", "inbox", "exact", "conflict", "compound", "ambiguous",
+    "create", "cancel", "cancel-conflict", "email", "email-thread",
+    "email-ambiguous", "direct-family", "standing",
+  ]) {
     const response = await fetch(`${origin}/bander/?scenario=${scenario}`);
     if (!response.ok || !(await response.text()).includes("Bander — Ask freely. Approve changes.")) throw new Error(`Pages direct refresh failed for ${scenario}`);
   }
@@ -44,4 +48,4 @@ try {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
-console.log(`Pages artifact verified: ${report.files} files; /bander/ direct refresh and seeded scenarios are ready.`);
+console.log(`Pages artifact verified: ${report.files} files; /bander/ direct refresh and all 14 seeded scenario destinations are ready.`);

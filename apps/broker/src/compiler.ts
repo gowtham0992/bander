@@ -210,7 +210,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       (intent.durationMinutes < 15 || intent.durationMinutes > 12 * 60)
     ) {
       const humanMessage =
-        "Please choose a duration between 15 minutes and 12 hours. Nothing happened.";
+        "Please choose a duration between 15 minutes and 12 hours. Bander didn’t do anything.";
       throw new CompilerError("clarification_required", humanMessage, humanMessage);
     }
 
@@ -218,7 +218,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
     if (intent.familyNotificationRequested) {
       if (!intent.familyContactAlias) {
         const humanMessage =
-          "Who should I let know? Please use their name, like Gil.\nNothing happened.";
+          "Who should I let know? Please use their name, like Gil.\nBander didn’t do anything.";
         throw new CompilerError("clarification_required", humanMessage, humanMessage);
       }
       familyBinding = this.familyContacts?.resolve(intent.familyContactAlias);
@@ -226,8 +226,8 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
         const label = safeIntentLabel(intent.familyContactAlias);
         const activeLabel = this.familyContacts?.activeDisplayLabel?.();
         const humanMessage = activeLabel
-          ? `I can’t message ${label} yet. Right now Bander can only message ${safeIntentLabel(activeLabel)}.\nNothing happened.`
-          : "I can’t message family yet. Ask the person who set up Bander to connect someone first.\nNothing happened.";
+          ? `I can’t message ${label} yet. Right now Bander can only message ${safeIntentLabel(activeLabel)}.\nBander didn’t do anything.`
+          : "I can’t message family yet. Ask the person who set up Bander to connect someone first.\nBander didn’t do anything.";
         throw new CompilerError("clarification_required", humanMessage, humanMessage);
       }
     } else if (intent.familyContactAlias !== null) {
@@ -246,7 +246,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       }
       const title = sanitizeFamilyNotificationTitle(intent.eventTitleHint);
       if (!title) {
-        const humanMessage = "What should I call the Calendar event? Nothing happened.";
+        const humanMessage = "What should I call the Calendar event? Bander didn’t do anything.";
         throw new CompilerError("clarification_required", humanMessage, humanMessage);
       }
       const startTime = resolveLocalStart({
@@ -309,7 +309,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
       if (error instanceof GoogleCalendarError) {
         const title = safeIntentLabel(intent.eventTitleHint);
         if (error.code === "event_not_found") {
-          const humanMessage = `I couldn’t find an eligible upcoming event called “${title}”.\nNothing happened.\nCheck the name or tell OpenClaw which date it is on.`;
+          const humanMessage = `I couldn’t find an eligible upcoming event called “${title}”.\nBander didn’t do anything.\nCheck the name or tell your assistant which date it is on.`;
           throw new CompilerError(
             "clarification_required",
             humanMessage,
@@ -317,7 +317,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
           );
         }
         if (error.code === "ambiguous_event_match") {
-          const humanMessage = `I found more than one eligible upcoming event called “${title}”.\nNothing happened.\nWhich date did you mean?`;
+          const humanMessage = `I found more than one eligible upcoming event called “${title}”.\nBander didn’t do anything.\nWhich date did you mean?`;
           throw new CompilerError(
             "clarification_required",
             humanMessage,
@@ -326,7 +326,7 @@ export class RealCalendarDraftCompiler implements DraftCompiler {
         }
         if (error.code === "unsupported_event_shape") {
           const verb = cancelling ? "remove" : "move";
-          const humanMessage = `I found “${title}”, but it isn’t a Calendar event Bander can safely ${verb} yet.\nNothing happened.`;
+          const humanMessage = `I found “${title}”, but it isn’t a Calendar event Bander can safely ${verb} yet.\nBander didn’t do anything.`;
           throw new CompilerError(
             "unsupported_request",
             humanMessage,
@@ -471,42 +471,42 @@ function deterministicIntentClarification(
   const title = safeIntentLabel(intent.eventTitleHint);
   if (!intent.eventTitleHint) {
     return intent.actionKind === "create_event"
-      ? "What should I call the Calendar event?\nNothing happened."
-      : "Which Calendar event would you like to move?\nNothing happened.";
+      ? "What should I call the Calendar event?\nBander didn’t do anything."
+      : "Which Calendar event would you like to move?\nBander didn’t do anything.";
   }
   if (intent.clarificationReason === "unsupported_action") {
-    return "I can add, move, or remove one eligible Calendar event, but I can’t contact a business, cancel reservations, handle recurring events, or remove events in bulk.\nNothing happened.";
+    return "I can add, move, or remove one eligible Calendar event, but I can’t contact a business, cancel reservations, handle recurring events, or remove events in bulk.\nBander didn’t do anything.";
   }
   if (intent.clarificationReason === "missing_contact") {
-    return "Who should I let know? Please use their name, like Gil.\nNothing happened.";
+    return "Who should I let know? Please use their name, like Gil.\nBander didn’t do anything.";
   }
   if (intent.clarificationReason === "ambiguous_contact") {
-    return "Who should I let know? Please use their name, like Gil.\nNothing happened.";
+    return "Who should I let know? Please use their name, like Gil.\nBander didn’t do anything.";
   }
   if (intent.clarificationReason === "unpaired_contact") {
     return activeFamilyDisplayLabel
-      ? `I can’t message that person yet. Right now Bander can only message ${safeIntentLabel(activeFamilyDisplayLabel)}.\nNothing happened.`
-      : "I can’t message family yet. Ask the person who set up Bander to connect someone first.\nNothing happened.";
+      ? `I can’t message that person yet. Right now Bander can only message ${safeIntentLabel(activeFamilyDisplayLabel)}.\nBander didn’t do anything.`
+      : "I can’t message family yet. Ask the person who set up Bander to connect someone first.\nBander didn’t do anything.";
   }
   if (intent.clarificationReason === "free_form_message_unsupported") {
-    return "I can include Bander’s exact appointment update, but I can’t send a custom message.\nNothing happened.";
+    return "I can include Bander’s exact appointment update, but I can’t send a custom message.\nBander didn’t do anything.";
   }
   if (!intent.targetLocalDate && !intent.targetLocalStart) {
     return intent.actionKind === "create_event"
-      ? `What date and time should I add “${title}”?\nNothing happened.`
-      : `What date and time should I move “${title}” to?\nNothing happened.`;
+      ? `What date and time should I add “${title}”?\nBander didn’t do anything.`
+      : `What date and time should I move “${title}” to?\nBander didn’t do anything.`;
   }
   if (!intent.targetLocalDate) {
     return intent.actionKind === "create_event"
-      ? `What date should I add “${title}”?\nNothing happened.`
-      : `What date should I move “${title}” to?\nNothing happened.`;
+      ? `What date should I add “${title}”?\nBander didn’t do anything.`
+      : `What date should I move “${title}” to?\nBander didn’t do anything.`;
   }
   if (!intent.targetLocalStart) {
     return intent.actionKind === "create_event"
-      ? `What time should I add “${title}”?\nNothing happened.`
-      : `What time should I move “${title}” to?\nNothing happened.`;
+      ? `What time should I add “${title}”?\nBander didn’t do anything.`
+      : `What time should I move “${title}” to?\nBander didn’t do anything.`;
   }
-  return `I need one clear destination date and time for “${title}”.\nNothing happened.`;
+  return `I need one clear destination date and time for “${title}”.\nBander didn’t do anything.`;
 }
 
 function currentInstallationLocalDate(

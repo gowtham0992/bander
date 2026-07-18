@@ -194,7 +194,7 @@ describe("real Calendar cancellation", () => {
     expect(card.effectPreviews).toEqual([{
       kind: "calendar.cancel_event",
       eventTitle: "Dentist appointment",
-      previousInterval: "Thu, Jul 23, 1:00–2:00 PM MDT",
+      previousInterval: "Thursday, Jul 23, 1:00–2:00 PM (Mountain time)",
     }]);
     await engine.approveAndExecute(card.draftId, card.draftHash);
     expect(boundary.deletes).toHaveLength(1);

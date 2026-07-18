@@ -249,7 +249,7 @@ describe("one-time Draft, Card, Band, Permit, Receipt", () => {
     const card = await engine.proposeFixture(fixture);
 
     expect(card.title).toBe("Here’s the deal");
-    expect(card.provenanceLabel).toBe("Your agent says your request was:");
+    expect(card.provenanceLabel).toBe("Your assistant says you asked:");
     expect(card.claimedUserRequest).toBe(fixture.claimedUserRequest);
     expect(card.allows).toEqual([
       "reschedule “Dinner with Sarah” from 7:00–8:30 PM to 7:30–9:00 PM",

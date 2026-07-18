@@ -26,6 +26,16 @@ npm run verify:demo
 
 The supported Node floor is 22.12.0; CI and the repository-pinned runtime use Node 24. In the clean-clone verifier, both measured warm-cache runs completed in 13 seconds on the development machine. Package and network download speed are the main variables, so this is measured evidence rather than a fixed-time promise. Expected output ends with `27 of 27 demo outcomes passed`. No shared judge account is provided because shared credentials would contradict Bander’s trust model.
 
+## For Build Week judges
+
+**Category:** Apps for Your Life
+
+- [Hosted Pages sandbox](https://gowtham0992.github.io/bander/)
+- [Three evaluator paths](#evaluator-paths)
+- [Real installation and setup](SETUP.md)
+
+The required `/feedback` Codex Session ID is supplied through Devpost.
+
 ## The 30-second story
 
 1. **Mum asks what is coming up tomorrow.** OpenClaw answers conversationally. No Card and no approval toll.

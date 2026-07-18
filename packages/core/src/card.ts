@@ -38,33 +38,16 @@ export function formatCalendarIntervalWithContext(
   start: string,
   end: string,
   timeZone: string,
+  includeTimeZone = true,
 ): string {
   const date = new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
+    weekday: "long",
     month: "short",
     day: "numeric",
     timeZone,
   }).format(new Date(start));
-  const zone =
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      timeZoneName: "short",
-    })
-      .formatToParts(new Date(start))
-      .find((part) => part.type === "timeZoneName")?.value ?? timeZone;
-  return `${date}, ${formatInterval(start, end, timeZone)} ${zone}`;
-}
-
-function localDate(start: string, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone,
-  }).formatToParts(new Date(start));
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((candidate) => candidate.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
+  const zone = timeZone === "America/Denver" ? "Mountain time" : timeZone;
+  return `${date}, ${formatInterval(start, end, timeZone)}${includeTimeZone ? ` (${zone})` : ""}`;
 }
 
 function calendarLine(effect: CalendarRescheduleEffect): string {
@@ -89,7 +72,7 @@ export function renderFamilyNotificationDocument(
   document: FamilyNotificationDocument,
 ): string {
   if (document.kind === "direct_message") {
-    return ["YOUR WORDS — SENT BY BANDER", document.body].join("\n");
+    return [document.body, "", "Approved word-for-word before Bander sent it."].join("\n");
   }
   const interval =
     document.kind === "calendar_transition"
@@ -105,12 +88,12 @@ export function renderFamilyNotificationDocument(
         );
   const stateLine =
     document.kind === "calendar_cancellation"
-      ? `“${document.eventTitle},” scheduled for ${interval}, is no longer on the calendar.`
-      : `“${document.eventTitle}” ${document.kind === "calendar_creation" ? "was added for" : "is now"} ${interval}.`;
+      ? `“${document.eventTitle}”, ${interval}, is no longer on the calendar.`
+      : `“${document.eventTitle}” ${document.kind === "calendar_creation" ? "was added for" : "moved to"} ${interval}.`;
   return [
-    "EXACT UPDATE FROM BANDER",
     stateLine,
-    "This is the exact update your family approved Bander to send.",
+    "",
+    "Approved word-for-word before Bander sent it.",
   ].join("\n");
 }
 
@@ -249,24 +232,19 @@ export function renderApprovalCard(
   const effectPreviews = document.effects.map((effect) =>
     effect.type === "calendar.reschedule_event"
       ? (() => {
-          const crossesLocalDate =
-            localDate(effect.expected.startTime, effect.expected.timeZone) !==
-            localDate(effect.changes.startTime, effect.expected.timeZone);
-          const preview = crossesLocalDate
-            ? formatCalendarIntervalWithContext
-            : formatInterval;
           return {
             kind: effect.type,
             eventTitle: effect.expected.title,
-            previousInterval: preview(
+            previousInterval: formatCalendarIntervalWithContext(
               effect.expected.startTime,
               effect.expected.endTime,
               effect.expected.timeZone,
             ),
-            resultingInterval: preview(
+            resultingInterval: formatCalendarIntervalWithContext(
               effect.changes.startTime,
               effect.changes.endTime,
               effect.expected.timeZone,
+              false,
             ),
           };
         })()
@@ -314,11 +292,11 @@ export function renderApprovalCard(
     draftId,
     draftHash,
     title: "Here’s the deal",
-    provenanceLabel: "Your agent says your request was:",
+    provenanceLabel: "Your assistant says you asked:",
     claimedUserRequest: document.source.claimedUserRequest,
     allows,
     effectPreviews,
-    notAllowed: "Other Bander-managed effects outside this Draft.",
+    notAllowed: "Anything not shown in this deal.",
     boundary:
       "Bander does not control tools, credentials, or accounts that bypass Bander.",
     connections,
@@ -390,7 +368,7 @@ export function renderHumanReceipt(
         status === "delivered"
           ? `Sent the approved message to ${familyNotification.binding.displayLabel}.`
           : status === "ambiguous"
-            ? `Bander could not confirm whether ${familyNotification.binding.displayLabel} received the approved message and will not send it again automatically.`
+          ? `Bander could not confirm whether Telegram accepted the approved message for ${familyNotification.binding.displayLabel} and will not send it again automatically.`
             : `${familyNotification.binding.displayLabel} was no longer connected, so no message was sent.`,
       detail: status === "delivered" ? "Telegram accepted the message; that does not prove it was read." : "Nothing will be retried automatically.",
       familyNotification: {
@@ -438,7 +416,7 @@ export function renderHumanReceipt(
       ? observed?.familyNotification?.status === "delivered"
         ? `The approved update was sent to ${familyNotification.binding.displayLabel}.`
         : observed?.familyNotification?.status === "ambiguous"
-          ? `The Calendar action completed, but Bander could not confirm whether ${familyNotification.binding.displayLabel} received the update and will not send it again automatically.`
+          ? `The Calendar action completed, but Bander could not confirm whether Telegram accepted the update for ${familyNotification.binding.displayLabel} and will not send it again automatically.`
           : `The Calendar action completed, but ${familyNotification.binding.displayLabel} was no longer connected and no family update was sent.`
       : message
         ? `${message.expected.displayName.split(" ")[0]} was notified.`

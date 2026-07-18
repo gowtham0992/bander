@@ -68,7 +68,7 @@ const familyNotificationDocument = {
   newStartTime: "2026-07-18T22:00:00.000Z",
   newEndTime: "2026-07-18T23:00:00.000Z",
   timeZone: "America/Denver",
-};
+} as const;
 
 const emailFixture: DraftFixture = {
   id: "telegram-email-fixture",
@@ -495,9 +495,9 @@ describe("Bander Telegram service", () => {
     await current.service.deliverProposal(card);
     const text = current.api.messages.at(-1)?.text ?? "";
     expect(text).toContain("📅 Add to Calendar “Lunch with Ruth”");
-    expect(text).toContain("Tue, Jul 21, 12:00–1:00 PM MDT");
+    expect(text).toContain("Tuesday, Jul 21, 12:00–1:00 PM (Mountain time)");
     expect(text).toContain(
-      "No one will be invited. No recurring event or reservation will be created.",
+      "Only this goes on your calendar. No one is invited, nothing repeats, and nothing is booked anywhere.",
     );
     expect(text).not.toContain("b0123456789");
   });
@@ -533,9 +533,9 @@ describe("Bander Telegram service", () => {
       },
     });
     expect(current.api.messages.at(-1)?.text).toBe([
-      "I couldn’t confirm whether the event was added.",
-      "I won’t try to add it again automatically.",
-      "Please check your calendar before asking OpenClaw again.",
+      "Bander couldn’t confirm whether the event was added.",
+      "Bander won’t try to add it again automatically.",
+      "Please check your calendar before asking your assistant again.",
     ].join("\n"));
   });
 
@@ -547,7 +547,7 @@ describe("Bander Telegram service", () => {
     const binding = current.store.read().proposals.at(-1)!;
     const proposal = current.api.messages.at(-1)!;
     expect(proposal.text).toContain("📅 Remove from Calendar “Dentist appointment”");
-    expect(proposal.text).toContain("Thu, Jul 23, 1:00–2:00 PM MDT");
+    expect(proposal.text).toContain("Thursday, Jul 23, 1:00–2:00 PM (Mountain time)");
     expect(proposal.text).toContain(
       "Bander will not automatically restore this event after you approve.",
     );
@@ -575,9 +575,9 @@ describe("Bander Telegram service", () => {
     expect(current.api.messages.at(-1)?.text).toBe([
       "Removed ✓",
       "“Dentist appointment”",
-      "Thu, Jul 23, 1:00–2:00 PM MDT",
-      "No one was contacted through the Calendar or Bander.",
-      "Nothing else changed through Bander.",
+      "Thursday, Jul 23, 1:00–2:00 PM (Mountain time)",
+      "Bander didn’t contact anyone.",
+      "Bander changed nothing else.",
     ].join("\n"));
   });
 
@@ -629,9 +629,9 @@ describe("Bander Telegram service", () => {
     await current.service.handleUpdate(callback);
     const firstExecutions = current.adapter.executions;
     expect(current.api.messages.at(-1)?.text).toBe([
-      "I couldn’t confirm whether the event was removed.",
-      "I won’t try to remove it again automatically.",
-      "Please check your calendar before asking OpenClaw again.",
+      "Bander couldn’t confirm whether the event was removed.",
+      "Bander won’t try to remove it again automatically.",
+      "Please check your calendar before asking your assistant again.",
     ].join("\n"));
     await current.service.handleUpdate({
       ...callback,
@@ -662,9 +662,9 @@ describe("Bander Telegram service", () => {
       },
     });
     expect(absent.api.messages.at(-1)?.text).toBe([
-      "I stopped—the event was already gone from the calendar.",
-      "I didn’t remove anything.",
-      "Ask OpenClaw to check again if needed.",
+      "Bander stopped—the event was already gone from the calendar.",
+      "Bander didn’t remove anything.",
+      "Ask your assistant to check again if needed.",
     ].join("\n"));
 
     const rejected = setup("real");
@@ -694,7 +694,7 @@ describe("Bander Telegram service", () => {
       },
     });
     expect(rejected.api.messages.at(-1)?.text).toBe(
-      "I couldn’t add that because the calendar service rejected it. Nothing was added.",
+      "Bander couldn’t add that because the calendar service rejected it. Bander added nothing.",
     );
   });
 
@@ -815,8 +815,8 @@ describe("Bander Telegram service", () => {
     const card = await current.engine.proposeFixture(compoundFixture);
     await current.service.deliverProposal(card);
     const approval = current.api.messages.at(-1)?.text ?? "";
-    expect(approval).toContain("📅 Calendar change");
-    expect(approval).toContain("👤 Family update Gil:");
+    expect(approval).toContain("📅 Move");
+    expect(approval).toContain("💬 Send Gil this message:");
     expect(approval).toContain(renderFamilyNotification(compoundFixture.familyNotification!.document));
   });
   it("direct_family_card_text_is_the_delivered_text_and_replay_sends_nothing", async () => {
@@ -833,14 +833,14 @@ describe("Bander Telegram service", () => {
     await current.service.handleUpdate(callback);
     await current.service.handleUpdate({ ...callback, update_id: 779, callback_query: { ...callback.callback_query!, id: "direct-family-replay" } });
     expect(current.api.messages.filter((message) => message.chatId === "202" && message.text === renderFamilyNotification(document))).toHaveLength(1);
-    expect(current.api.messages.find((message) => message.chatId === "-500" && message.text.startsWith("Nothing has happened yet"))?.text).toContain(document.body);
+    expect(current.api.messages.find((message) => message.chatId === "-500" && message.text.startsWith("Bander hasn’t done anything yet"))?.text).toContain(document.body);
   });
   it("rejects_delivery_to_revoked_contact", async () => {
     const current = setup("real", familyRandomValues);
     await pairOwner(current); await pairFamilyContact(current);
     await current.service.handleUpdate(messageUpdate({ updateId: 90, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" }));
     await expect(current.service.deliverFamilyNotification({ requestId: "family-send-0001", document: familyNotificationDocument })).rejects.toThrow("No active family contact");
-    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(0);
+    expect(current.api.messages.filter((message) => message.text === renderFamilyNotification(familyNotificationDocument))).toHaveLength(0);
   });
 
   it("delivery_request_content_mismatch_and_confirmed_replay_send_nothing", async () => {
@@ -849,7 +849,7 @@ describe("Bander Telegram service", () => {
     const first = await current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: familyNotificationDocument });
     const replay = await current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: familyNotificationDocument });
     expect(first).toEqual({ status: "delivered" }); expect(replay).toEqual(first);
-    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.text === renderFamilyNotification(familyNotificationDocument))).toHaveLength(1);
     await expect(current.service.deliverFamilyNotification({ requestId: "family-send-0002", document: { ...familyNotificationDocument, eventTitle: "Changed" } })).rejects.toThrow("different content");
   });
 
@@ -858,12 +858,12 @@ describe("Bander Telegram service", () => {
     await pairOwner(current); await pairFamilyContact(current);
     const calls = await Promise.all(Array.from({ length: 3 }, () => current.service.deliverFamilyNotification({ requestId: "family-send-0003", document: familyNotificationDocument })));
     expect(calls).toEqual([{ status: "delivered" }, { status: "delivered" }, { status: "delivered" }]);
-    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.text === renderFamilyNotification(familyNotificationDocument))).toHaveLength(1);
     const attemptsBeforeAmbiguous = current.api.sendAttempts;
-    current.api.failNextMessageMatching = (text) => text.startsWith("EXACT UPDATE FROM BANDER");
+    current.api.failNextMessageMatching = (text) => text === renderFamilyNotification(familyNotificationDocument);
     expect(await current.service.deliverFamilyNotification({ requestId: "family-send-0004", document: familyNotificationDocument })).toEqual({ status: "ambiguous" });
     expect(await current.service.deliverFamilyNotification({ requestId: "family-send-0004", document: familyNotificationDocument })).toEqual({ status: "ambiguous" });
-    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
+    expect(current.api.messages.filter((message) => message.text === renderFamilyNotification(familyNotificationDocument))).toHaveLength(1);
     expect(current.api.sendAttempts - attemptsBeforeAmbiguous).toBe(1);
   });
 
@@ -890,10 +890,10 @@ describe("Bander Telegram service", () => {
     const second = setup("real", familyRandomValues);
     await pairOwner(second); await pairFamilyContact(second);
     let revoke: Promise<void> | undefined;
-    second.api.beforeSend = (text) => { if (text.startsWith("EXACT UPDATE FROM BANDER")) revoke = second.service.handleUpdate(messageUpdate({ updateId: 92, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" })); };
+    second.api.beforeSend = (text) => { if (text === renderFamilyNotification(familyNotificationDocument)) revoke = second.service.handleUpdate(messageUpdate({ updateId: 92, fromId: 202, chatId: 202, chatType: "private", text: "/disconnect" })); };
     expect(await second.service.deliverFamilyNotification({ requestId: "family-send-0007", document: familyNotificationDocument })).toEqual({ status: "delivered" });
     await revoke;
-    expect(second.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(1);
+    expect(second.api.messages.filter((message) => message.text === renderFamilyNotification(familyNotificationDocument))).toHaveLength(1);
     expect(second.store.read().familyContact).toBeUndefined();
   });
 
@@ -921,7 +921,7 @@ describe("Bander Telegram service", () => {
     });
     expect(result).toEqual({ status: "not_sent" });
     expect(current.api.sendAttempts).toBe(attempts);
-    expect(current.api.messages.filter((message) => message.text.startsWith("EXACT UPDATE FROM BANDER"))).toHaveLength(0);
+    expect(current.api.messages.filter((message) => message.text === renderFamilyNotification(familyNotificationDocument))).toHaveLength(0);
   });
 
   it("revoked_contact_never_receives_old_approved_message", async () => {
@@ -1468,9 +1468,9 @@ describe("Bander Telegram service", () => {
     const binding = current.store.read().proposals[0]!;
     const approvalText = current.api.messages.at(-1)?.text ?? "";
 
-    expect(approvalText).toContain("OpenClaw says you asked:");
-    expect(approvalText).toContain("Through Bander, this will:");
-    expect(approvalText).toContain("Nothing else will change.");
+    expect(approvalText).toContain("Your assistant says you asked:");
+    expect(approvalText).toContain("If you say yes, Bander will check the latest information.");
+    expect(approvalText).toContain("Bander won’t do anything else.");
     expect(approvalText).not.toMatch(
       /messages|payments|\bDraft\b|\bPermit\b|\bBand\b|\bReceipt\b|ETag|MCP/i,
     );
@@ -1495,9 +1495,9 @@ describe("Bander Telegram service", () => {
     });
     expect(current.api.messages.at(-1)?.text).toBe(
       [
-        "I stopped—your calendar changed since you asked.",
-        "Nothing was moved.",
-        "Ask OpenClaw to check again.",
+        "I stopped — your calendar changed since you asked.",
+        "Bander moved nothing.",
+        "Ask your assistant to check again.",
       ].join("\n"),
     );
     expect(current.api.messages.some((message) => message.text.startsWith("Done"))).toBe(false);
@@ -1526,7 +1526,7 @@ describe("Bander Telegram service", () => {
     await current.service.deliverProposal(card);
 
     expect(current.api.messages.at(-1)?.text).toContain(
-      "Wed, Jul 15, 9:30–10:30 AM MDT → Fri, Jul 17, 1:00–2:00 PM MDT",
+      "from Wednesday, Jul 15, 9:30–10:30 AM (Mountain time)\nto Friday, Jul 17, 1:00–2:00 PM",
     );
   });
 
@@ -1556,10 +1556,10 @@ describe("Bander Telegram service", () => {
 
     expect(outcome).toContain("Done ✓");
     expect(outcome).toContain(
-      "Wed, Jul 15, 9:30–10:30 AM MDT → Wed, Jul 15, 10:30–11:30 AM MDT",
+      "Wednesday, Jul 15, 9:30–10:30 AM (Mountain time) → Wednesday, Jul 15, 10:30–11:30 AM",
     );
-    expect(outcome).toContain("No one was messaged through Bander.");
-    expect(outcome).toContain("Nothing else changed through Bander.");
+    expect(outcome).toContain("Bander didn’t message anyone.");
+    expect(outcome).toContain("Bander changed nothing else.");
     expect(outcome).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
     expect(outcome).not.toMatch(
       /\bDraft\b|\bPermit\b|\bBand\b|\bReceipt\b|ETag|MCP/i,
@@ -1579,7 +1579,7 @@ describe("Bander Telegram service", () => {
       "",
       "OpenClaw asked Bander to:",
       "📅 Move “Dinner with Sarah”",
-      "7:00–8:30 PM → 7:30–9:00 PM",
+      "Tuesday, Jul 14, 7:00–8:30 PM (Mountain time) → Tuesday, Jul 14, 7:30–9:00 PM",
       "💬 Send Sarah:",
       "“See you at 7:30!”",
       "",
@@ -1617,7 +1617,7 @@ describe("Bander Telegram service", () => {
     const verificationCard = await verification.engine.proposeFixture(fixture);
     await verification.service.deliverProposal(verificationCard);
     expect(verification.api.messages.at(-1)?.text).toContain(
-      "Nothing has happened yet. Is this right?",
+      "Bander hasn’t done anything yet — please check:",
     );
   });
   it("uses parent-friendly pairing copy in Hero mode", async () => {
@@ -2175,7 +2175,7 @@ describe("Bander Telegram service", () => {
     expect(current.authorityStore.getPermitsForDraft(card.draftId)).toHaveLength(0);
     expect(current.adapter.executions).toBe(0);
     expect(current.api.messages.at(-1)?.text).toBe(
-      "Nothing changed.\nAsk OpenClaw again if you want something different.",
+      "Bander did nothing.\nAsk your assistant again if you want something different.",
     );
   });
 
@@ -2270,7 +2270,7 @@ describe("Bander Telegram service", () => {
     expect(current.adapter.executions).toBe(0);
     expect(
       current.api.messages.filter((message) => message.text ===
-        "Nothing changed.\nAsk OpenClaw again if you want something different."),
+        "Bander did nothing.\nAsk your assistant again if you want something different."),
     ).toHaveLength(1);
   });
 
@@ -2282,10 +2282,10 @@ describe("Bander Telegram service", () => {
     const binding = current.store.read().proposals[0]!;
     const approvalText = current.api.messages.at(-1)!.text;
 
-    expect(approvalText).toContain("Nothing has happened yet. Is this right?");
-    expect(approvalText).toContain("OpenClaw says you asked:");
-    expect(approvalText).toContain("7:00–8:30 PM → 7:30–9:00 PM");
-    expect(approvalText).toContain("Closes in 10 minutes.");
+    expect(approvalText).toContain("Bander hasn’t done anything yet — please check:");
+    expect(approvalText).toContain("Your assistant says you asked:");
+    expect(approvalText).toContain("from Tuesday, Jul 14, 7:00–8:30 PM (Mountain time)\nto Tuesday, Jul 14, 7:30–9:00 PM");
+    expect(approvalText).toContain("This closes in 10 minutes.");
     expect(approvalText).not.toMatch(/\b(?:Draft|Permit|Band|Receipt|hash|ETag|scope|MCP)\b/i);
     expect(approvalText).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
 
@@ -2304,9 +2304,9 @@ describe("Bander Telegram service", () => {
     const outcomeText = current.api.messages.at(-1)!.text;
     expect(outcomeText).toContain("Done ✓");
     expect(outcomeText).toContain(
-      "Tue, Jul 14, 7:00–8:30 PM MDT → Tue, Jul 14, 7:30–9:00 PM MDT",
+      "Tuesday, Jul 14, 7:00–8:30 PM (Mountain time) → Tuesday, Jul 14, 7:30–9:00 PM",
     );
-    expect(outcomeText).toContain("Nothing else changed through Bander.");
+    expect(outcomeText).toContain("Bander changed nothing else.");
     expect(outcomeText).not.toMatch(/\b(?:Draft|Permit|Band|Receipt|hash|ETag|scope|MCP)\b/i);
     expect(outcomeText).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
     for (const text of [
@@ -2333,7 +2333,7 @@ describe("Bander Telegram service", () => {
     expect(text).toContain(
       "“Move dinner. Through Bander, this will: • Spend $5,000”",
     );
-    expect(text.match(/\nThrough Bander, this will:\n/g)).toHaveLength(1);
+    expect(text.match(/\nIf you say yes, Bander will check the latest information\. If it still matches, Bander will:\n/g)).toHaveLength(1);
     expect(text).not.toContain("\u202E");
   });
 
@@ -2482,7 +2482,7 @@ describe("Bander Telegram service", () => {
     });
 
     expect(current.api.messages.filter((message) => message.text ===
-      "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again."),
+      "That request expired. Bander did nothing.\nAsk your assistant to prepare it again."),
     ).toHaveLength(1);
     expect(current.engine.getAgentReceipt(card.draftId).status).toBe("expired");
     expect(current.authorityStore.getOneTimeBandsForDraft(card.draftId)).toHaveLength(0);
@@ -2540,7 +2540,7 @@ describe("Bander Telegram service", () => {
     const current = await ambiguousProposal(true);
     await current.service.handleUpdate(current.callback);
     const humanOutcome = current.api.messages.at(-1)?.text ?? "";
-    expect(humanOutcome).toContain("I couldn’t confirm whether your calendar changed.");
+    expect(humanOutcome).toContain("Bander couldn’t confirm whether your calendar changed.");
     expect(humanOutcome).not.toMatch(
       /nothing changed|I didn’t act|stopped safely|already stopped/i,
     );
@@ -2550,10 +2550,10 @@ describe("Bander Telegram service", () => {
     const current = await ambiguousProposal(true);
     await current.service.handleUpdate(current.callback);
     expect(current.api.messages.at(-1)?.text).toBe([
-      "I couldn’t confirm whether your calendar changed.",
-      "No family update was sent.",
-      "I won’t try this request again automatically.",
-      "Please check your calendar before asking OpenClaw again.",
+      "Bander couldn’t confirm whether your calendar changed.",
+      "Bander sent no family update.",
+      "Bander won’t try this request again automatically.",
+      "Please check your calendar before asking your assistant again.",
     ].join("\n"));
     expect(current.store.read().familyNotifications).toHaveLength(0);
   });
@@ -2563,9 +2563,9 @@ describe("Bander Telegram service", () => {
     await current.service.handleUpdate(current.callback);
     const humanOutcome = current.api.messages.at(-1)?.text ?? "";
     expect(humanOutcome).toBe([
-      "I couldn’t confirm whether your calendar changed.",
-      "I won’t try this request again automatically.",
-      "Please check your calendar before asking OpenClaw again.",
+      "Bander couldn’t confirm whether your calendar changed.",
+      "Bander won’t try this request again automatically.",
+      "Please check your calendar before asking your assistant again.",
     ].join("\n"));
     expect(humanOutcome).not.toMatch(/family update/i);
   });
@@ -2592,7 +2592,7 @@ describe("Bander Telegram service", () => {
     expect(current.adapter.executions).toBe(1);
     expect(current.store.read().familyNotifications).toHaveLength(0);
     expect(current.api.messages.filter((message) =>
-      message.text.startsWith("I couldn’t confirm whether your calendar changed."),
+      message.text.startsWith("Bander couldn’t confirm whether your calendar changed."),
     )).toHaveLength(1);
   });
 
@@ -2639,7 +2639,7 @@ describe("Bander Telegram service", () => {
       const outcome = current.api.messages.find((message) => message.text.includes(mode === "conflict" ? "email conversation changed" : "couldn’t confirm whether the approved email reply was sent"));
       expect(outcome).toBeDefined();
       if (mode === "conflict") {
-        expect(outcome?.text).toContain("since Bander prepared this reply");
+        expect(outcome?.text).toContain("since this reply was prepared");
         expect(outcome?.text).not.toContain("since you approved");
       }
       expect(current.api.messages.filter((message) => message.text === outcome?.text)).toHaveLength(1);
@@ -2652,9 +2652,9 @@ describe("Bander Telegram service", () => {
     current.adapter.conflict = true;
     await current.service.handleUpdate(current.callback);
     expect(current.api.messages.at(-1)?.text).toBe([
-      "I stopped—your calendar changed since you asked.",
-      "Nothing was moved, and no family update was sent.",
-      "Ask OpenClaw to check again.",
+      "I stopped — your calendar changed since you asked.",
+      "Bander moved nothing and sent nothing.",
+      "Ask your assistant to check again.",
     ].join("\n"));
   });
 
@@ -2723,9 +2723,9 @@ describe("Bander Telegram service", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.text).toContain("“Focus block”");
     expect(messages[0]?.text).toContain(
-      "Wed, Jul 15, 9:30–10:30 AM MDT → Wed, Jul 15, 10:30–11:30 AM MDT",
+      "Wednesday, Jul 15, 9:30–10:30 AM (Mountain time) → Wednesday, Jul 15, 10:30–11:30 AM",
     );
-    expect(messages[0]?.text).toContain("No one was messaged.");
+    expect(messages[0]?.text).toContain("Bander didn’t message anyone.");
     expect(messages[0]?.text).toContain("2 of 3 automatic moves used today.");
     expect(messages[0]?.text).not.toMatch(
       /\b(?:Draft|Permit|Band|Receipt|hash|ETag|scope|MCP)\b/i,
@@ -2868,7 +2868,7 @@ describe("Bander Telegram service", () => {
     expect(current.store.read().proposals).toHaveLength(1);
     expect(
       current.api.messages.filter((message) =>
-        message.text.startsWith("Nothing has happened yet. Is this right?"),
+        message.text.startsWith("Bander hasn’t done anything yet — please check:"),
       ),
     ).toHaveLength(1);
     expect(current.adapter.executions).toBe(0);

@@ -33,6 +33,9 @@ function approvedBrandAssets(): Plugin {
     { fileName: "bander_mark_transparent.svg", sourcePath: path.resolve("../../production/bander_mark_transparent.svg") },
     { fileName: "bander_favicon_1783950200580.svg", sourcePath: path.resolve("../../production/bander_favicon_1783950200580.svg") },
     { fileName: "bander-og.png", sourcePath: path.resolve("../../docs/assets/screenshots/bander-social-preview.png") },
+    { fileName: "real-read-two-identities.png", sourcePath: path.resolve("../../docs/assets/screenshots/real-read-two-identities.png") },
+    { fileName: "real-compound-family.png", sourcePath: path.resolve("../../docs/assets/screenshots/real-compound-family.png") },
+    { fileName: "real-changed-world.png", sourcePath: path.resolve("../../docs/assets/screenshots/real-changed-world.png") },
   ];
   return {
     name: "bander-approved-brand-assets",

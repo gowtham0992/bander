@@ -88,7 +88,7 @@ try {
   }
   await evaluate(`(()=>{${axeSource};return true})()`);
   const axeViolations = await evaluate<Array<{ id: string; impact: string | null; nodes: number }>>(
-    `globalThis.axe.run(document.querySelector(".lane-grid"), {runOnly:{type:"rule",values:["button-name","nested-interactive","aria-allowed-attr"]}}).then(result => result.violations.map(violation => ({id:violation.id,impact:violation.impact,nodes:violation.nodes.length})))`,
+    `globalThis.axe.run(document, {runOnly:{type:"rule",values:["button-name","link-name","nested-interactive","aria-allowed-attr","heading-order"]}}).then(result => result.violations.map(violation => ({id:violation.id,impact:violation.impact,nodes:violation.nodes.length})))`,
   );
   if (axeViolations.length > 0) throw new Error(`axe found primary-lane accessibility violations: ${JSON.stringify(axeViolations)}`);
   if (!(await evaluate<boolean>(`document.body.textContent.includes("Bander can also stop when the world changed—or admit when a result cannot be confirmed. Explore those cases below.")`))) {
@@ -103,21 +103,32 @@ try {
   const externalRequests = requests.filter((url) => new URL(url).origin !== origin);
   if (externalRequests.length > 0) throw new Error("The Pages runtime made an external network request");
 
-  await key("Tab", "Tab", 9);
-  await key("Tab", "Tab", 9);
-  const focusedRead = await evaluate<{ name: string | null; outline: string }>(`({name:document.activeElement?.getAttribute("aria-label")??null,outline:getComputedStyle(document.activeElement).outlineStyle})`);
+  let focusedRead = { name: null as string | null, outline: "none" };
+  const tabOrder: string[] = [];
+  for (let index = 0; index < 24 && focusedRead.name !== "Just ask"; index += 1) {
+    await key("Tab", "Tab", 9);
+    focusedRead = await evaluate<{ name: string | null; outline: string }>(`({name:document.activeElement?.getAttribute("aria-label")??document.activeElement?.textContent?.replace(/\\s+/g," ").trim()??null,outline:getComputedStyle(document.activeElement).outlineStyle})`);
+    if (focusedRead.name) tabOrder.push(focusedRead.name);
+  }
   if (focusedRead.name !== "Just ask" || focusedRead.outline === "none") throw new Error("The first lane is not visibly keyboard focusable under its explicit accessible name");
+  const laneOrder = tabOrder.filter((name) => ["Just ask", "Approve a change", "When Bander isn’t sure"].includes(name));
+  if (laneOrder[0] !== "Just ask") throw new Error(`The primary lanes are not in a logical keyboard order: ${JSON.stringify(laneOrder)}`);
   await key("Enter", "Enter", 13);
   if (!(await waitFor(`document.body.textContent.includes("Here’s tomorrow.")`))) throw new Error("Enter did not activate the native read-lane button");
 
   await reload();
-  for (let index = 0; index < 4; index += 1) await key("Tab", "Tab", 9);
+  let uncertainFocused = false;
+  for (let index = 0; index < 26 && !uncertainFocused; index += 1) {
+    await key("Tab", "Tab", 9);
+    uncertainFocused = await evaluate<boolean>(`document.activeElement?.getAttribute("aria-label")==="When Bander isn’t sure"`);
+  }
+  if (!uncertainFocused) throw new Error("The uncertainty lane was not reachable in keyboard order");
   await key(" ", "Space", 32);
   if (!(await waitFor(`document.body.textContent.includes("Sandbox scenario")`))) throw new Error("Space did not activate the native uncertainty-lane button");
 
   await command("Page.navigate", { url: `${origin}/bander/?scenario=compound` });
   await new Promise((resolve) => setTimeout(resolve, 120));
-  if (!(await evaluate<boolean>(`document.body.textContent.includes("Through Bander, this will:") && !document.body.textContent.includes("Draft not found")`))) {
+  if (!(await evaluate<boolean>(`document.body.textContent.includes("If you say yes, Bander will check the latest information") && !document.body.textContent.includes("Draft not found")`))) {
     throw new Error("The compound deep link did not initialize into a safe Card");
   }
   await evaluate(`(()=>{const button=document.querySelector(".deal-card .primary");button?.click();button?.click();return true})()`);
@@ -157,7 +168,7 @@ try {
     fs.writeFileSync(`/private/tmp/bander-pages-${width}x${height}.png`, Buffer.from(screenshot.data, "base64"), { mode: 0o600 });
   }
 
-  console.log(`Pages browser QA verified: ${buttons.length} named buttons, three exact lane names, scoped axe with zero lane violations, one main heading, keyboard Enter/Space, guided final real-evidence link, deep-link single-flight approval, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.`);
+  console.log(`Pages browser QA verified: ${buttons.length} named buttons, three exact lane names, page-wide scoped axe checks with zero violations, one main heading, keyboard Enter/Space, guided final real-evidence link, deep-link single-flight approval, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.`);
 } finally {
   socket.close();
 }

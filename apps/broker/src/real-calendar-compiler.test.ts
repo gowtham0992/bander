@@ -123,7 +123,7 @@ describe("real Calendar intent compiler", () => {
       }),
     );
     await expect(compiler.compile("Move it and tell him")).rejects.toMatchObject({
-      humanMessage: "Who should I let know? Please use their name, like Gil.\nNothing happened.",
+      humanMessage: "Who should I let know? Please use their name, like Gil.\nBander didn’t do anything.",
     });
     expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });
@@ -148,7 +148,7 @@ describe("real Calendar intent compiler", () => {
       compiler.compile("Move it and tell Gil to bring groceries"),
     ).rejects.toMatchObject({
       humanMessage:
-        "I can include Bander’s exact appointment update, but I can’t send a custom message.\nNothing happened.",
+        "I can include Bander’s exact appointment update, but I can’t send a custom message.\nBander didn’t do anything.",
     });
     expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });
@@ -299,7 +299,7 @@ describe("real Calendar intent compiler", () => {
     );
 
     const expected =
-      "What date should I move “Fictional planning block” to?\nNothing happened.";
+      "What date should I move “Fictional planning block” to?\nBander didn’t do anything.";
     await expect(compiler.compile("Move it Monday")).rejects.toEqual(
       new CompilerError("clarification_required", expected, expected),
     );
@@ -331,7 +331,7 @@ describe("real Calendar intent compiler", () => {
     await expect(compiler.compile("Move the block")).rejects.toMatchObject({
       code: "clarification_required",
       humanMessage:
-        "I found more than one eligible upcoming event called “Fictional planning block”.\nNothing happened.\nWhich date did you mean?",
+        "I found more than one eligible upcoming event called “Fictional planning block”.\nBander didn’t do anything.\nWhich date did you mean?",
     });
   });
 
@@ -357,13 +357,13 @@ describe("real Calendar intent compiler", () => {
     await expect(compiler.compile("Move it")).rejects.toMatchObject({
       code: "clarification_required",
       humanMessage:
-        "I couldn’t find an eligible upcoming event called “Bander Demo Appointment”.\nNothing happened.\nCheck the name or tell OpenClaw which date it is on.",
+        "I couldn’t find an eligible upcoming event called “Bander Demo Appointment”.\nBander didn’t do anything.\nCheck the name or tell your assistant which date it is on.",
     });
   });
 
   it.each([
-    ["date", "", "14:00", "What date should I move “Fictional planning block” to?\nNothing happened."],
-    ["time", "2026-07-17", "", "What time should I move “Fictional planning block” to?\nNothing happened."],
+    ["date", "", "14:00", "What date should I move “Fictional planning block” to?\nBander didn’t do anything."],
+    ["time", "2026-07-17", "", "What time should I move “Fictional planning block” to?\nBander didn’t do anything."],
   ])("asks specifically for a missing target %s", async (_field, date, time, message) => {
     const resolver = calendar();
     const compiler = new RealCalendarDraftCompiler(
@@ -403,7 +403,7 @@ describe("real Calendar intent compiler", () => {
 
     await expect(compiler.compile("Cancel the planning block")).rejects.toMatchObject({
       humanMessage:
-        "I can add, move, or remove one eligible Calendar event, but I can’t contact a business, cancel reservations, handle recurring events, or remove events in bulk.\nNothing happened.",
+        "I can add, move, or remove one eligible Calendar event, but I can’t contact a business, cancel reservations, handle recurring events, or remove events in bulk.\nBander didn’t do anything.",
     });
     expect(resolver.discoverEvent).not.toHaveBeenCalled();
   });

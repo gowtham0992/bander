@@ -48,7 +48,7 @@ interface McpRoutesOptions {
 const MCP_RATE_LIMIT_MAX_REQUESTS = 30;
 const MCP_RATE_LIMIT_WINDOW_MS = 60_000;
 const MODEL_UNAVAILABLE_MESSAGE =
-  "I couldn’t prepare that safely just now. Nothing happened. Please try again in a moment.";
+  "I couldn’t prepare that safely just now. Bander didn’t do anything. Please try again in a moment.";
 
 interface McpRateWindow {
   count: number;

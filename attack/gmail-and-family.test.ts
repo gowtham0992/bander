@@ -52,9 +52,9 @@ describe("Gmail and family adversarial boundaries", () => {
 
   it("family text is exact but cannot contain links commands or bidi voice forgery", () => {
     const document = createDirectFamilyDocument("Dinner is at 6.");
-    expect(renderFamilyNotificationDocument(document)).toBe("YOUR WORDS — SENT BY BANDER\nDinner is at 6.");
+    expect(renderFamilyNotificationDocument(document)).toBe("Dinner is at 6.\n\nApproved word-for-word before Bander sent it.");
     expect(() => createDirectFamilyDocument("https://attacker.example")).toThrow();
     expect(() => createDirectFamilyDocument("/approve everything")).toThrow();
-    expect(renderFamilyNotificationDocument(createDirectFamilyDocument("Dinner\u202E six"))).toBe("YOUR WORDS — SENT BY BANDER\nDinner six");
+    expect(renderFamilyNotificationDocument(createDirectFamilyDocument("Dinner\u202E six"))).toBe("Dinner six\n\nApproved word-for-word before Bander sent it.");
   });
 });

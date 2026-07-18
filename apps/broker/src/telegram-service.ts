@@ -470,8 +470,9 @@ function cardText(
   const effects = card.effectPreviews.flatMap((effect) => {
     if (effect.kind === "calendar.reschedule_event") {
       return [
-        `${mode === "real" ? "📅 Calendar change" : "• Move"} “${safeDisplayText(effect.eventTitle)}”`,
-        `${safeDisplayText(effect.previousInterval)} → ${safeDisplayText(effect.resultingInterval)}`,
+        `${mode === "real" ? "📅 Move" : "• Move"} “${safeDisplayText(effect.eventTitle)}”`,
+        `from ${safeDisplayText(effect.previousInterval)}`,
+        `to ${safeDisplayText(effect.resultingInterval)}`,
       ];
     }
     if (effect.kind === "calendar.create_event") {
@@ -496,7 +497,7 @@ function cardText(
     }
     return effect.kind === "family.telegram_notification"
       ? [
-          `${mode === "real" ? "👤 Family update" : "• Send"} ${firstName(effect.recipientDisplayName)}:`,
+          `${mode === "real" ? "💬 Send" : "• Send"} ${firstName(effect.recipientDisplayName)} this message:`,
           `“${safeMultilineDisplayText(effect.body)}”`,
         ]
       : [
@@ -578,12 +579,12 @@ function cardText(
     ].join("\n");
   }
   return [
-    "Nothing has happened yet. Is this right?",
+    "Bander hasn’t done anything yet — please check:",
     "",
-    "OpenClaw says you asked:",
+    "Your assistant says you asked:",
     `“${safeDisplayText(card.claimedUserRequest)}”`,
     "",
-    "Through Bander, this will:",
+    "If you say yes, Bander will check the latest information. If it still matches, Bander will:",
     ...effects,
     "",
     ...(mode === "real"
@@ -598,10 +599,7 @@ function cardText(
               "No one else, no links, no attachment, and no extra message.",
             ]
       : includesCreate
-        ? [
-            "Not included:",
-            "No one will be invited. No recurring event or reservation will be created.",
-          ]
+        ? ["Only this goes on your calendar. No one is invited, nothing repeats, and nothing is booked anywhere."]
         : includesCancel
           ? [
               "Bander will not automatically restore this event after you approve.",
@@ -616,10 +614,10 @@ function cardText(
                     "It does not contact anyone or cancel the appointment itself.",
                   ]),
             ]
-          : ["Nothing else will change."]
+          : ["Bander won’t do anything else."]
       : ["Not included:", "• Any other events, messages or payments"]),
     "",
-    `Closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
+    `This closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
   ].join("\n");
 }
 
@@ -660,11 +658,11 @@ function receiptText(
           "Sent ✓",
           `To ${firstName(receipt.familyNotification.recipientDisplayName)}:`,
           `“${safeMultilineDisplayText(receipt.familyNotification.body)}”`,
-          "Telegram accepted the message; that does not prove it was read.",
+          "Telegram accepted the message. Bander cannot tell whether it was read.",
         ].join("\n")
       : receipt.familyNotification.status === "ambiguous"
-        ? `I couldn’t confirm whether ${firstName(receipt.familyNotification.recipientDisplayName)} received the message.\nI won’t send it again automatically.`
-        : `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected. No message was sent.`;
+        ? `Bander couldn’t confirm whether Telegram accepted the message.\nBander won’t send it again automatically.`
+        : `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected. Bander sent nothing.`;
   }
   if (!receipt.calendar) throw new Error("Calendar receipt is missing its Calendar result");
   if (mode === "hero") {
@@ -677,7 +675,7 @@ function receiptText(
           receipt.calendar.previous.endTime,
           receipt.calendar.timeZone,
         ),
-        "No one was messaged.",
+        "Bander didn’t message anyone.",
       ].join("\n");
     }
     return [
@@ -691,7 +689,7 @@ function receiptText(
             `💬 Sent ${firstName(receipt.message.recipientDisplayName)}:`,
             `“${safeDisplayText(receipt.message.body)}”`,
           ]
-        : ["No one was messaged."]),
+        : ["Bander didn’t message anyone."]),
     ].join("\n");
   }
   if (receipt.familyNotification) {
@@ -714,7 +712,7 @@ function receiptText(
                 receipt.calendar.timeZone,
               )}.`,
             ]),
-        `I couldn’t confirm whether ${firstName(receipt.familyNotification.recipientDisplayName)} received the update, so I won’t send it again automatically.`,
+        `Bander couldn’t confirm whether Telegram accepted the update for ${firstName(receipt.familyNotification.recipientDisplayName)}, so Bander won’t send it again automatically.`,
       ].join("\n");
     }
     if (receipt.familyNotification.status === "not_sent") {
@@ -736,7 +734,7 @@ function receiptText(
                 receipt.calendar.timeZone,
               )}.`,
             ]),
-        `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected, so no family update was sent.`,
+        `${firstName(receipt.familyNotification.recipientDisplayName)} was no longer connected, so Bander sent no family update.`,
       ].join("\n");
     }
     if ("removed" in receipt.calendar) {
@@ -750,8 +748,8 @@ function receiptText(
           receipt.calendar.previous.endTime,
           receipt.calendar.timeZone,
         ),
-        `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
-        "Nothing else changed through Bander.",
+        `Bander sent the exact approved message to ${firstName(receipt.familyNotification.recipientDisplayName)}.`,
+        "Bander changed nothing else.",
       ].join("\n");
     }
     if ("created" in receipt.calendar) {
@@ -765,8 +763,8 @@ function receiptText(
           receipt.calendar.completed.endTime,
           receipt.calendar.timeZone,
         ),
-        `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
-        "Nothing else changed through Bander.",
+        `Bander sent the exact approved message to ${firstName(receipt.familyNotification.recipientDisplayName)}.`,
+        "Bander changed nothing else.",
       ].join("\n");
     }
     return [
@@ -782,9 +780,10 @@ function receiptText(
         receipt.calendar.completed.startTime,
         receipt.calendar.completed.endTime,
         receipt.calendar.timeZone,
+        false,
       )}`,
-      `Sent ${firstName(receipt.familyNotification.recipientDisplayName)} the approved update.`,
-      "Nothing else changed through Bander.",
+      `Bander sent the exact approved message to ${firstName(receipt.familyNotification.recipientDisplayName)}.`,
+      "Bander changed nothing else.",
     ].join("\n");
   }
   if ("removed" in receipt.calendar) {
@@ -798,8 +797,8 @@ function receiptText(
         receipt.calendar.previous.endTime,
         receipt.calendar.timeZone,
       ),
-      "No one was contacted through the Calendar or Bander.",
-      "Nothing else changed through Bander.",
+      "Bander didn’t contact anyone.",
+      "Bander changed nothing else.",
     ].join("\n");
   }
   if ("created" in receipt.calendar) {
@@ -813,8 +812,7 @@ function receiptText(
         receipt.calendar.completed.endTime,
         receipt.calendar.timeZone,
       ),
-      "No one was invited or messaged through Bander.",
-      "Nothing else changed through Bander.",
+      "Bander didn’t invite or message anyone, and Bander changed nothing else.",
     ].join("\n");
   }
   return [
@@ -824,11 +822,12 @@ function receiptText(
       receipt.calendar.previous.startTime,
       receipt.calendar.previous.endTime,
       receipt.calendar.timeZone,
-    )} → ${formatCalendarIntervalWithContext(
-      receipt.calendar.completed.startTime,
-      receipt.calendar.completed.endTime,
-      receipt.calendar.timeZone,
-    )}`,
+      )} → ${formatCalendarIntervalWithContext(
+        receipt.calendar.completed.startTime,
+        receipt.calendar.completed.endTime,
+        receipt.calendar.timeZone,
+        false,
+      )}`,
     ...(receipt.message
       ? [
           `Sent ${firstName(receipt.message.recipientDisplayName)}:`,
@@ -836,10 +835,10 @@ function receiptText(
         ]
       : [
           mode === "real"
-            ? "No one was messaged through Bander."
+            ? "Bander didn’t message anyone."
             : "No messages were sent.",
         ]),
-    "Nothing else changed through Bander.",
+    "Bander changed nothing else.",
   ].join("\n");
 }
 
@@ -872,8 +871,8 @@ function refusalText(
 ): string {
   if (code === "draft_expired") {
     return mode === "hero"
-      ? "That request timed out, so I did nothing.\nAsk OpenClaw again if you still want it."
-      : "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again.";
+      ? "That request timed out, so Bander did nothing.\nAsk your assistant again if you still want it."
+      : "That request expired. Bander did nothing.\nAsk your assistant to prepare it again.";
   }
   if (code === "calendar_outcome_ambiguous") {
     const includesFamily = card.effectPreviews.some(
@@ -887,65 +886,65 @@ function refusalText(
     );
     return [
       includesCreate
-        ? "I couldn’t confirm whether the event was added."
+        ? "Bander couldn’t confirm whether the event was added."
         : includesCancel
-          ? "I couldn’t confirm whether the event was removed."
-          : "I couldn’t confirm whether your calendar changed.",
-      ...(includesFamily ? ["No family update was sent."] : []),
+          ? "Bander couldn’t confirm whether the event was removed."
+          : "Bander couldn’t confirm whether your calendar changed.",
+      ...(includesFamily ? ["Bander sent no family update."] : []),
       includesCreate
-        ? "I won’t try to add it again automatically."
+        ? "Bander won’t try to add it again automatically."
         : includesCancel
-          ? "I won’t try to remove it again automatically."
-          : "I won’t try this request again automatically.",
-      "Please check your calendar before asking OpenClaw again.",
+          ? "Bander won’t try to remove it again automatically."
+          : "Bander won’t try this request again automatically.",
+      "Please check your calendar before asking your assistant again.",
     ].join("\n");
   }
   if (code === "email_outcome_ambiguous") {
     return [
-      "I couldn’t confirm whether the approved email reply was sent.",
-      "I won’t send it again automatically.",
-      "Please check your Sent folder before asking OpenClaw again.",
+      "Bander couldn’t confirm whether the approved email reply was sent.",
+      "Bander won’t send it again automatically.",
+      "Please check your Sent folder before asking your assistant again.",
     ].join("\n");
   }
   if (code === "family_outcome_ambiguous") {
     return [
-      "I couldn’t confirm whether the approved family message was sent.",
-      "I won’t send it again automatically.",
-      "Please check with your family member before asking OpenClaw again.",
+      "Bander couldn’t confirm whether Telegram accepted the approved family message.",
+      "Bander won’t send it again automatically.",
+      "Please check with your family member before asking your assistant again.",
     ].join("\n");
   }
   if (code === "email_thread_changed") {
     return [
-      "I stopped—the email conversation changed since Bander prepared this reply.",
-      "I didn’t send the email.",
-      "Ask OpenClaw to check the latest message before replying again.",
+      "Bander stopped—the email conversation changed since this reply was prepared.",
+      "Bander didn’t send the email.",
+      "Ask your assistant to check the latest message before replying again.",
     ].join("\n");
   }
   if (code === "email_send_rejected") {
-    return "I couldn’t send that reply because the email service rejected it. Nothing was sent.";
+    return "Bander couldn’t send that reply because the email service rejected it. Bander sent nothing.";
   }
   if (code === "calendar_event_already_absent") {
     const includesFamily = card.effectPreviews.some(
       (effect) => effect.kind === "family.telegram_notification",
     );
     return [
-      "I stopped—the event was already gone from the calendar.",
+      "Bander stopped—the event was already gone from the calendar.",
       includesFamily
-        ? "I didn’t remove anything or send a family update."
-        : "I didn’t remove anything.",
-      "Ask OpenClaw to check again if needed.",
+        ? "Bander didn’t remove anything or send a family update."
+        : "Bander didn’t remove anything.",
+      "Ask your assistant to check again if needed.",
     ].join("\n");
   }
   if (code === "calendar_create_rejected") {
-    return "I couldn’t add that because the calendar service rejected it. Nothing was added.";
+    return "Bander couldn’t add that because the calendar service rejected it. Bander added nothing.";
   }
   if (code === "calendar_cancel_rejected") {
-    return "I couldn’t remove that because the calendar service rejected it. Nothing was removed.";
+    return "Bander couldn’t remove that because the calendar service rejected it. Bander removed nothing.";
   }
   if (code !== "conflict") {
     return [
-      "I couldn’t confirm whether that request completed.",
-      "Please check the affected service before asking OpenClaw again.",
+      "Bander couldn’t confirm whether that request completed.",
+      "Please check the affected service before asking your assistant again.",
     ].join("\n");
   }
   if (mode === "real") {
@@ -956,15 +955,15 @@ function refusalText(
       (effect) => effect.kind === "calendar.cancel_event",
     );
     return [
-      "I stopped—your calendar changed since you asked.",
+      "I stopped — your calendar changed since you asked.",
       includesFamily
         ? includesCancel
-          ? "I didn’t remove the event or send a family update."
-          : "Nothing was moved, and no family update was sent."
+          ? "Bander removed nothing and sent nothing."
+          : "Bander moved nothing and sent nothing."
         : includesCancel
-          ? "I didn’t remove the event."
-          : "Nothing was moved.",
-      "Ask OpenClaw to check again.",
+          ? "Bander removed nothing."
+          : "Bander moved nothing.",
+      "Ask your assistant to check again.",
     ].join("\n");
   }
   const includesMessage = card.effectPreviews.some(
@@ -1027,18 +1026,18 @@ function terminalCallbackText(
     return "Calendar rejected the removal. Nothing was removed.";
   }
   if (code === "draft_expired") {
-    return "That request expired. Nothing happened.";
+    return "That request expired. Bander did nothing.";
   }
   if (code === "conflict") {
-    return "Stopped safely. Nothing changed through Bander.";
+    return "Bander stopped because the latest information changed.";
   }
   return "Bander could not confirm the outcome. Please check before trying again.";
 }
 
 function declineText(mode: TelegramCopyMode): string {
   return mode === "hero"
-    ? "Nothing changed."
-    : "Nothing changed.\nAsk OpenClaw again if you want something different.";
+    ? "Bander did nothing."
+    : "Bander did nothing.\nAsk your assistant again if you want something different.";
 }
 
 function standingOutcomeText(
@@ -1062,9 +1061,10 @@ function standingOutcomeText(
       receipt.calendar.completed.startTime,
       receipt.calendar.completed.endTime,
       receipt.calendar.timeZone,
+      false,
     )}`,
     "",
-    "No one was messaged.",
+    "Bander didn’t message anyone.",
     `${actionsUsed} of ${maxActions} automatic moves used today.`,
   ].join("\n");
 }
@@ -2402,7 +2402,7 @@ export class TelegramService {
           );
           return;
         }
-        await this.#api.answerCallback(callback.id, "That request expired. Nothing happened.");
+        await this.#api.answerCallback(callback.id, "That request expired. Bander did nothing.");
         return;
       }
       if (binding.lifecycle === "declined") {
@@ -2423,11 +2423,11 @@ export class TelegramService {
             };
             this.#store.write(delivered);
           }
-          await this.#api.answerCallback(callback.id, "Nothing changed.");
+          await this.#api.answerCallback(callback.id, "Bander did nothing.");
         } else {
           await this.#api.answerCallback(
             callback.id,
-            "You already chose Not now. Nothing happened.",
+            "You already chose Not now. Bander did nothing.",
           );
         }
         return;
@@ -2502,7 +2502,7 @@ export class TelegramService {
         this.#store.write(delivered);
         await this.#api.answerCallback(
           callback.id,
-          result.status === "declined" ? "Nothing changed." : "Stopped.",
+          result.status === "declined" ? "Bander did nothing." : "Stopped.",
         );
         return;
       }
@@ -2654,7 +2654,7 @@ export class TelegramService {
           if (!currentBinding || currentBinding.expiryDeliveredAt) return;
           await this.#api.sendMessage(
             binding.chatId,
-            "That request expired. Nothing happened.\nAsk OpenClaw to prepare it again.",
+            "That request expired. Bander did nothing.\nAsk your assistant to prepare it again.",
           );
           const delivered = this.#store.read();
           const deliveredIndex = delivered.standingCandidates.findIndex(
@@ -2678,7 +2678,7 @@ export class TelegramService {
           await deliverExpiry();
           await this.#api.answerCallback(
             callback.id,
-            "That request expired. Nothing happened.",
+            "That request expired. Bander did nothing.",
           );
           return;
         }
@@ -2687,7 +2687,7 @@ export class TelegramService {
           await deliverExpiry();
           await this.#api.answerCallback(
             callback.id,
-            "That request expired. Nothing happened.",
+            "That request expired. Bander did nothing.",
           );
           return;
         }
@@ -2838,7 +2838,7 @@ export class TelegramService {
             await this.#api.answerCallback(
               callback.id,
               error.code === "standing_candidate_expired"
-                ? "That request expired. Nothing happened."
+                ? "That request expired. Bander did nothing."
                 : "That automatic request no longer matches what you reviewed.",
             );
             return;

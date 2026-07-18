@@ -371,7 +371,7 @@ describe("real Calendar event creation", () => {
     expect(card.effectPreviews).toEqual([{
       kind: "calendar.create_event",
       eventTitle: "Lunch with Ruth",
-      resultingInterval: "Tue, Jul 21, 12:00–1:00 PM MDT",
+      resultingInterval: "Tuesday, Jul 21, 12:00–1:00 PM (Mountain time)",
     }]);
     const first = await engine.approveAndExecute(card.draftId, card.draftHash);
     const replay = await engine.approveAndExecute(card.draftId, card.draftHash);

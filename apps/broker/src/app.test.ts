@@ -835,7 +835,7 @@ describe("broker approval boundary", () => {
       expect(JSON.parse(text)).toEqual({ status: "temporarily_unavailable" });
       expect(text).not.toMatch(/provider|model|API|error/i);
       expect(delivered).toEqual([
-        "I couldn’t prepare that safely just now. Nothing happened. Please try again in a moment.",
+        "I couldn’t prepare that safely just now. Bander didn’t do anything. Please try again in a moment.",
       ]);
       expect(proposeFixture).not.toHaveBeenCalled();
       expect(setup.adapter.executions).toBe(0);

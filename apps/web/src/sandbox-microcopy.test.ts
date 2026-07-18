@@ -50,7 +50,8 @@ describe("final sandbox microcopy", () => {
   });
 
   it("keeps create and cancellation as secondary product journeys", () => {
-    expect(source).toContain("Add or remove something from the Calendar");
+    expect(source).toContain("Add an event");
+    expect(source).toContain("Remove an event");
     expect(source).toContain('"add-lunch-with-ruth-and-notify-gil"');
     expect(source).toContain('"cancel-dentist-and-notify-gil"');
     expect(source).toContain('cancels ? "Remove this event" : "Do exactly this"');
