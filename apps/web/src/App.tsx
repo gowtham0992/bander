@@ -9,6 +9,8 @@ import type {
 } from "@bander/contracts";
 import { createDemoBackend } from "./backend/index.js";
 import { R2_PRESENTATION_BEAT_MS, familyThreadWorldPresentation, initialFamilyThreadState, reduceFamilyThread } from "./family-thread-state.js";
+import { initialProductSurfaceState, reduceProductSurface } from "./family-thread-surfaces.js";
+import { ComparisonThread, ProofDrawer, SetupRail, WorldDetailSheet } from "./family-thread-surface-view.js";
 
 const demoBackend = createDemoBackend();
 
@@ -562,6 +564,8 @@ function WorldObject({
   active = false,
   unconfirmed = false,
   message,
+  onOpen,
+  openLabel,
 }: {
   kind: "calendar" | "inbox" | "phone";
   title: string;
@@ -569,14 +573,16 @@ function WorldObject({
   active?: boolean;
   unconfirmed?: boolean;
   message?: string;
+  onOpen: () => void;
+  openLabel: string;
 }) {
   return (
-    <article className="world-object" data-active={active || undefined} data-unconfirmed={unconfirmed || undefined} aria-label={`${title}: ${detail}`}>
+    <button className="world-object" type="button" onClick={onOpen} data-active={active || undefined} data-unconfirmed={unconfirmed || undefined} aria-label={openLabel}>
       <span className="world-glyph"><WorldGlyph kind={kind} /></span>
       <span className="world-copy"><strong>{title}</strong><small>{detail}</small></span>
       {message && <pre className="world-message">{message}</pre>}
       <span className="world-seeded">SANDBOX</span>
-    </article>
+    </button>
   );
 }
 
@@ -584,6 +590,7 @@ type FamilyThreadDeal = "email" | "compound" | "conflict" | "uncertainty";
 
 function FamilyThread() {
   const [flow, dispatch] = useReducer(reduceFamilyThread, initialFamilyThreadState);
+  const [surface, surfaceDispatch] = useReducer(reduceProductSurface, initialProductSurfaceState);
   const [card, setCard] = useState<ApprovalCard | null>(null);
   const [state, setState] = useState<DemoSandboxState | null>(null);
   const [ambiguousMessage, setAmbiguousMessage] = useState("");
@@ -862,9 +869,9 @@ function FamilyThread() {
 
         <aside className="world-dock" aria-label="Seeded outside world">
           <p className="world-heading">Beyond the Line</p>
-          <WorldObject kind="calendar" title="Calendar" detail={compoundCalendarCrossed && drRaoEvent ? "Dr. Rao · Thu 2 PM" : held ? "Result unconfirmed" : "No Bander change"} active={compoundCalendarCrossed} unconfirmed={held} />
-          <WorldObject kind="inbox" title="Inbox" detail={emailConfirmed ? "Sent ✓" : latestInbox ? "1 message" : "Seeded mail"} active={emailConfirmed} />
-          <WorldObject kind="phone" title="Gil’s phone" detail={compoundPhoneCrossed ? "Update sent" : held ? "No update sent" : "Quiet"} active={compoundPhoneCrossed} {...(compoundPhoneCrossed && familyUpdate ? { message: familyUpdate.body } : {})} />
+          <WorldObject kind="calendar" title="Calendar" detail={compoundCalendarCrossed && drRaoEvent ? "Dr. Rao · Thu 2 PM" : held ? "Result unconfirmed" : "No Bander change"} active={compoundCalendarCrossed} unconfirmed={held} onOpen={() => surfaceDispatch({ type: "open_world", world: "calendar" })} openLabel="Open seeded Calendar details" />
+          <WorldObject kind="inbox" title="Inbox" detail={emailConfirmed ? "Sent ✓" : latestInbox ? "1 message" : "Seeded mail"} active={emailConfirmed} onOpen={() => surfaceDispatch({ type: "open_world", world: "inbox" })} openLabel="Open seeded Sent Mail details" />
+          <WorldObject kind="phone" title="Gil’s phone" detail={compoundPhoneCrossed ? "Update sent" : held ? "No update sent" : "Quiet"} active={compoundPhoneCrossed} {...(compoundPhoneCrossed && familyUpdate ? { message: familyUpdate.body } : {})} onOpen={() => surfaceDispatch({ type: "open_world", world: "phone" })} openLabel="Open seeded Gil update details" />
         </aside>
 
         {compoundPhoneCrossed && familyUpdate && <article className="mobile-phone-light" aria-label="Exact approved sandbox update sent to Gil"><span>Gil’s phone · sandbox</span><pre>{familyUpdate.body}</pre></article>}
@@ -873,6 +880,15 @@ function FamilyThread() {
       </div>
 
       {cardActive && card && <div className="deal-modal-backdrop"><div ref={dialogRef} className="deal-modal" role="dialog" aria-modal="true" aria-label={`Exact Bander ${waitingDeal} deal`} onKeyDown={trapDialogFocus}><DealCard card={card} embedded busy={busy} onApprove={approve} onDecline={decline} onChange={decline} showChange={false} /></div></div>}
+
+      <section className="thread-continuation" aria-label="Explore Bander">
+        <button className="proof-drawer-trigger" onClick={() => surfaceDispatch({ type: "open_proof" })}><span aria-hidden="true">27</span>All 27 verified outcomes <b aria-hidden="true">→</b></button>
+        <ComparisonThread stage={surface.comparison} onOpen={() => surfaceDispatch({ type: "open_comparison" })} onNext={() => surfaceDispatch({ type: "next_comparison_beat" })} onFull={() => surfaceDispatch({ type: "open_full_comparison" })} />
+        <SetupRail active={surface.setupStation} onOpen={(stationId) => surfaceDispatch({ type: "open_setup", stationId })} onClose={() => surfaceDispatch({ type: "close_setup" })} />
+      </section>
+
+      {surface.proof !== "closed" && <ProofDrawer mode={surface.proof === "comparison" ? "comparison" : "outcomes"} onClose={() => surfaceDispatch({ type: "close_proof" })} />}
+      {surface.worldSheet && <WorldDetailSheet world={surface.worldSheet} calendarDetail={compoundCalendarCrossed && drRaoEvent ? `Appointment with Dr. Rao · Thu · ${formatReceiptInterval(drRaoEvent, drRaoEvent.timeZone)} MDT` : held ? "The provider result is unconfirmed" : "No Bander Calendar change"} inboxDetail={emailConfirmed ? "The exact approved reply is in seeded Sent Mail" : latestInbox ? "One seeded message from Dr. Rao’s office" : "No seeded message loaded"} phoneDetail={compoundPhoneCrossed ? "Exact approved update sent" : "No family update sent"} {...(compoundPhoneCrossed && familyUpdate ? { phoneMessage: familyUpdate.body } : {})} onClose={() => surfaceDispatch({ type: "close_world" })} />}
     </main>
   );
 }

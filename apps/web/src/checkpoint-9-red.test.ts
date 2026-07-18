@@ -6,8 +6,9 @@ describe("Checkpoint 9 public-surface truthfulness", () => {
 
   it("email_success_claims_only_the_email_effect", () => {
     expect(source).toContain(
-      "{screen.receipt.familyNotification && <p>Gil’s phone received the exact text shown on the Card.</p>}",
+      "{screen.receipt.familyNotification && <p>Bander sent the exact approved update to Gil.</p>}",
     );
+    expect(source).not.toMatch(/Gil(?:’s phone)?[^\n<]{0,100}\b(?:received|got|read|saw)\b/i);
     expect(source).toContain("screen.receipt.emailReply ? (");
   });
 

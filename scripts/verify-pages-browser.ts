@@ -75,6 +75,31 @@ async function reload(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 120));
 }
 
+async function capture(path: string): Promise<void> {
+  const screenshot = await command<{ data: string }>("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  fs.writeFileSync(path, Buffer.from(screenshot.data, "base64"), { mode: 0o600 });
+}
+
+async function assertSettledProofDrawer(label: string): Promise<{ opacity: string; background: string; headingContrast: number; rowContrast: number }> {
+  await new Promise((resolve) => setTimeout(resolve, 320));
+  const result = await evaluate<{ opacity: string; background: string; backgroundAlpha: number; headingContrast: number; rowContrast: number }>(`(()=>{
+    const drawer=document.querySelector(".proof-drawer");
+    const heading=drawer?.querySelector("h2");
+    const row=drawer?.querySelector(".proof-list a span");
+    if(!drawer||!heading||!row)return{opacity:"missing",background:"missing",backgroundAlpha:0,headingContrast:0,rowContrast:0};
+    const style=getComputedStyle(drawer);
+    const channels=(value)=>{const parts=value.match(/[\\d.]+/g)?.map(Number)??[];return{r:parts[0]??0,g:parts[1]??0,b:parts[2]??0,a:parts[3]??1}};
+    const luminance=(value)=>{const color=channels(value);const linear=[color.r,color.g,color.b].map(channel=>{const normalized=channel/255;return normalized<=.04045?normalized/12.92:Math.pow((normalized+.055)/1.055,2.4)});return .2126*linear[0]+.7152*linear[1]+.0722*linear[2]};
+    const contrast=(foreground,background)=>{const first=luminance(foreground);const second=luminance(background);return (Math.max(first,second)+.05)/(Math.min(first,second)+.05)};
+    const background=style.backgroundColor;
+    return{opacity:style.opacity,background,backgroundAlpha:channels(background).a,headingContrast:contrast(getComputedStyle(heading).color,background),rowContrast:contrast(getComputedStyle(row).color,background)};
+  })()`);
+  if (result.opacity !== "1" || result.backgroundAlpha < 1 || result.headingContrast < 4.5 || result.rowContrast < 4.5) {
+    throw new Error(`${label} Proof Drawer did not settle into an opaque, readable surface: ${JSON.stringify(result)}`);
+  }
+  return result;
+}
+
 try {
   await command("Page.enable");
   await command("Runtime.enable");
@@ -166,6 +191,9 @@ try {
   if (!(await waitFor(`document.querySelector(".family-thread-shell")?.classList.contains("stage-uncertainty_held")`))) throw new Error("The existing typed ambiguity path did not Hold at the Line");
   const heldState = await evaluate<{ unconfirmed: boolean; calendarActive: boolean; phoneActive: boolean; marker: boolean; retry: boolean; falseCertainty: boolean; focusOutline: string }>(`(()=>{const outcome=document.querySelector(".held-outcome");const text=outcome?.textContent?.toLowerCase()??"";return{unconfirmed:document.querySelectorAll(".world-object")[0]?.hasAttribute("data-unconfirmed")??false,calendarActive:document.querySelectorAll(".world-object")[0]?.hasAttribute("data-active")??false,phoneActive:document.querySelectorAll(".world-object")[2]?.hasAttribute("data-active")??false,marker:Boolean(document.querySelector('.deal-marker[data-marker-state="held"]')),retry:[...document.querySelectorAll("button")].some(button=>/retry|try again/i.test(button.textContent??"")),falseCertainty:text.includes("nothing changed")||text.includes("done ✓"),focusOutline:outcome?getComputedStyle(outcome).outlineStyle:"missing"}})()`);
   if (!heldState.unconfirmed || heldState.calendarActive || heldState.phoneActive || !heldState.marker || heldState.retry || heldState.falseCertainty || heldState.focusOutline !== "none") throw new Error(`Hold did not preserve the unknown terminal truth: ${JSON.stringify(heldState)}`);
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await evaluate(`document.querySelector(".held-outcome")?.scrollIntoView({block:"center",inline:"nearest"});window.scrollTo({left:0})`);
+  await capture("/private/tmp/bander-r34-desktop-complete-thread.png");
   await new Promise((resolve) => setTimeout(resolve, 350));
   if (!(await evaluate<string>(`document.querySelector(".family-thread-shell")?.className??""`)).includes("stage-uncertainty_held")) throw new Error("The held state retried or advanced automatically");
 
@@ -210,6 +238,55 @@ try {
 
   await command("Page.navigate", { url: `${origin}/bander/` });
   await new Promise((resolve) => setTimeout(resolve, 120));
+
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await reload();
+  const proofTrigger = await evaluate<boolean>(`(()=>{const button=document.querySelector(".proof-drawer-trigger");button?.focus();button?.click();return Boolean(button)})()`);
+  if (!proofTrigger || !(await waitFor(`Boolean(document.querySelector(".proof-drawer[role=dialog]"))`))) throw new Error("The R3 proof drawer did not open from its one quiet control");
+  const desktopProofSurface = await assertSettledProofDrawer("Desktop");
+  const proof = await evaluate<{ links: number; groups: number; routes: string[]; focus: string; viewport: boolean; oldGrid: boolean }>(`(()=>{const drawer=document.querySelector(".proof-drawer");const box=drawer?.getBoundingClientRect();return{links:drawer?.querySelectorAll("[data-proof-route]").length??0,groups:drawer?.querySelectorAll(".proof-groups section").length??0,routes:[...drawer?.querySelectorAll("[data-proof-route]")??[]].map(link=>link.getAttribute("data-proof-route")??""),focus:document.activeElement?.getAttribute("aria-label")??"",viewport:Boolean(box&&box.height>=innerHeight-1),oldGrid:Boolean(document.querySelector(".behavior-grid,.lane-grid,.setup-steps,.comparison-table"))}})()`);
+  const expectedRoutes = ["schedule","inbox","exact","conflict","compound","ambiguous","create","cancel","cancel-conflict","email","email-thread","email-ambiguous","direct-family","standing"];
+  if (proof.links !== 27 || proof.groups !== 5 || !expectedRoutes.every((route) => proof.routes.includes(route)) || proof.focus !== "Close drawer" || !proof.viewport || proof.oldGrid) throw new Error(`The R3 proof drawer is incomplete: ${JSON.stringify(proof)}`);
+  await capture("/private/tmp/bander-r34-desktop-proof-drawer.png");
+  await key("Escape", "Escape", 27);
+  if (!(await waitFor(`!document.querySelector(".proof-drawer") && document.activeElement?.classList.contains("proof-drawer-trigger")`))) throw new Error("Escape did not close the proof drawer and restore focus");
+
+  await evaluate(`document.querySelector(".comparison-question")?.click()`);
+  const comparisonBeat1 = await evaluate<string>(`document.querySelector(".comparison-beat")?.getAttribute("data-comparison-stage")??""`);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  const comparisonHandsOff = await evaluate<string>(`document.querySelector(".comparison-beat")?.getAttribute("data-comparison-stage")??""`);
+  if (comparisonBeat1 !== "beat_1" || comparisonHandsOff !== "beat_1") throw new Error("The R4 comparison advanced without the visitor");
+  await evaluate(`document.querySelector(".comparison-beat button")?.click()`);
+  if (!(await waitFor(`document.querySelector(".comparison-beat")?.getAttribute("data-comparison-stage")==="beat_2"`))) throw new Error("The R4 comparison did not reach beat two");
+  await evaluate(`document.querySelector(".comparison-thread")?.scrollIntoView({block:"center",inline:"nearest"});window.scrollTo({left:0})`);
+  await capture("/private/tmp/bander-r34-desktop-comparison-beat2.png");
+  await evaluate(`document.querySelector(".comparison-beat button")?.click()`);
+  await evaluate(`document.querySelector(".comparison-beat button")?.click()`);
+  if (!(await waitFor(`document.querySelector(".comparison-beat")?.getAttribute("data-comparison-stage")==="complete"`))) throw new Error("The R4 comparison did not complete through visitor controls");
+  await evaluate(`document.querySelector(".comparison-beat button")?.click()`);
+  if (!(await waitFor(`document.querySelector(".proof-drawer")?.textContent?.includes("Who holds the Google and Gmail credentials?")`))) throw new Error("The full five-row comparison did not open in the drawer");
+  await key("Escape", "Escape", 27);
+
+  await evaluate(`document.querySelectorAll(".setup-track > button")[2]?.click()`);
+  if (!(await waitFor(`Boolean(document.querySelector(".setup-dialog[role=dialog]"))`))) throw new Error("The R4 setup station did not open its static detail");
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  const setupDetail = await evaluate<{ external: string; anchor: string; focus: string; stations: number }>(`(()=>{const link=document.querySelector(".setup-dialog .setup-guide-link");return{external:link?.getAttribute("target")??"",anchor:link?.getAttribute("href")??"",focus:document.activeElement?.getAttribute("aria-label")??"",stations:document.querySelectorAll(".setup-track > button").length}})()`);
+  if (setupDetail.external !== "_blank" || !setupDetail.anchor.endsWith("#4-configure-separate-narrow-google-desktop-oauth-clients") || setupDetail.focus !== "Close setup detail" || setupDetail.stations !== 5) throw new Error(`The R4 setup rail is incomplete: ${JSON.stringify(setupDetail)}`);
+  await capture("/private/tmp/bander-r34-desktop-setup-modal.png");
+  await key("Escape", "Escape", 27);
+
+  await evaluate(`document.querySelector(".family-stage")?.scrollIntoView({block:"start"})`);
+  await capture("/private/tmp/bander-r34-desktop-main-thread.png");
+
+  for (const route of expectedRoutes) {
+    await command("Page.navigate", { url: `${origin}/bander/?scenario=${route}` });
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    const routeState = await evaluate<{ failed: boolean; content: boolean }>(`({failed:document.body.textContent.includes("This demo step reset itself"),content:Boolean(document.querySelector(".deal-card,.read-result,.standing-card"))})`);
+    if (routeState.failed || !routeState.content) throw new Error(`Direct scenario route ${route} did not survive refresh: ${JSON.stringify(routeState)}`);
+  }
+
+  await command("Page.navigate", { url: `${origin}/bander/` });
+  await new Promise((resolve) => setTimeout(resolve, 120));
   for (const [width, height] of [[1440, 900], [1280, 720], [500, 900], [375, 812]] as const) {
     await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 });
     await reload();
@@ -222,6 +299,29 @@ try {
   }
 
   await command("Emulation.setDeviceMetricsOverride", { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
+  await reload();
+  await evaluate(`document.querySelector(".proof-drawer-trigger")?.click()`);
+  await waitFor(`Boolean(document.querySelector(".proof-drawer"))`);
+  const mobileProofSurface = await assertSettledProofDrawer("Mobile");
+  await capture("/private/tmp/bander-r34-mobile-proof-drawer.png");
+  await key("Escape", "Escape", 27);
+  await evaluate(`document.querySelector(".comparison-question")?.click()`);
+  await evaluate(`document.querySelector(".comparison-beat button")?.click()`);
+  await waitFor(`document.querySelector(".comparison-beat")?.getAttribute("data-comparison-stage")==="beat_2"`);
+  await evaluate(`document.querySelector(".comparison-thread")?.scrollIntoView({block:"center",inline:"nearest"});window.scrollTo({left:0})`);
+  await capture("/private/tmp/bander-r34-mobile-comparison-beat2.png");
+  await evaluate(`document.querySelectorAll(".setup-track > button")[3]?.click()`);
+  await waitFor(`Boolean(document.querySelector(".setup-dialog"))`);
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  await capture("/private/tmp/bander-r34-mobile-setup-modal.png");
+  await key("Escape", "Escape", 27);
+  await evaluate(`document.querySelector('.world-object[aria-label="Open seeded Calendar details"]')?.click()`);
+  if (!(await waitFor(`Boolean(document.querySelector(".world-sheet"))`))) throw new Error("The mobile seeded world dock did not raise its detail sheet");
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  const mobileWorld = await evaluate<{ minTarget: number; seeded: boolean; obstructed: boolean }>(`(()=>{const targets=[...document.querySelectorAll(".world-dock button")];const sheet=document.querySelector(".world-sheet")?.getBoundingClientRect();return{minTarget:Math.min(...targets.map(target=>Math.min(target.getBoundingClientRect().width,target.getBoundingClientRect().height))),seeded:document.querySelector(".world-sheet")?.textContent?.includes("SANDBOX")??false,obstructed:Boolean(sheet&&sheet.bottom>innerHeight)}})()`);
+  if (mobileWorld.minTarget < 44 || !mobileWorld.seeded || mobileWorld.obstructed) throw new Error(`The mobile world sheet is inaccessible or obscured: ${JSON.stringify(mobileWorld)}`);
+  await capture("/private/tmp/bander-r34-mobile-world-sheet.png");
+  await key("Escape", "Escape", 27);
   await reload();
   await evaluate(`document.querySelector('[aria-label="Tap to ask — you drive everything here."]')?.click()`);
   if (!(await waitFor(`Boolean(document.querySelector(".suggested-message"))`))) throw new Error("The 375px Card journey did not reach the suggested parent message");
@@ -241,7 +341,8 @@ try {
 
   const finalExternalRequests = requests.filter((url) => new URL(url).origin !== origin);
   if (finalExternalRequests.length > 0) throw new Error("The complete R2 Pages journey made an external network request");
-  console.log("Pages browser QA verified: R1 plus visitor-controlled Cross/Return/Hold, Calendar-before-phone presentation, compound decline, exact family text, truthful conflict/ambiguity states, visible non-interactive focus suppression, mobile Card hierarchy, scoped axe checks, direct-route replay safety, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.");
+  console.log(`Settled Proof Drawer verified: desktop ${JSON.stringify(desktopProofSurface)}, mobile ${JSON.stringify(mobileProofSurface)}.`);
+  console.log("Pages browser QA verified: R1/R2 Cross/Return/Hold plus the 27-outcome proof drawer, fair visitor-controlled comparison, five-station setup rail, persistent seeded world details, all 14 direct routes, focus/Escape restoration, mobile sheets and targets, scoped axe checks, zero external requests, and 1440×900 / 1280×720 / 500×900 / 375×812 layouts.");
 } finally {
   socket.close();
 }
