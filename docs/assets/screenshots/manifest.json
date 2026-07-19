@@ -55,6 +55,41 @@
       "file": "story-gil-full.png",
       "caption": "Gil's phone with the Bander bot header visible: a separate device, Bander's own identity, exactly the approved sentence.",
       "sources": ["real family-contact Telegram capture"]
+    },
+    {
+      "file": "gallery-story-full-changed-world.png",
+      "caption": "3:2 gallery variant of the changed-world thread capture.",
+      "sources": ["real protected-group Telegram capture"]
+    },
+    {
+      "file": "gallery-story-full-flow.png",
+      "caption": "3:2 gallery variant of the full success-loop thread capture.",
+      "sources": ["real protected-group Telegram capture"]
+    },
+    {
+      "file": "gallery-story-gil-phone.png",
+      "caption": "3:2 gallery variant of Gil's phone receiving the approved sentence.",
+      "sources": ["real family-contact Telegram capture"]
+    },
+    {
+      "file": "gallery-pages-approved.png",
+      "caption": "The browser sandbox after one approved deal; the page's own seeded-data disclosure is visible in frame.",
+      "sources": ["built Pages sandbox capture"]
+    },
+    {
+      "file": "gallery-pages-comparison.png",
+      "caption": "The sandbox's why-now block and fair-question stepper; seeded sandbox surface.",
+      "sources": ["built Pages sandbox capture"]
+    },
+    {
+      "file": "../media/sandbox-episode.gif",
+      "caption": "The guided sandbox episode in motion: ask, approve the exact deal, calendar and Gil's phone respond. Seeded data; disclosure ribbon visible in frame.",
+      "sources": ["built Pages sandbox capture"]
+    },
+    {
+      "file": "../media/real-telegram-flow.gif",
+      "caption": "Beat sequence of real Telegram captures: request, exact approval Card, truthful outcome, and the approved sentence on Gil's phone. Each frame is a labeled real capture; no simulated motion.",
+      "sources": ["real owner Telegram capture", "real family-contact Telegram capture"]
     }
   ]
 }

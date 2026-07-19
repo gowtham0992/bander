@@ -14,6 +14,10 @@ Your assistant can read your calendar and mail and talk like a person. Bander ho
 
 The browser is a deterministic, seeded product experience. It cannot contact Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts.
 
+<!-- demo-video-link: insert public YouTube URL here before submission -->
+
+![Real Telegram, fictional data: one request becomes one exact approval Card, one truthful outcome, and the exact approved sentence on Gil's phone](docs/assets/media/real-telegram-flow.gif)
+
 ## Judge quickstart
 
 ```bash
@@ -176,6 +180,8 @@ npm run real
 ## Deterministic browser sandbox
 
 The hosted and local browser experiences use the shared production authority engine, contracts, canonical SHA-256 hashing, and Card renderer against versioned fictional fixtures. They never claim to touch real services.
+
+![The guided sandbox episode: ask freely, approve one exact deal, and watch the seeded calendar and Gil's phone update — nothing advances without a tap](docs/assets/media/sandbox-episode.gif)
 
 ```bash
 npm run demo
