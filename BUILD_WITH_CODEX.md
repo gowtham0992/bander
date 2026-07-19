@@ -2676,3 +2676,47 @@ this presentation checkpoint. The transcript hashes remain
 `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
 both files remain ignored, untracked, and untouched. `/feedback`, parent
 testing, filming, submission, and a release tag remain deferred.
+
+## 2026-07-18 — Why now: GPT-5.6 Sol narrative
+
+**Status:** implemented and verified locally; public deployment check pending
+
+The current Pages surface, README, and product source of truth now make one
+carefully separated claim: GPT-5.6 Sol supplies reliable bounded interpretation
+of imperfect family language, while Bander supplies the trust boundary. The
+Pages narrative appears immediately before the fair OpenClaw comparison as a
+plain, non-interactive block. README links the claim to the existing live probe
+evidence, and the Build Plan states explicitly that model capability and system
+trust are separate claims. No surface says that Sol is safe, injection-immune,
+or the source of Bander's authority.
+
+The focused coherence test was written first and observed red because none of
+the three surfaces carried the new narrative. After implementation it passed
+5/5. The requested deliberate mutation then removed the frontier-fit sentence
+from README; the same test failed on the missing threshold marker and returned
+to 5/5 after restoration. The built Pages JavaScript contains both the kicker
+and the trust-separation sentence. Desktop 1440×900 and mobile 375×812 browser
+inspection found one visible narrative block, natural wrapping, no horizontal
+overflow, and the intended ordering before `THE FAIR QUESTION`.
+
+The complete local functional run passed 51 files and 531 cases; the
+adversarial run passed 3 files and 26 cases; the deterministic verifier passed
+all 27 outcomes; the Pages artifact verified 10 files plus all 14 direct
+scenario destinations and 3 browser/server parity cases; typecheck and both
+production/Pages builds passed; the one-time HTTP recovery verifier passed;
+the dependency audit found zero vulnerabilities; the tracked/proposed secret
+scan found no matches; and offline doctor reported 11 PASS, 2 expected WARN,
+and 0 FAIL. A stale Checkpoint 11 assertion exposed by the prior screenshot
+capture commits expected exactly four reviewed assets even though the privacy
+manifest now contains ten; it was narrowed to the actual invariant that every
+curated public asset is present in the manually reviewed manifest.
+
+Standing-recovery and isolated OpenClaw verification could not be rerun in this
+session because their required local IPC/loopback processes were denied after
+the execution-approval service reached its usage limit. No product failure was
+observed, and no workaround or boundary change was made. Commit, push, public
+Pages deployment, and the signed-out desktop/mobile check remain pending until
+those execution permissions are available. The transcript hashes remain
+`7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557` and
+`75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
+both files remain ignored, untracked, and untouched.

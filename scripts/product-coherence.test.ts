@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 describe("current public product claims", () => {
   const plan = fs.readFileSync("Bander_Build_Plan.md", "utf8");
   const readme = fs.readFileSync("README.md", "utf8");
+  const pages = fs.readFileSync("apps/web/src/App.tsx", "utf8");
 
   it("keeps the product source of truth on the five-tool real product", () => {
     for (const tool of [
@@ -36,5 +37,23 @@ describe("current public product claims", () => {
     expect(plan).toContain("seeded email read/reply");
     expect(readme).toContain("does not provide full Calendar management");
     expect(readme).not.toContain("all nine deterministic demo outcomes");
+  });
+
+  it("keeps the GPT-5.6 Sol frontier-fit claim coherent and truth-scoped", () => {
+    expect(pages).toContain("WHY THIS IS POSSIBLE NOW");
+    expect(pages).toContain("The missing piece was never intelligence. It was trust — and that is the part Bander adds.");
+    expect(readme).toContain("Bander exists now because GPT-5.6 Sol crossed a threshold");
+    expect(readme).toContain("That solved the understanding. It did not solve the trust");
+    expect(plan).toContain("The two claims are deliberately separate.");
+
+    const whyNowIndex = pages.indexOf("WHY THIS IS POSSIBLE NOW");
+    const fairQuestionIndex = pages.indexOf("<ComparisonThread");
+    expect(whyNowIndex).toBeGreaterThan(-1);
+    expect(fairQuestionIndex).toBeGreaterThan(whyNowIndex);
+
+    for (const publicSurface of [pages, readme, plan]) {
+      expect(publicSurface).not.toContain("GPT-5.6 Sol is safe");
+      expect(publicSurface).not.toContain("GPT-5.6 Sol is injection-immune");
+    }
   });
 });

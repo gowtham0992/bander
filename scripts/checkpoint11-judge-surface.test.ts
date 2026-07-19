@@ -103,6 +103,8 @@ describe("Checkpoint 11 judge-facing freeze", () => {
     };
     expect(manifest.label).toBe("REAL INTEGRATION · FICTIONAL TEST DATA");
     expect(manifest.manualPrivacyReview).toBe(true);
-    expect(manifest.assets).toHaveLength(4);
+    expect(manifest.assets).toEqual(expect.arrayContaining(
+      screenshotAssets.map((asset) => expect.objectContaining({ file: asset.split("/").at(-1) })),
+    ));
   });
 });

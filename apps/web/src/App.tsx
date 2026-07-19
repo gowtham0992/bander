@@ -865,6 +865,10 @@ function FamilyThread() {
 
       <section className="thread-continuation" aria-label="Explore Bander" inert={surfaceOpen || undefined}>
         <button className="proof-drawer-trigger" onClick={() => surfaceDispatch({ type: "open_proof" })}><span aria-hidden="true">27</span>All 27 verified outcomes <b aria-hidden="true">→</b></button>
+        <section className="frontier-fit" aria-labelledby="frontier-fit-title">
+          <span id="frontier-fit-title">WHY THIS IS POSSIBLE NOW</span>
+          <p>GPT-5.6 Sol finally understands imperfect family language reliably enough to act on — in our live probes it extracted bounded intent with zero false accepts across every adversarial phrasing we threw at it. The missing piece was never intelligence. It was trust — and that is the part Bander adds.</p>
+        </section>
         <ComparisonThread stage={surface.comparison} onOpen={() => surfaceDispatch({ type: "open_comparison" })} onNext={() => surfaceDispatch({ type: "next_comparison_beat" })} onFull={() => surfaceDispatch({ type: "open_full_comparison" })} />
         <SetupRail active={surface.setupStation} onOpen={(stationId) => surfaceDispatch({ type: "open_setup", stationId })} onClose={() => surfaceDispatch({ type: "close_setup" })} />
       </section>

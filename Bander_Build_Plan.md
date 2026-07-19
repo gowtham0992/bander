@@ -118,6 +118,8 @@ Family delivery is bound to the opaque contact and pairing revision stored in th
 
 ## 7. GPT-5.6 Sol's bounded role
 
+Sol's reliability at bounded natural-language interpretation is the capability that makes a parent-facing product feasible; Bander's architecture is what makes it trustworthy. The two claims are deliberately separate.
+
 Real mode uses the exact model ID `gpt-5.6-sol` for conversation/tool selection plus separate bounded Calendar, Gmail-read, and product-action Structured Outputs:
 
 1. OpenClaw uses it for conversation and genuine tool selection.
