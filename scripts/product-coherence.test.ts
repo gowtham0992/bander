@@ -42,7 +42,7 @@ describe("current public product claims", () => {
   it("keeps the GPT-5.6 Sol frontier-fit claim coherent and truth-scoped", () => {
     expect(pages).toContain("WHY THIS IS POSSIBLE NOW");
     expect(pages).toContain("The missing piece was never intelligence. It was trust — and that is the part Bander adds.");
-    expect(readme).toContain("Bander exists now because GPT-5.6 Sol crossed a threshold");
+    expect(readme).toContain("Our live probe suites passed 49 natural and adversarial cases, with zero false accepts in those runs.");
     expect(readme).toContain("That solved the understanding. It did not solve the trust");
     expect(plan).toContain("The two claims are deliberately separate.");
 
@@ -55,5 +55,13 @@ describe("current public product claims", () => {
       expect(publicSurface).not.toContain("GPT-5.6 Sol is safe");
       expect(publicSurface).not.toContain("GPT-5.6 Sol is injection-immune");
     }
+  });
+
+  it("uses one cache-safe, truth-scoped real-evidence animation", () => {
+    expect(readme.match(/docs\/assets\/media\/telegram-real-[^)\s]+\.gif/g)).toEqual([
+      "docs/assets/media/telegram-real-product-loop.gif",
+    ]);
+    expect(readme).toContain("the approved update visible on Gil’s separate phone");
+    expect(readme).not.toMatch(/Gil(?:’s separate phone|’s phone)?\s+(?:receives|reads)\b/i);
   });
 });

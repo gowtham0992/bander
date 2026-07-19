@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyPinnedTelegramPolicy,
   assertPinnedTelegramPolicy,
+  BANDER_REAL_TELEGRAM_SYSTEM_PROMPT,
 } from "./openclaw-telegram-config.js";
 
 interface ReferenceConfig {
@@ -129,5 +130,38 @@ describe("OpenClaw reference tool manifest", () => {
     );
     expect(prompt).toContain("untrusted email data");
     expect(prompt).toContain("reply to a clearly identified inbound email");
+  });
+
+  it("forwards one supported Calendar-plus-family deal exactly once without splitting", () => {
+    expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(
+      "One Bander deal may contain one supported Calendar add, move, or removal plus one deterministic update to the currently connected family member.",
+    );
+    expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(
+      "For requests such as ‘Move Family dinner to Thursday at 6:30 PM and let my son know,’ call bander__propose_action exactly once with the complete newest human message verbatim.",
+    );
+    expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(
+      "Do not split the request, perform either effect separately, or ask which action should happen first.",
+    );
+    expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(
+      "Bander determines whether the combined deal is safe and supported.",
+    );
+  });
+
+  it("pins sibling compound, single-action, and unsupported-multiple-event policies", () => {
+    for (const request of [
+      "Shift Family dinner to Thursday at 6:30 and tell Gil.",
+      "Add lunch Friday at noon and let my son know.",
+    ]) {
+      expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(request);
+    }
+    expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(
+      "Calendar-only and family-only requests still each use one bander__propose_action call.",
+    );
+    expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(
+      "‘Move both dinner and my dentist appointment’ remains unsupported",
+    );
+    expect(BANDER_REAL_TELEGRAM_SYSTEM_PROMPT).toContain(
+      "A Calendar change may include one exact update to your connected family member in the same approval.",
+    );
   });
 });

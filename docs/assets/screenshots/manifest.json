@@ -3,12 +3,12 @@
   "label": "REAL INTEGRATION · FICTIONAL TEST DATA",
   "manualPrivacyReview": true,
   "metadataClean": true,
-  "reviewedOn": "2026-07-17",
-  "review": "Manually checked the four fictional Telegram sources and final crops for personal names or photos, phone numbers, email addresses, handles, numeric identifiers, invite or pairing links, callback data, real Calendar or email content, unrelated conversations, account-switching UI, and secret configuration. Automated checks are supplementary, not the privacy claim.",
+  "reviewedOn": "2026-07-19",
+  "review": "Manually checked the fictional Telegram sources, curated stills, and approved five-scene full-screen GIF for personal names or photos, phone numbers, non-test email addresses, handles, numeric identifiers, invite or pairing links, callback data, real Calendar or email content, unrelated conversations, account-switching UI, and secret configuration. Automated checks are supplementary, not the privacy claim.",
   "assets": [
     {
       "file": "real-compound-family.png",
-      "caption": "One Card. The exact Calendar change and the exact sentence Gil will receive. A separate phone receives precisely that sentence.",
+      "caption": "One Card. The exact Calendar change and the exact sentence Bander may send to Gil. Gil's separate phone visibly shows that approved sentence.",
       "sources": ["real owner Telegram capture", "real family-contact Telegram capture"]
     },
     {
@@ -23,7 +23,7 @@
     },
     {
       "file": "bander-social-preview.png",
-      "caption": "She read the exact sentence. She tapped once. Her son’s phone told the truth.",
+      "caption": "She checked the exact sentence and tapped once. Her son’s phone visibly shows Bander's approved update.",
       "sources": ["curated compound-family evidence"]
     },
     {
@@ -33,7 +33,7 @@
     },
     {
       "file": "story-gil-phone.png",
-      "caption": "Gil's phone receiving precisely the approved sentence.",
+      "caption": "Gil's phone visibly showing precisely the approved sentence.",
       "sources": ["real family-contact Telegram capture"]
     },
     {
@@ -68,7 +68,7 @@
     },
     {
       "file": "gallery-story-gil-phone.png",
-      "caption": "3:2 gallery variant of Gil's phone receiving the approved sentence.",
+      "caption": "3:2 gallery variant of Gil's phone visibly showing the approved sentence.",
       "sources": ["real family-contact Telegram capture"]
     },
     {
@@ -87,9 +87,15 @@
       "sources": ["built Pages sandbox capture"]
     },
     {
-      "file": "../media/telegram-real-loop.gif",
-      "caption": "Beat sequence of full real Telegram captures: the complete success thread, the approved sentence on Gil's phone, and the changed-world refusal. Each frame is a labeled real capture; no simulated motion.",
-      "sources": ["real protected-group Telegram capture", "real family-contact Telegram capture"]
+      "file": "../media/telegram-real-product-loop.gif",
+      "caption": "Five real moments: a bounded read, one exact Calendar-and-family deal, Bander’s approved update visible on Gil’s separate phone, a changed-world refusal, and an exact Gmail reply. The full Telegram context is preserved in every frame.",
+      "sources": ["real protected-group Telegram capture", "real family-contact Telegram capture"],
+      "width": 1000,
+      "height": 900,
+      "durationSeconds": 18.8,
+      "frames": 5,
+      "bytes": 1220012,
+      "sha256": "48d1c3143af0c16025c2426496c76475bf74ca14a4a4ec5da3a580c0a3525aa1"
     }
   ]
 }

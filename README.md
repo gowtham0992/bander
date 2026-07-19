@@ -43,16 +43,16 @@ The required `/feedback` Codex Session ID is supplied through Devpost.
 1. **Mum asks what is coming up tomorrow.** OpenClaw answers conversationally. No Card and no approval toll.
 2. **She asks to reply to an email.** Bander shows the recipient and exact email reply before anything is sent.
 3. **She approves once.** Bander sends only those stored bytes.
-4. **She asks to add the appointment and tell Gil.** One Card shows the Calendar change and the exact sentence Gil will receive.
-5. **The Calendar changes first; then Gil’s separate phone receives precisely what she approved.** If the email or Calendar changed first, Bander stops. If an external result cannot be confirmed, Bander says so and does not send again blindly.
+4. **She asks to add the appointment and tell Gil.** One Card shows the Calendar change and the exact sentence Bander may send to Gil.
+5. **After approval, Bander changes the Calendar first, then sends Gil precisely the sentence Mum approved. If the Calendar or email changes before approval, Bander stops.**
 
 ## Real product, fictional data
 
 The browser experience uses seeded data and cannot contact real services. The captures below come from Bander’s real Telegram, Google Calendar, Gmail, OpenClaw, and GPT‑5.6 integration using fictional test data. The evidence ledger records the corresponding live runs and failure-first verification.
 
-![Full real Telegram captures in sequence: the complete approved loop with both identities, the exact approved sentence on Gil's separate phone, and the changed-world refusal where nothing moved and nothing was sent.](docs/assets/media/telegram-real-loop.gif)
+![Five full-screen real Bander integration captures using fictional test data: a free Calendar read, one exact Calendar-and-family deal, the approved update visible on Gil’s separate phone, a changed-world refusal, and one exact Gmail reply.](docs/assets/media/telegram-real-product-loop.gif)
 
-*Three real moments on a loop: one exact deal approved and truthfully reported, Gil's separate phone receiving precisely the approved sentence—from a bot the assistant cannot address—and the refusal when the calendar changed first. Approval binds a state of the world, not merely an intention.*
+*Five real moments: a bounded read, one exact Calendar-and-family deal, Bander’s approved update visible on Gil’s separate phone, a changed-world refusal, and an exact Gmail reply. The full Telegram context is preserved in every frame.*
 
 ## Why not just native approvals?
 
@@ -115,7 +115,7 @@ The real protected OpenClaw profile exposes exactly five tools:
 
 **Iteration changed the product.** Live work showed that Gmail rewrote the caller-supplied `Message-ID`; the first compound approval exposed a state-lock deadlock; and an ambiguous Calendar execution was initially about to be described as “nothing changed.” The setup path and public sandbox were repeatedly compared with actual runtime behavior rather than accepted from generated prose.
 
-Bander exists now because GPT-5.6 Sol crossed a threshold: it interprets imperfect, natural parent phrasing reliably enough to act on — our live probe suites show zero false accepts across 40+ adversarial phrasings ([evidence](BUILD_WITH_CODEX.md#checkpoint-23--live-gpt-56-sol-bounded-intent-compiler)). That solved the understanding. It did not solve the trust, which is why the rest of this repository exists. In the product, Sol has bounded roles only: **GPT‑5.6 Sol operates inside those deterministic boundaries.** OpenClaw uses it for conversation and genuine tool selection. Bander uses strict Structured Outputs for bounded Calendar, inbox, reply, and family hints. Sol cannot choose identities, recipient addresses, credentials, authority, execution parameters, or outcome language.
+Our live probe suites passed 49 natural and adversarial cases, with zero false accepts in those runs. That solved the understanding. It did not solve the trust, which is why the rest of this repository exists. In the product, Sol has bounded roles only: **GPT‑5.6 Sol operates inside those deterministic boundaries.** OpenClaw uses it for conversation and genuine tool selection. Bander uses strict Structured Outputs for bounded Calendar, inbox, reply, and family hints. Sol cannot choose identities, recipient addresses, credentials, authority, execution parameters, or outcome language.
 
 **Codex built and tested the system; GPT‑5.6 Sol operates within its deterministic boundaries.** The `/feedback` Session ID from the primary build task will be supplied directly in Devpost, not committed as a placeholder.
 
@@ -140,7 +140,7 @@ Bander exists now because GPT-5.6 Sol crossed a threshold: it interprets imperfe
 - [Guided setup and recovery](BUILD_WITH_CODEX.md#2026-07-16--combined-checkpoint-10-external-owner-and-evaluator-surface)
 - [Judge-facing product surface](BUILD_WITH_CODEX.md#2026-07-17--combined-checkpoint-11-judge-surface-freeze)
 
-The fresh Checkpoint 11 matrix contains 478 runtime functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the ledger identifies those specific red→green cases rather than claiming that every safety property failed first.
+The latest verified product matrix covers 530 functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the ledger identifies those specific red→green cases rather than claiming that every safety property failed first.
 
 ## Guided real setup
 

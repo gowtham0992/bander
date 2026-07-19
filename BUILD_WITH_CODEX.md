@@ -2720,3 +2720,128 @@ those execution permissions are available. The transcript hashes remain
 `7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557` and
 `75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`;
 both files remain ignored, untracked, and untouched.
+
+## 2026-07-19 — Live compound OpenClaw tool-selection regression
+
+**Status:** fixed and verified locally; live owner Card acceptance passed
+
+The exact owner request `Move Family dinner to Thursday at 6:30 PM and let my
+son know.` produced an OpenClaw clarification asking which action should happen
+first. Read-only state inspection confirmed that OpenClaw made zero
+`bander__propose_action` calls: no Card, authority, Calendar effect, or family
+effect existed. The protected real prompt described a single Calendar change
+and a single family message independently but did not state that one supported
+Bander deal may combine one Calendar effect with its deterministic connected-
+family update.
+
+Two focused prompt-policy tests were added first and observed red. They pin the
+exact failed request, one verbatim `bander__propose_action` call, no split or
+effect ordering by OpenClaw, two sibling compound phrasings, preserved
+Calendar-only and family-only behavior, the unsupported multiple-Calendar-event
+boundary, and truthful capability copy. After the prompt-only correction the
+focused OpenClaw configuration/provider set passed 23/23. Removing the explicit
+compound-deal clause deliberately turned the exact regression test red; restoring
+it returned the focused set to green.
+
+The isolated real OpenClaw verifier then observed one human request, one
+`bander__propose_action` call, zero tool failures, a proposed Draft with
+execution not started, removal of all non-allowlisted tools, and exactly five
+configured real Bander tools. Typecheck passed; the functional matrix passed 51
+files and 533 cases; the adversarial matrix passed 3 files and 26 cases; and the
+tracked/proposed secret scan found no matches. A stale pre-existing Checkpoint
+11 assertion still required three superseded README screenshot links after the
+approved full-thread GIF shipped; its test-only expectation was narrowed to the
+current `telegram-real-product-loop.gif` evidence surface. Both transcript hashes remain
+`7309a1a37068a08b43c6bc3fe2db2c32fc66553fb38374f5a8919a908261f557` and
+`75d7c22868024133e6ce09a2a0a9f7dde870ada0cf33dd70e5ea981e90881c58`.
+
+No Calendar, Telegram family-delivery, Gmail, authority, recovery, adapter,
+compiler, MCP inventory, or runtime-matching behavior changed. After restarting
+the production stack, the owner sent the exact request twice as two separate
+Telegram messages. Each message produced exactly one
+`bander__propose_action` call carrying the complete newest request verbatim;
+neither run asked which action should happen first. Each produced one genuine
+Bander Card containing the authoritative `Family Dinner` Calendar move and the
+exact deterministic update for Gil. Read-only inspection before approval found
+both proposals pending, no recent family-delivery operation, and the real event
+still at Wednesday, July 22, 6:00–7:00 PM in `America/Denver`. No Card was
+approved during this acceptance check.
+
+The subsequent owner-driven evidence session completed the real journey. The
+newest compound Card was approved once: Google Calendar authoritatively moved
+the fictional `Family Dinner` event to Thursday, July 23, 6:30–7:30 PM in
+`America/Denver`, Telegram confirmed one deterministic family update, and the
+owner received the truthful combined outcome. The family message matched the
+Card preview byte-for-byte. Replaying the same approval returned `Already done`;
+the durable family-operation count remained unchanged and a read-only Calendar
+check observed no second mutation.
+
+For changed-world evidence, the owner naturally asked to move the fictional
+`Dentist appointment` and notify family, including an incidental pickup reason.
+Bander preserved the request as hearsay but included only its deterministic
+Calendar-linked family update in the Card. The owner then changed the source
+event independently from 10:30–11:30 AM to 11:00 AM–12:00 PM before approval.
+Approval ended in the typed `conflict` classification: Bander made zero Calendar
+mutation, created no family-delivery operation, and Telegram showed the
+truth-scoped refusal.
+
+The same real session also exercised Gmail. A natural question about a
+fictional sender used exactly one `bander__read_inbox` call and created no
+authority. The owner then approved one exact, single-recipient reply after a
+specific source-date clarification. Gmail showed exactly one reply in Sent;
+approval replay returned `Already done` and sent nothing again. This exposed a
+separate parent-usability limitation: a later reply request does not yet inherit
+the exact email selected by the preceding read, so the parent may need to repeat
+the source date. No unsafe contextual guess or product-boundary change was made
+during evidence capture.
+
+After the owner preserved the full source screenshots, the real stack was
+stopped. Both fictional events were restored with fresh ETags, conditional
+writes, and `sendUpdates: none`. Final read-only verification observed `Family
+Dinner` at Wednesday, July 22, 6:00–7:00 PM and `Dentist appointment` at Friday,
+July 24, 10:30–11:30 AM, both in `America/Denver`. No screenshot, identifier,
+account address, token, or private routing value was committed.
+
+## 2026-07-19 — Final real-evidence animation and prompt regression checkpoint
+
+**Status:** verified locally; commit, push, and signed-out GitHub check pending
+
+The owner supplied the approved five-scene real-evidence animation at
+`/private/tmp/bander-real-evidence-full-review.gif`. The source was copied
+without regeneration, recompression, resizing, cropping, annotation, or timing
+changes to the cache-safe public path
+`docs/assets/media/telegram-real-product-loop.gif`. `cmp` and SHA-256 verified
+the repository copy is byte-identical to the approved source. `ffprobe` and a
+full `ffmpeg` decode observed five decodable GIF frames at 1000×900 over 18.800
+seconds; the file is 1,220,012 bytes and has SHA-256
+`48d1c3143af0c16025c2426496c76475bf74ca14a4a4ec5da3a580c0a3525aa1`.
+The previous filename had zero remaining textual references before its asset
+was removed.
+
+README now uses the approved full-screen alt text and caption, states that
+Bander sends the exact approved family sentence without claiming device receipt
+or human reading, reports 49 live natural/adversarial Sol probe cases with zero
+false accepts in those runs, and publishes the requested conservative product
+matrix of 530 functional cases plus 26 adversarial cases. The complete local
+Vitest runner now reports 535 tests because five subsequent prompt-policy and
+public-document/media coherence assertions sit on top of that published product
+matrix.
+
+The media assertions were updated before the artifact and copy, producing the
+expected red result: three Checkpoint 11 cases failed for the stale README path,
+copy, missing asset, and old manifest entry. After replacement, the focused
+OpenClaw/configuration and public-coherence set passed 40/40. The complete
+functional runner passed 51 files and 535 tests; the adversarial suite passed 3
+files and 26 tests; all 27 deterministic outcomes passed; one-time and standing
+recovery passed; isolated OpenClaw verification observed exactly five real tools
+and one proposal call; typecheck and production/Pages builds passed; the Pages
+artifact verified all 14 direct destinations plus 3 browser/server parity cases;
+the dependency audit found zero vulnerabilities; all five GIF scenes decoded;
+and the tracked/proposed-file secret scan found zero matches across 217 files.
+
+No Calendar, Gmail, Telegram, authority, adapter, compiler, MCP inventory,
+Pages behavior, CSP, fixture, sandbox animation, or production execution code
+changed for the media replacement. The only runtime behavior included in this
+checkpoint is the separately verified protected-OpenClaw compound tool-selection
+prompt correction described immediately above. Both transcripts remain ignored,
+untracked, and untouched.

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 const read = (file: string) => fs.readFileSync(file, "utf8");
@@ -43,8 +44,15 @@ describe("Checkpoint 11 judge-facing freeze", () => {
   it("tells the complete read, email, calendar, family, and uncertainty story", () => {
     expect(readme).toContain("Mum asks what is coming up");
     expect(readme).toContain("exact email reply");
-    expect(readme).toContain("Calendar change and the exact sentence Gil will receive");
-    expect(readme).toContain("does not send again");
+    expect(readme).toContain("Calendar change and the exact sentence Bander may send to Gil");
+    expect(readme).toContain("If the Calendar or email changes before approval, Bander stops.");
+  });
+
+  it("uses the final five-scene real-evidence story without overstating delivery", () => {
+    expect(readme).toContain("After approval, Bander changes the Calendar first, then sends Gil precisely the sentence Mum approved. If the Calendar or email changes before approval, Bander stops.");
+    expect(readme).toContain("Our live probe suites passed 49 natural and adversarial cases, with zero false accepts in those runs.");
+    expect(readme).toContain("530 functional cases and 26 adversarial cases.");
+    expect(readme).not.toMatch(/Gil(?:’s separate phone|’s phone)?\s+(?:receives|reads)\b/i);
   });
 
   it("explains why Bander complements native approvals", () => {
@@ -90,21 +98,41 @@ describe("Checkpoint 11 judge-facing freeze", () => {
       expect(fs.existsSync(asset), `${asset} should exist`).toBe(true);
       expect(pngChunkTypes(asset)).not.toEqual(expect.arrayContaining(["eXIf", "tEXt", "zTXt", "iTXt"]));
     }
-    expect(readme).toContain("docs/assets/screenshots/real-compound-family.png");
-    expect(readme).toContain("docs/assets/screenshots/real-changed-world.png");
-    expect(readme).toContain("docs/assets/screenshots/real-read-two-identities.png");
+    const asset = "docs/assets/media/telegram-real-product-loop.gif";
+    expect(readme).toContain(asset);
+    expect(readme.match(/docs\/assets\/media\/telegram-real-[^)\s]+\.gif/g)).toEqual([asset]);
+    expect(fs.existsSync(asset)).toBe(true);
+    const gif = fs.readFileSync(asset);
+    expect(gif.subarray(0, 6).toString("ascii")).toBe("GIF89a");
+    expect(gif.readUInt16LE(6)).toBe(1000);
+    expect(gif.readUInt16LE(8)).toBe(900);
+    expect(gif.byteLength).toBe(1_220_012);
+    expect(createHash("sha256").update(gif).digest("hex")).toBe(
+      "48d1c3143af0c16025c2426496c76475bf74ca14a4a4ec5da3a580c0a3525aa1",
+    );
+    expect(readme).toContain("Five full-screen real Bander integration captures using fictional test data: a free Calendar read, one exact Calendar-and-family deal, the approved update visible on Gil’s separate phone, a changed-world refusal, and one exact Gmail reply.");
+    expect(readme).toContain("Five real moments: a bounded read, one exact Calendar-and-family deal, Bander’s approved update visible on Gil’s separate phone, a changed-world refusal, and an exact Gmail reply. The full Telegram context is preserved in every frame.");
   });
 
   it("records the visible screenshot evidence label and privacy review", () => {
     const manifest = JSON.parse(read("docs/assets/screenshots/manifest.json")) as {
       label?: string;
       manualPrivacyReview?: boolean;
-      assets?: unknown[];
+      assets?: Array<Record<string, unknown>>;
     };
     expect(manifest.label).toBe("REAL INTEGRATION · FICTIONAL TEST DATA");
     expect(manifest.manualPrivacyReview).toBe(true);
     expect(manifest.assets).toEqual(expect.arrayContaining(
       screenshotAssets.map((asset) => expect.objectContaining({ file: asset.split("/").at(-1) })),
     ));
+    expect(manifest.assets).toContainEqual(expect.objectContaining({
+      file: "../media/telegram-real-product-loop.gif",
+      width: 1000,
+      height: 900,
+      durationSeconds: 18.8,
+      frames: 5,
+      bytes: 1_220_012,
+      sha256: "48d1c3143af0c16025c2426496c76475bf74ca14a4a4ec5da3a580c0a3525aa1",
+    }));
   });
 });
