@@ -16,8 +16,6 @@ The browser is a deterministic, seeded product experience. It cannot contact Goo
 
 <!-- demo-video-link: insert public YouTube URL here before submission -->
 
-![Real Telegram, fictional data: one request becomes one exact approval Card, one truthful outcome, and the exact approved sentence on Gil's phone](docs/assets/media/telegram-real-loop.gif)
-
 ## Judge quickstart
 
 ```bash
