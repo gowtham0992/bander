@@ -16,7 +16,7 @@ The browser is a deterministic, seeded product experience. It cannot contact Goo
 
 <!-- demo-video-link: insert public YouTube URL here before submission -->
 
-![Real Telegram, fictional data: one request becomes one exact approval Card, one truthful outcome, and the exact approved sentence on Gil's phone](docs/assets/media/real-telegram-flow.gif)
+![Real Telegram, fictional data: one request becomes one exact approval Card, one truthful outcome, and the exact approved sentence on Gil's phone](docs/assets/media/telegram-real-loop.gif)
 
 ## Judge quickstart
 
@@ -50,23 +50,11 @@ The required `/feedback` Codex Session ID is supplied through Devpost.
 
 ## Real product, fictional data
 
-The browser experience uses seeded data and cannot contact real services. The screenshots below come from Bander’s real Telegram, Google Calendar, Gmail, OpenClaw, and GPT‑5.6 integration using fictional test data. The evidence ledger records the corresponding live runs and failure-first verification.
+The browser experience uses seeded data and cannot contact real services. The captures below come from Bander’s real Telegram, Google Calendar, Gmail, OpenClaw, and GPT‑5.6 integration using fictional test data. The evidence ledger records the corresponding live runs and failure-first verification.
 
-![Two real Telegram surfaces: the owner sees one exact Calendar-and-family deal, and Gil's separate phone receives the identical approved sentence.](docs/assets/screenshots/real-compound-family.png)
+![Full real Telegram captures in sequence: the complete approved loop with both identities, the exact approved sentence on Gil's separate phone, and the changed-world refusal where nothing moved and nothing was sent.](docs/assets/media/telegram-real-loop.gif)
 
-*One Card. The exact Calendar change and the exact sentence Gil will receive. A separate phone receives precisely that sentence—from a bot the assistant cannot address.*
-
-### Reading without an approval toll
-
-![A real Telegram conversation where Bander reports a completed change, then OpenClaw answers a harmless schedule question without showing another approval Card.](docs/assets/screenshots/real-read-two-identities.png)
-
-*Reading flows freely. Bander speaks when something real is about to change.*
-
-### Approval is tied to the world the parent saw
-
-![A real Telegram changed-world refusal where Bander says the Calendar changed and neither the event nor family update was performed.](docs/assets/screenshots/real-changed-world.png)
-
-*Approval binds a state of the world, not merely an intention.*
+*Three real moments on a loop: one exact deal approved and truthfully reported, Gil's separate phone receiving precisely the approved sentence—from a bot the assistant cannot address—and the refusal when the calendar changed first. Approval binds a state of the world, not merely an intention.*
 
 ## Why not just native approvals?
 
