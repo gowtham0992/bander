@@ -142,7 +142,7 @@ Stop the pairing process with `Ctrl-C` after Bander confirms the group.
 The operator chooses the display label and aliases locally. OpenClaw and the model cannot create or redirect this relationship.
 
 ```bash
-npm run pair:family -- --name Gil --alias "my son" --alias son
+npm run pair:family -- --name Jason --alias "my son" --alias son
 ```
 
 Remote handoff is the normal flow:

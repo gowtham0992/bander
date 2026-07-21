@@ -44,12 +44,12 @@ describe("Checkpoint 11 judge-facing freeze", () => {
   it("tells the complete read, email, calendar, family, and uncertainty story", () => {
     expect(readme).toContain("Mum asks what is coming up");
     expect(readme).toContain("exact email reply");
-    expect(readme).toContain("Calendar change and the exact sentence Bander may send to Gil");
+    expect(readme).toContain("Calendar change and the exact sentence Bander may send them");
     expect(readme).toContain("If the Calendar or email changes before approval, Bander stops.");
   });
 
   it("uses the final real-evidence story without overstating delivery", () => {
-    expect(readme).toContain("After approval, Bander changes the Calendar first, then sends Gil precisely the sentence Mum approved. If the Calendar or email changes before approval, Bander stops.");
+    expect(readme).toContain("After approval, Bander changes the Calendar first, then sends that family member precisely the sentence Mum approved. If the Calendar or email changes before approval, Bander stops.");
     expect(readme).toContain("Our live probe suites passed 49 natural and adversarial cases, with zero false accepts in those runs.");
     expect(readme).toContain("535 functional cases plus 26 adversarial cases.");
     expect(readme).not.toMatch(/Gil(?:’s separate phone|’s phone)?\s+(?:receives|reads)\b/i);

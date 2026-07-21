@@ -51,8 +51,8 @@ The required `/feedback` Codex Session ID is supplied through Devpost.
 1. **Mum asks what is coming up tomorrow.** OpenClaw answers conversationally. No Card and no approval toll.
 2. **She asks to reply to an email.** Bander shows the recipient and exact email reply before anything is sent.
 3. **She approves once.** Bander sends only those stored bytes.
-4. **She asks to add the appointment and tell Gil.** One Card shows the Calendar change and the exact sentence Bander may send to Gil.
-5. **After approval, Bander changes the Calendar first, then sends Gil precisely the sentence Mum approved. If the Calendar or email changes before approval, Bander stops.**
+4. **She asks to add the appointment and tell a connected family member.** One Card shows the Calendar change and the exact sentence Bander may send them.
+5. **After approval, Bander changes the Calendar first, then sends that family member precisely the sentence Mum approved. If the Calendar or email changes before approval, Bander stops.**
 
 ## Real product, fictional data
 

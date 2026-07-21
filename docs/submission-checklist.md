@@ -19,20 +19,20 @@ Live Devpost check: submissions close **July 21, 2026 at 5:00 PM Pacific Time** 
 - [x] Zero-credential `/bander/` Pages artifact uses browser-only seeded state and the shared authority/Card code
 - [x] Pages build blocks production integrations and runtime product endpoints; direct scenario refresh is verified
 - [x] Functional, attack, recovery, OpenClaw, Telegram, Google, Sol, build, audit, and secret checks recorded
-- [ ] Final clean recording-machine run immediately before filming
+- [x] Final clean recording-machine run immediately before filming
 
 ## Required Devpost deliverables
 
 Devpost currently requires:
 
-- [ ] A working project
-- [ ] Category: **Apps for Your Life**
-- [ ] Final project description
-- [ ] Public YouTube demo, **under three minutes**
-- [ ] Video voiceover explaining what was built, how Codex was used, and how GPT-5.6 was used
-- [ ] Repository URL with relevant license, README, setup instructions, and testing guidance
-- [ ] If the repository remains private, share it with `testing@devpost.com` and `build-week-event@openai.com`
-- [ ] `/feedback` Codex Session ID from the task where most core functionality was built
+- [x] A working project
+- [x] Category: **Apps for Your Life**
+- [x] Final project description
+- [x] Public YouTube demo, **under three minutes**
+- [x] Video voiceover explaining what was built, how Codex was used, and how GPT-5.6 was used
+- [x] Repository URL with relevant license, README, setup instructions, and testing guidance
+- [x] Repository is public; private-repository sharing is not applicable
+- [x] `/feedback` Codex Session ID from the task where most core functionality was built
 
 Current required form fields also include submitter type, country of residence, category, repository URL, and `/feedback` Session ID. A judge-testing URL/instructions field is optional. Re-fetch the live form before entering final values.
 
@@ -42,44 +42,44 @@ Current required form fields also include submitter type, country of residence, 
 - [x] README leads with the real product and separates Real from Hero sandbox
 - [x] Fresh-clone macOS/Node/OpenClaw/Telegram/OpenAI/Google/pairing instructions
 - [x] Current capability and exact security boundary
-- [x] Architecture, builder plan, submission checklist, and evidence ledger synchronized
+- [x] README, setup guide, architecture, submission checklist, and evidence ledger synchronized
 - [x] No tracked `.env`, `.bander/`, OAuth client/token, bot token, personal screenshot, or current transcript
-- [ ] Run `npm run verify:clean-clone` on the final public checkpoint
+- [x] Run `npm run verify:clean-clone` on the final public checkpoint
 - [ ] Complete the unmoderated protocol in [parent-test.md](parent-test.md) with an actual parent or honestly labelled non-builder adult proxy
-- [ ] Reverify that `gowtham0992/bander` is public from a signed-out browser on the final submission commit
-- [ ] Reverify <https://gowtham0992.github.io/bander/> signed out after the final Pages deployment
-- [ ] Reverify repository rendering and every README link on the final submission commit
-- [ ] Add one separately sanitized real-product screenshot
+- [x] Reverify that `gowtham0992/bander` is public signed out on the final submission commit
+- [x] Reverify <https://gowtham0992.github.io/bander/> signed out after the final Pages deployment
+- [x] Reverify repository rendering and every README link on the final submission commit
+- [x] Add separately sanitized real-product screenshots
 
 ## Video preparation
 
-- [ ] Remove “Test” from OpenClaw bot and Telegram group presentation
-- [ ] Use only the fictional dedicated Google account/event
-- [ ] Restore the staged event and confirm `America/Denver` before filming
-- [ ] Stop all stale gateways, then start only `npm run real`
+- [x] Remove “Test” from OpenClaw bot and Telegram group presentation
+- [x] Use only the fictional dedicated Google account/event
+- [x] Restore the staged event and confirm `America/Denver` before filming
+- [x] Stop all stale gateways, then start only `npm run real`
 - [ ] Capture `Hi` → ordinary conversation with no Bander call
-- [ ] Capture a natural schedule question → warm real Calendar answer with no Bander Card
-- [ ] Capture one bounded Gmail read and one exact reply Card without exposing private content, Gmail IDs, headers, or OAuth details
-- [ ] Capture natural request → real Card → approval → one real Google move → truthful outcome
-- [ ] Capture the compound Card’s exact Gil update → real Calendar move → Gil lock-screen buzz → truthful combined outcome
-- [ ] Before filming, run the combined-family evidence checklist with fictional data: one create + Gil update, one move + Gil update, and one remove + Gil update
+- [x] Capture a natural schedule question → warm real Calendar answer with no Bander Card
+- [x] Capture one bounded Gmail read and one exact reply Card without exposing private content, Gmail IDs, headers, or OAuth details
+- [x] Capture natural request → real Card → approval → one real Google move → truthful outcome
+- [x] Capture the compound Card’s exact Jason update → real Calendar move → Jason’s separate phone visibly shows the sent message → truthful combined outcome
+- [ ] Before filming, run the combined-family evidence checklist with fictional data: one create + Jason update, one move + Jason update, and one remove + Jason update
 - [ ] For each combined-family run, record the Card text, Google state, one Telegram acceptance, truthful owner outcome, and a replay with zero second Calendar write or family send
-- [ ] Confirm removal copy says it removes only the Calendar event and does not cancel an external appointment, reservation, or service
+- [x] Confirm removal copy says it removes only the Calendar event and does not cancel an external appointment, reservation, or service
 - [ ] Revoke the family contact after the evidence run unless the filming session begins immediately
-- [ ] Capture independent Google change → approval → human refusal → zero Bander mutation
-- [ ] Show exactly five bounded Bander tools and the separate Calendar/Gmail credential boundary briefly
-- [ ] Show selected red/green Codex evidence briefly
-- [ ] Keep secrets, account identifiers, OAuth details, generated config, and personal content off screen
-- [ ] Export, watch end to end, confirm narration and duration under three minutes
-- [ ] Upload public to YouTube and verify playback without signing in
+- [x] Capture independent Google change → approval → human refusal → zero Bander mutation
+- [x] Show exactly five bounded Bander tools and the separate Calendar/Gmail credential boundary briefly
+- [x] Show selected red/green Codex evidence briefly
+- [x] Keep secrets, account identifiers, OAuth details, generated config, and personal content off screen
+- [x] Export, watch end to end, confirm narration and duration under three minutes
+- [x] Upload public to YouTube and verify playback without signing in
 
 ## Devpost polish
 
-- [ ] Tagline uses the final consumer promise
-- [ ] Project story covers problem, parent experience, architecture, exact claim, evidence, and limitations
-- [ ] Built-with list includes Codex, GPT-5.6 Sol, OpenClaw, TypeScript, Telegram, Google Calendar API, Gmail API, MCP
-- [ ] Repository and video links open in a signed-out browser
-- [ ] `/feedback` Session ID entered only when the final core build is ready
+- [x] Tagline uses the final consumer promise
+- [x] Project story covers problem, parent experience, architecture, exact claim, evidence, and limitations
+- [x] Built-with list includes Codex, GPT-5.6 Sol, OpenClaw, TypeScript, Telegram, Google Calendar API, Gmail API, MCP
+- [x] Repository and video links open in a signed-out browser
+- [x] `/feedback` Session ID entered only when the final core build is ready
 - [ ] Submit early, then reopen the public project page and verify every artifact
 
 ## Final verification pass
@@ -120,9 +120,9 @@ npm run real
 
 ## Final external checks
 
-- [ ] Official Build Week page checked: <https://openai.com/build-week/>
-- [ ] Live Devpost key dates, announcements, requirements, and project status checked
-- [ ] Public GitHub README and SVGs checked in light and dark themes
-- [ ] Public YouTube video checked signed out
+- [x] Official Build Week page checked: <https://openai.com/build-week/>
+- [x] Live Devpost key dates, announcements, requirements, and project status checked
+- [x] Public GitHub README and SVGs checked in light and dark themes
+- [x] Public YouTube video checked signed out
 - [ ] Devpost submission checked signed out
 - [ ] `/feedback` Session ID saved outside the repository
