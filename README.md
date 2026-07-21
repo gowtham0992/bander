@@ -2,8 +2,6 @@
   <img src="docs/assets/bander-mark.svg" width="140" alt="Bander logo: a red claw protected by a teal band">
 </p>
 
-![Bander — The OpenClaw I’d actually give my parents.](docs/assets/bander-banner.svg)
-
 # Bander
 
 **The OpenClaw I’d actually give my parents.**
@@ -136,7 +134,6 @@ Our live probe suites passed 49 natural and adversarial cases, with zero false a
 ## Real services and evidence
 
 - [Architecture decisions](docs/architecture.md)
-- [Product source of truth](Bander_Build_Plan.md)
 - [Real Calendar boundary](BUILD_WITH_CODEX.md#checkpoint-22--real-google-calendar-risk-spike)
 - [Schedule read lane](BUILD_WITH_CODEX.md#july-16-2026--bounded-real-schedule-read-lane)
 - [Family pairing and replay-safe delivery](BUILD_WITH_CODEX.md#july-16-2026--replay-safe-family-notification-delivery)

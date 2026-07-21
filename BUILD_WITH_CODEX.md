@@ -2885,3 +2885,26 @@ OpenClaw patch tarball inspected during this checkpoint still pins the same
 version; no misleading lockfile-only override or unverified runtime repack was
 shipped. Both transcript hashes remain unchanged and the files remain ignored
 and untracked.
+
+## 2026-07-21 — Final submission documentation coherence
+
+**Status:** complete; public submission surfaces prepared
+
+The final real demonstration exercised Bander's bounded Gmail, Google Calendar,
+Telegram, and consented-family-contact paths with fictional data. It showed a
+combined Calendar change and exact approved update to Jason, an exact Gmail
+reply, and the changed-world refusal that made zero Bander Calendar mutation
+and sent no family update when the approved state no longer matched.
+
+The public repository and Pages experience now present the finished product,
+and the public 2:39 YouTube film shows the parent journey end to end. The final
+published evidence count is 535 functional cases plus 26 adversarial cases.
+Clean-clone verification passed from an isolated checkout with no credentials,
+and the public YouTube, Pages, repository, thumbnail, and README links were
+verified without relying on an authenticated product session.
+
+README and the Devpost submission materials were prepared with the current
+capability boundary, evidence language, public links, and deterministic-sandbox
+disclosure. The superseded internal Build Plan was retired; README,
+`docs/architecture.md`, `SETUP.md`, and this evidence ledger now carry the
+current public and technical source-of-truth responsibilities.
