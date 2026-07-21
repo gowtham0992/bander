@@ -2901,7 +2901,10 @@ and the public 2:39 YouTube film shows the parent journey end to end. The final
 published evidence count is 535 functional cases plus 26 adversarial cases.
 Clean-clone verification passed from an isolated checkout with no credentials,
 and the public YouTube, Pages, repository, thumbnail, and README links were
-verified without relying on an authenticated product session.
+verified without relying on an authenticated product session. The final
+tracked/proposed secret scan found zero secret-shaped matches; `git diff
+--check` passed; and local `main`, `origin/main`, and the public repository were
+verified at the same committed state after the documentation push.
 
 README and the Devpost submission materials were prepared with the current
 capability boundary, evidence language, public links, and deterministic-sandbox
