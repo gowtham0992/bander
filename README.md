@@ -14,11 +14,17 @@ Your assistant can read your calendar and mail and talk like a person. Bander ho
 
 The browser is a deterministic, seeded product experience. It cannot contact Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts.
 
-## Watch the product work
+## Demo
 
-### [▶ Watch the 2:38 Bander product demo](https://www.youtube.com/watch?v=z7OrvquejvQ)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=z7OrvquejvQ">
+    <img src="https://img.youtube.com/vi/z7OrvquejvQ/hqdefault.jpg" alt="Watch the Bander product demo" width="640" />
+  </a>
+</p>
 
-[![Watch the 2:38 Bander product demo](docs/assets/screenshots/bander-social-preview.png)](https://www.youtube.com/watch?v=z7OrvquejvQ)
+- Watch: https://www.youtube.com/watch?v=z7OrvquejvQ
+- Try: https://gowtham0992.github.io/bander/
+- Source: https://github.com/gowtham0992/bander
 
 ## Judge quickstart
 

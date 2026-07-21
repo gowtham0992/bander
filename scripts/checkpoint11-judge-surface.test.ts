@@ -101,7 +101,8 @@ describe("Checkpoint 11 judge-facing freeze", () => {
     const asset = "docs/assets/media/telegram-real-product-loop.gif";
     expect(readme).not.toContain(asset);
     expect(readme).not.toContain("docs/assets/media/sandbox-episode.gif");
-    expect(readme).toContain("docs/assets/screenshots/bander-social-preview.png");
+    expect(readme).toContain("https://img.youtube.com/vi/z7OrvquejvQ/hqdefault.jpg");
+    expect(readme).not.toContain("docs/assets/screenshots/bander-social-preview.png");
     expect(fs.existsSync(asset)).toBe(true);
     const gif = fs.readFileSync(asset);
     expect(gif.subarray(0, 6).toString("ascii")).toBe("GIF89a");

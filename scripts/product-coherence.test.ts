@@ -59,8 +59,13 @@ describe("current public product claims", () => {
 
   it("links the final public video without presenting stale GIF loops", () => {
     const videoUrl = "https://www.youtube.com/watch?v=z7OrvquejvQ";
-    expect(readme).toContain(`### [▶ Watch the 2:38 Bander product demo](${videoUrl})`);
-    expect(readme).toContain(`[![Watch the 2:38 Bander product demo](docs/assets/screenshots/bander-social-preview.png)](${videoUrl})`);
+    expect(readme).toContain("## Demo");
+    expect(readme).toContain(`<a href="${videoUrl}">`);
+    expect(readme).toContain('<img src="https://img.youtube.com/vi/z7OrvquejvQ/hqdefault.jpg" alt="Watch the Bander product demo" width="640" />');
+    expect(readme).toContain(`- Watch: ${videoUrl}`);
+    expect(readme).toContain("- Try: https://gowtham0992.github.io/bander/");
+    expect(readme).toContain("- Source: https://github.com/gowtham0992/bander");
+    expect(readme).not.toContain("docs/assets/screenshots/bander-social-preview.png");
     expect(readme).not.toContain("docs/assets/media/telegram-real-product-loop.gif");
     expect(readme).not.toContain("docs/assets/media/sandbox-episode.gif");
     expect(readme).not.toMatch(/Gil(?:’s separate phone|’s phone)?\s+(?:receives|reads)\b/i);
