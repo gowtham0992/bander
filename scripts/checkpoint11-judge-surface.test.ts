@@ -48,10 +48,10 @@ describe("Checkpoint 11 judge-facing freeze", () => {
     expect(readme).toContain("If the Calendar or email changes before approval, Bander stops.");
   });
 
-  it("uses the final five-scene real-evidence story without overstating delivery", () => {
+  it("uses the final real-evidence story without overstating delivery", () => {
     expect(readme).toContain("After approval, Bander changes the Calendar first, then sends Gil precisely the sentence Mum approved. If the Calendar or email changes before approval, Bander stops.");
     expect(readme).toContain("Our live probe suites passed 49 natural and adversarial cases, with zero false accepts in those runs.");
-    expect(readme).toContain("530 functional cases and 26 adversarial cases.");
+    expect(readme).toContain("535 functional cases plus 26 adversarial cases.");
     expect(readme).not.toMatch(/Gil(?:’s separate phone|’s phone)?\s+(?:receives|reads)\b/i);
   });
 
@@ -93,14 +93,15 @@ describe("Checkpoint 11 judge-facing freeze", () => {
     expect(readme).toContain("real Telegram, Google Calendar, Gmail, OpenClaw, and GPT‑5.6 integration using fictional test data");
   });
 
-  it("ships the curated real-product screenshot set with README links", () => {
+  it("ships the curated real-product screenshot set without presenting stale GIF loops", () => {
     for (const asset of screenshotAssets) {
       expect(fs.existsSync(asset), `${asset} should exist`).toBe(true);
       expect(pngChunkTypes(asset)).not.toEqual(expect.arrayContaining(["eXIf", "tEXt", "zTXt", "iTXt"]));
     }
     const asset = "docs/assets/media/telegram-real-product-loop.gif";
-    expect(readme).toContain(asset);
-    expect(readme.match(/docs\/assets\/media\/telegram-real-[^)\s]+\.gif/g)).toEqual([asset]);
+    expect(readme).not.toContain(asset);
+    expect(readme).not.toContain("docs/assets/media/sandbox-episode.gif");
+    expect(readme).toContain("docs/assets/screenshots/bander-social-preview.png");
     expect(fs.existsSync(asset)).toBe(true);
     const gif = fs.readFileSync(asset);
     expect(gif.subarray(0, 6).toString("ascii")).toBe("GIF89a");
@@ -110,8 +111,6 @@ describe("Checkpoint 11 judge-facing freeze", () => {
     expect(createHash("sha256").update(gif).digest("hex")).toBe(
       "48d1c3143af0c16025c2426496c76475bf74ca14a4a4ec5da3a580c0a3525aa1",
     );
-    expect(readme).toContain("Five full-screen real Bander integration captures using fictional test data: a free Calendar read, one exact Calendar-and-family deal, the approved update visible on Gil’s separate phone, a changed-world refusal, and one exact Gmail reply.");
-    expect(readme).toContain("Five real moments: a bounded read, one exact Calendar-and-family deal, Bander’s approved update visible on Gil’s separate phone, a changed-world refusal, and an exact Gmail reply. The full Telegram context is preserved in every frame.");
   });
 
   it("records the visible screenshot evidence label and privacy review", () => {

@@ -14,7 +14,11 @@ Your assistant can read your calendar and mail and talk like a person. Bander ho
 
 The browser is a deterministic, seeded product experience. It cannot contact Google, Gmail, Telegram, OpenAI, OpenClaw, or your accounts.
 
-<!-- demo-video-link: insert public YouTube URL here before submission -->
+## Watch the product work
+
+### [▶ Watch the 2:38 Bander product demo](https://www.youtube.com/watch?v=z7OrvquejvQ)
+
+[![Watch the 2:38 Bander product demo](docs/assets/screenshots/bander-social-preview.png)](https://www.youtube.com/watch?v=z7OrvquejvQ)
 
 ## Judge quickstart
 
@@ -48,11 +52,7 @@ The required `/feedback` Codex Session ID is supplied through Devpost.
 
 ## Real product, fictional data
 
-The browser experience uses seeded data and cannot contact real services. The captures below come from Bander’s real Telegram, Google Calendar, Gmail, OpenClaw, and GPT‑5.6 integration using fictional test data. The evidence ledger records the corresponding live runs and failure-first verification.
-
-![Five full-screen real Bander integration captures using fictional test data: a free Calendar read, one exact Calendar-and-family deal, the approved update visible on Gil’s separate phone, a changed-world refusal, and one exact Gmail reply.](docs/assets/media/telegram-real-product-loop.gif)
-
-*Five real moments: a bounded read, one exact Calendar-and-family deal, Bander’s approved update visible on Gil’s separate phone, a changed-world refusal, and an exact Gmail reply. The full Telegram context is preserved in every frame.*
+The browser experience uses seeded data and cannot contact real services. Bander’s real Telegram, Google Calendar, Gmail, OpenClaw, and GPT‑5.6 integration using fictional test data was exercised end to end. The evidence ledger records the corresponding live runs and failure-first verification.
 
 ## Why not just native approvals?
 
@@ -140,7 +140,7 @@ Our live probe suites passed 49 natural and adversarial cases, with zero false a
 - [Guided setup and recovery](BUILD_WITH_CODEX.md#2026-07-16--combined-checkpoint-10-external-owner-and-evaluator-surface)
 - [Judge-facing product surface](BUILD_WITH_CODEX.md#2026-07-17--combined-checkpoint-11-judge-surface-freeze)
 
-The latest verified product matrix covers 530 functional cases and 26 adversarial cases. Load-bearing safety properties were observed failing before their fixes; the ledger identifies those specific red→green cases rather than claiming that every safety property failed first.
+The latest verified product matrix covers 535 functional cases plus 26 adversarial cases. Load bearing safety properties were observed failing before their fixes. The ledger identifies those specific red→green cases rather than claiming that every safety property failed first.
 
 ## Guided real setup
 
@@ -166,8 +166,6 @@ npm run real
 ## Deterministic browser sandbox
 
 The hosted and local browser experiences use the shared production authority engine, contracts, canonical SHA-256 hashing, and Card renderer against versioned fictional fixtures. They never claim to touch real services.
-
-![The guided sandbox episode: ask freely, approve one exact deal, and watch the seeded calendar and Gil's phone update — nothing advances without a tap](docs/assets/media/sandbox-episode.gif)
 
 ```bash
 npm run demo

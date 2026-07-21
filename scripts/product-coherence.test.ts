@@ -57,11 +57,20 @@ describe("current public product claims", () => {
     }
   });
 
-  it("uses one cache-safe, truth-scoped real-evidence animation", () => {
-    expect(readme.match(/docs\/assets\/media\/telegram-real-[^)\s]+\.gif/g)).toEqual([
-      "docs/assets/media/telegram-real-product-loop.gif",
-    ]);
-    expect(readme).toContain("the approved update visible on Gil’s separate phone");
+  it("links the final public video without presenting stale GIF loops", () => {
+    const videoUrl = "https://www.youtube.com/watch?v=z7OrvquejvQ";
+    expect(readme).toContain(`### [▶ Watch the 2:38 Bander product demo](${videoUrl})`);
+    expect(readme).toContain(`[![Watch the 2:38 Bander product demo](docs/assets/screenshots/bander-social-preview.png)](${videoUrl})`);
+    expect(readme).not.toContain("docs/assets/media/telegram-real-product-loop.gif");
+    expect(readme).not.toContain("docs/assets/media/sandbox-episode.gif");
     expect(readme).not.toMatch(/Gil(?:’s separate phone|’s phone)?\s+(?:receives|reads)\b/i);
+  });
+
+  it("pins the current verification count and supported failure-first claim", () => {
+    expect(readme).toContain("535 functional cases plus 26 adversarial cases");
+    expect(readme).toContain("Load bearing safety properties were observed failing before their fixes.");
+    expect(readme).not.toMatch(/every load[- ]bearing (?:safety )?propert/i);
+    expect(plan).toContain("Tuesday, July 21");
+    expect(plan).not.toContain("Monday, July 21");
   });
 });

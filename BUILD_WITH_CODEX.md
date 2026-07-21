@@ -2845,3 +2845,43 @@ changed for the media replacement. The only runtime behavior included in this
 checkpoint is the separately verified protected-OpenClaw compound tool-selection
 prompt correction described immediately above. Both transcripts remain ignored,
 untracked, and untouched.
+
+## 2026-07-21 — Final submission safety checkpoint
+
+**Status:** verified; ready to commit and push
+
+The clean-clone command was reproduced red against a genuinely clean checkout:
+the cloned tree already matched the source, but the verifier unconditionally
+ran `git commit` and failed with `nothing to commit, working tree clean`. A
+real-temporary-repository regression test observed that failure before the fix.
+The verifier now skips only the empty ephemeral commit, still snapshots actual
+tracked or proposed source differences, and still fails when verification
+creates an unexpected working-tree change. The first restored run also exposed
+an outdated hard-coded image allowlist; approved evidence media now comes from
+the committed privacy-review manifest, while unlisted screenshots still fail.
+
+The final isolated acceptance run completed in 15 seconds with a 4-second
+`npm ci`: no credentials, generated state, transcripts, or unapproved images;
+typecheck, production and Pages builds; actionable no-account doctor; resumable
+setup and recovery tests; zero-account sandbox startup; 27/27 deterministic
+outcomes; no reachable Google, Telegram, or OpenAI product endpoint; and a clean
+isolated working tree.
+
+README now links the public 2:38 YouTube demo through both a heading and the
+existing social-preview thumbnail. Its two GIF presentations were removed while
+the underlying assets remain committed. Current public copy reports the requested
+535 functional cases plus 26 adversarial cases and uses the supported statement
+that load bearing safety properties were observed failing before their fixes.
+The Build Plan now identifies the deadline as Tuesday, July 21.
+
+Final local verification passed 51 functional files with 539 runner assertions
+(including four new clean-clone/document-coherence assertions), 3 adversarial
+files with 26 cases, typecheck, production build, Pages artifact verification
+for all 14 direct destinations, 3/3 browser/server parity cases, a tracked and
+proposed secret scan across 215 files, and a production-only dependency audit
+with zero vulnerabilities. The full dependency audit newly reports one moderate
+`protobufjs` parser advisory inside OpenClaw's published shrinkwrap. The latest
+OpenClaw patch tarball inspected during this checkpoint still pins the same
+version; no misleading lockfile-only override or unverified runtime repack was
+shipped. Both transcript hashes remain unchanged and the files remain ignored
+and untracked.

@@ -93,6 +93,7 @@ describe("Checkpoint 12 judge surfaces", () => {
     expect(readme).toContain("**Category:** Apps for Your Life");
     expect(readme).toContain("The required `/feedback` Codex Session ID is supplied through Devpost.");
     expect(readme).not.toMatch(/video coming soon|demo video:\s*(?:$|\[\]\(\))/im);
+    expect(readme).not.toContain("demo-video-link");
   });
 
   it("keeps the absolute static security and five-tool boundaries", () => {

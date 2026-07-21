@@ -56,7 +56,7 @@ function trackedAndProposedFiles(cwd: string): string[] {
   ).stdout.split("\0").filter(Boolean);
 }
 
-function copyCurrentCheckout(source: string, destination: string): void {
+export function copyCurrentCheckout(source: string, destination: string): void {
   for (const relative of trackedAndProposedFiles(source)) {
     if (relative === ".git" || relative.startsWith(".git/")) continue;
     const from = path.join(source, relative);
@@ -67,7 +67,14 @@ function copyCurrentCheckout(source: string, destination: string): void {
     else fs.copyFileSync(from, to, fs.constants.COPYFILE_FICLONE);
   }
   run("git", ["add", "-A"], { cwd: destination });
+  if (run("git", ["status", "--porcelain"], { cwd: destination }).stdout === "") return;
   run("git", ["-c", "user.name=Bander Clean Clone", "-c", "user.email=clean-clone@invalid", "commit", "-m", "ephemeral clean-clone verification"], { cwd: destination });
+}
+
+export function assertWorkingTreeClean(cwd: string): void {
+  if (run("git", ["status", "--porcelain"], { cwd }).stdout !== "") {
+    throw new Error("The isolated verification changed the repository working tree");
+  }
 }
 
 function assertNoPrivateArtifacts(cwd: string): void {
@@ -83,12 +90,14 @@ function assertNoPrivateArtifacts(cwd: string): void {
     }
   }
   const files = trackedAndProposedFiles(cwd);
+  const mediaManifest = JSON.parse(
+    fs.readFileSync(path.join(cwd, "docs/assets/screenshots/manifest.json"), "utf8"),
+  ) as { assets: Array<{ file: string }> };
   const approvedImages = new Set([
     "production/bander-og.png",
-    "docs/assets/screenshots/bander-social-preview.png",
-    "docs/assets/screenshots/real-compound-family.png",
-    "docs/assets/screenshots/real-changed-world.png",
-    "docs/assets/screenshots/real-read-two-identities.png",
+    ...mediaManifest.assets.map((asset) =>
+      path.posix.normalize(path.posix.join("docs/assets/screenshots", asset.file)),
+    ),
   ]);
   if (files.some((file) => /\.(?:png|jpe?g|webp)$/i.test(file) && !approvedImages.has(file))) {
     throw new Error("The isolated clone contains a personal or generated screenshot");
@@ -277,9 +286,7 @@ export async function verifyCleanClone(source = process.cwd()): Promise<void> {
       throw new Error("The deterministic demo did not report 27 green outcomes");
     }
     await proveDemoStarts(clone, environment);
-    if (run("git", ["status", "--porcelain"], { cwd: clone }).stdout !== "") {
-      throw new Error("The isolated verification changed the repository working tree");
-    }
+    assertWorkingTreeClean(clone);
     process.stdout.write(
       [
         "Clean-clone acceptance: PASS",

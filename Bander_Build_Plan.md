@@ -217,7 +217,7 @@ Bander does not currently claim:
 
 ## 12. Build Week submission contract
 
-Bander enters **Apps for Your Life**. As of July 15, Devpost reports submissions close Monday, July 21 at 5:00 PM Pacific Time. The submission needs a working project, category, project description, public sub-three-minute YouTube demo with audio explaining Codex and GPT-5.6, repository URL with README and license, and the `/feedback` Session ID from the task where most core functionality was built.
+Bander enters **Apps for Your Life**. As of July 15, Devpost reports submissions close Tuesday, July 21 at 5:00 PM Pacific Time. The submission needs a working project, category, project description, public sub-three-minute YouTube demo with audio explaining Codex and GPT-5.6, repository URL with README and license, and the `/feedback` Session ID from the task where most core functionality was built.
 
 The filmed story opens with a frictionless schedule read, then shows one approved compound Calendar-and-family deal, the family phone receiving the exact approved update, and one changed-world refusal that stops both effects. Hero remains available for deterministic judge access. The repository and Pages are public; final video, sanitized screenshot, Devpost copy, and `/feedback` remain later gates.
 
